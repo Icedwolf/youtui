@@ -106,6 +106,8 @@ enum Command {
     GetArtistAlbums {
         channel_id: String,
         browse_params: String,
+        #[arg(default_value_t = usize::MAX)]
+        max_pages: usize,
     },
     SubscribeArtist {
         channel_id: String,

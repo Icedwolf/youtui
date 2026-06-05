@@ -1,15 +1,17 @@
+use crate::app::component::actionhandler::ComponentEffect;
 use crate::app::structures::ListSong;
+use crate::app::structures::Thumbnail;
 use crate::app::ui::playlist::Playlist;
 use crate::get_data_dir;
+use async_callback_manager::AsyncTask;
+use fs_err as fs;
 use serde::{Deserialize, Serialize};
-use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
 use tracing::{debug, info, warn};
 use ytmapi_rs::common::VideoID;
-use crate::app::structures::Thumbnail;
 
-const QUEUE_DIR: &str = "youtui/queues";
+const QUEUE_DIR: &str = "queues";
 const AUTO_SAVE: &str = "__autosave";
 
 #[derive(Serialize, Deserialize)]
@@ -95,27 +97,29 @@ pub fn save_queue(playlist: &Playlist, name: &str) -> Result<(), Box<dyn std::er
     Ok(())
 }
 
-pub fn load_queue(playlist: &mut Playlist, name: &str) -> Result<(), Box<dyn std::error::Error>> {
+pub fn load_queue(playlist: &mut Playlist, name: &str) -> Result<ComponentEffect<Playlist>, Box<dyn std::error::Error>> {
     let path = get_queue_dir()?.join(format!("{}.json", name));
-    debug!("Loading queue from path: {:?}", path);
+    info!("Loading queue from path: {:?}", path);
     
     let json = fs::read_to_string(&path)?;
     debug!("Read JSON: {}", json);
 
     if let Ok(saved) = serde_json::from_str::<CompactSavedQueue>(&json) {
-        load_compact_queue(playlist, saved)?;
+        info!("Parsed as CompactSavedQueue ({} songs)", saved.songs.len());
+        load_compact_queue(playlist, saved)
     } else if let Ok(saved) = serde_json::from_str::<LegacySong>(&json) {
-        normalize_and_load(playlist, saved, name)?;
+        info!("Parsed as LegacySong format ({} songs), will normalize", saved.songs.len());
+        normalize_and_load(playlist, saved, name)
     } else {
         warn!("Queue file corrupted, starting fresh");
+        Ok(AsyncTask::new_no_op())
     }
-    Ok(())
 }
 
-fn load_compact_queue(playlist: &mut Playlist, saved: CompactSavedQueue) -> Result<(), Box<dyn std::error::Error>> {
+fn load_compact_queue(playlist: &mut Playlist, saved: CompactSavedQueue) -> Result<ComponentEffect<Playlist>, Box<dyn std::error::Error>> {
     debug!("Loaded compact queue with {} songs", saved.songs.len());
     info!("Clearing playlist (reset)");
-    let _ = playlist.reset();
+    let mut effect = playlist.reset();
     
     if !saved.songs.is_empty() {
         let songs: Vec<ListSong> = saved.songs
@@ -133,24 +137,26 @@ fn load_compact_queue(playlist: &mut Playlist, saved: CompactSavedQueue) -> Resu
             .collect();
         
         info!("Created {} songs from compact metadata", songs.len());
-        let (_first_id, _effect) = playlist.push_song_list(songs);
+        let (first_id, push_effect) = playlist.push_song_list(songs);
+        effect = effect.push(push_effect);
         
         if let Some(idx) = saved.current_index {
             if let Some(song_id) = playlist.get_id_from_index(idx) {
-                let _effect = playlist.play_song_id(song_id);
+                effect = effect.push(playlist.play_song_id(song_id));
                 info!("Restored playback to song at index {}", idx);
             } else {
-                warn!("Saved index {} out of bounds, not restoring playback", idx);
+                effect = effect.push(playlist.play_song_id(first_id));
+                info!("Saved index {} out of bounds, playing first song", idx);
             }
         }
         info!("Load complete");
     } else {
         info!("No songs to load from save file");
     }
-    Ok(())
+    Ok(effect)
 }
 
-fn normalize_and_load(playlist: &mut Playlist, saved: LegacySong, name: &str) -> Result<(), Box<dyn std::error::Error>> {
+fn normalize_and_load(playlist: &mut Playlist, saved: LegacySong, name: &str) -> Result<ComponentEffect<Playlist>, Box<dyn std::error::Error>> {
     info!("Normalizing queue file to compact format");
     let get_largest_thumbnail_url = |thumbs: &Vec<Thumbnail>| -> Option<String> {
         thumbs.iter().max_by_key(|t| t.height * t.width).map(|t| t.url.clone())
@@ -182,8 +188,7 @@ fn normalize_and_load(playlist: &mut Playlist, saved: LegacySong, name: &str) ->
     file.sync_all()?;
     fs::rename(&temp_path, &path)?;
 
-    info!("Clearing playlist (reset)");
-    let _ = playlist.reset();
+    info!("Normalized queue to compact format");
     load_compact_queue(playlist, compact)
 }
 
@@ -219,9 +224,18 @@ pub fn auto_save(playlist: &Playlist) -> Result<(), Box<dyn std::error::Error>> 
     save_queue(playlist, AUTO_SAVE)
 }
 
-pub fn auto_load(playlist: &mut Playlist) -> Result<(), Box<dyn std::error::Error>> {
-    debug!("Auto-loading queue");
-    load_queue(playlist, AUTO_SAVE)
+pub fn auto_load(playlist: &mut Playlist) -> Result<ComponentEffect<Playlist>, Box<dyn std::error::Error>> {
+    info!("Auto-loading queue from __autosave.json");
+    match load_queue(playlist, AUTO_SAVE) {
+        Ok(effect) => {
+            info!("Auto-load succeeded, effect is_no_op={}", effect.is_no_op());
+            Ok(effect)
+        }
+        Err(e) => {
+            warn!("Auto-load failed: {e}");
+            Err(e)
+        }
+    }
 }
 
 #[cfg(test)]
@@ -293,7 +307,7 @@ mod tests {
         }
         
         // Verify no heavy fields
-        let excluded_keys = vec!["thumbnails", "album_art", "artists_string"];
+        let excluded_keys = vec!["thumbnails", "artists_string"];
         for key in excluded_keys {
             assert!(!keys.iter().any(|k| *k == key));
         }
@@ -313,5 +327,143 @@ mod tests {
         let json = serde_json::to_string(&song_ref).unwrap();
         // Artists should be a JSON array
         assert!(json.contains(r#""artists":["First","Second","Third"]"#));
+    }
+
+    fn make_test_playlist_with_songs() -> Playlist {
+        let songs = vec![
+            ListSong::create_with_metadata(
+                VideoID::from_raw("song_a"),
+                "Song A".to_string(),
+                vec!["Artist A".to_string()],
+                Some("Album A".to_string()),
+                "3:00".to_string(),
+                None,
+            ),
+            ListSong::create_with_metadata(
+                VideoID::from_raw("song_b"),
+                "Song B".to_string(),
+                vec!["Artist B1".to_string(), "Artist B2".to_string()],
+                None,
+                "4:30".to_string(),
+                Some("https://example.com/thumb.jpg".to_string()),
+            ),
+            ListSong::create_with_metadata(
+                VideoID::from_raw("song_c"),
+                "Song C".to_string(),
+                vec!["Artist C".to_string()],
+                Some("Album C".to_string()),
+                "5:10".to_string(),
+                None,
+            ),
+        ];
+        let (mut playlist, _effect) = Playlist::new();
+        let (_first_id, _push_effect) = playlist.push_song_list(songs);
+        playlist
+    }
+
+    #[test]
+    fn test_load_compact_queue_populates_songs() {
+        let saved = CompactSavedQueue {
+            current_index: Some(1),
+            songs: vec![
+                CompactSongRef {
+                    video_id: VideoID::from_raw("v1"),
+                    title: "Track One".to_string(),
+                    artists: vec!["Alice".to_string()],
+                    album: Some("Album X".to_string()),
+                    duration_string: "3:00".to_string(),
+                    thumbnail_url: None,
+                },
+                CompactSongRef {
+                    video_id: VideoID::from_raw("v2"),
+                    title: "Track Two".to_string(),
+                    artists: vec!["Bob".to_string(), "Carol".to_string()],
+                    album: None,
+                    duration_string: "4:30".to_string(),
+                    thumbnail_url: Some("https://example.com/t.jpg".to_string()),
+                },
+            ],
+        };
+        let (mut playlist, _effect) = Playlist::new();
+        let effect = load_compact_queue(&mut playlist, saved).unwrap();
+
+        let songs: Vec<_> = playlist.list.get_list_iter().collect();
+        assert_eq!(songs.len(), 2);
+        assert_eq!(songs[0].video_id.get_raw(), "v1");
+        assert_eq!(songs[0].title, "Track One");
+        assert_eq!(songs[0].artists.len(), 1);
+        assert_eq!(songs[0].artists[0].name, "Alice");
+        assert_eq!(songs[1].video_id.get_raw(), "v2");
+        assert_eq!(songs[1].title, "Track Two");
+        assert_eq!(songs[1].artists.len(), 2);
+        assert!(playlist.get_cur_playing_index().is_some(),
+            "current_index=1 should set a playing song");
+        assert!(!effect.is_no_op(),
+            "load with songs should produce a real effect");
+    }
+
+    #[test]
+    fn test_load_compact_queue_empty() {
+        let saved = CompactSavedQueue {
+            current_index: None,
+            songs: vec![],
+        };
+        let (mut playlist, _effect) = Playlist::new();
+        let effect = load_compact_queue(&mut playlist, saved).unwrap();
+        assert_eq!(playlist.list.get_list_iter().count(), 0);
+        assert!(playlist.get_cur_playing_index().is_none());
+        assert!(effect.is_no_op(),
+            "empty load should produce no-op");
+    }
+
+    #[test]
+    fn test_save_load_filesystem_roundtrip() {
+        let tmp = tempfile::tempdir().unwrap();
+        unsafe { std::env::set_var("YOUTUI_DATA_DIR", tmp.path()) };
+
+        // save + load with songs
+        let songs = vec![
+            ListSong::create_with_metadata(
+                VideoID::from_raw("a1"), "Alpha".to_string(), vec!["Art A".to_string()],
+                Some("Alb A".to_string()), "2:00".to_string(), None,
+            ),
+            ListSong::create_with_metadata(
+                VideoID::from_raw("b2"), "Beta".to_string(), vec!["Art B".to_string()],
+                None, "3:15".to_string(), Some("https://ex.co/t.jpg".to_string()),
+            ),
+        ];
+        let (mut playlist, _effect) = Playlist::new();
+        let (_first_id, _) = playlist.push_song_list(songs);
+        save_queue(&playlist, "fs_test").unwrap();
+        assert!(tmp.path().join("queues/fs_test.json").exists());
+
+        let (mut loaded, _effect) = Playlist::new();
+        load_queue(&mut loaded, "fs_test").unwrap();
+        let loaded_songs: Vec<_> = loaded.list.get_list_iter().collect();
+        assert_eq!(loaded_songs.len(), 2);
+        assert_eq!(loaded_songs[0].video_id.get_raw(), "a1");
+        assert_eq!(loaded_songs[0].title, "Alpha");
+        assert_eq!(loaded_songs[1].video_id.get_raw(), "b2");
+        assert_eq!(loaded_songs[1].title, "Beta");
+
+        // autosave + autoload
+        let (mut p2, _) = Playlist::new();
+        let xsongs = vec![ListSong::create_with_metadata(
+            VideoID::from_raw("x"), "X".to_string(), vec!["Y".to_string()],
+            None, "1:00".to_string(), None,
+        )];
+        let (_first_id2, _) = p2.push_song_list(xsongs);
+        auto_save(&p2).unwrap();
+        assert!(tmp.path().join("queues/__autosave.json").exists());
+
+        let (mut loaded2, _) = Playlist::new();
+        auto_load(&mut loaded2).unwrap();
+        assert_eq!(loaded2.list.get_list_iter().count(), 1);
+        assert_eq!(loaded2.list.get_list_iter().next().unwrap().video_id.get_raw(), "x");
+
+        // load nonexistent file errors
+        let (mut p3, _) = Playlist::new();
+        let result = load_queue(&mut p3, "no_such_queue");
+        assert!(result.is_err(), "loading nonexistent queue should error");
     }
 }

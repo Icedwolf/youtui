@@ -9,7 +9,6 @@ pub mod api;
 pub mod api_error_handler;
 pub mod player;
 pub mod song_downloader;
-pub mod song_thumbnail_downloader;
 
 const DL_CALLBACK_CHUNK_SIZE: u64 = 100000; // How often song download will pause to execute code.
 const MAX_RETRIES: usize = 5;
@@ -23,7 +22,6 @@ pub struct Server {
     pub api: api::Api,
     pub player: player::Player,
     pub song_downloader: song_downloader::SongDownloader,
-    pub song_thumbnail_downloader: song_thumbnail_downloader::SongThumbnailDownloader,
     pub api_error_handler: api_error_handler::ApiErrorHandler,
 }
 
@@ -42,15 +40,12 @@ impl Server {
         let player = player::Player::new();
         let song_downloader =
             song_downloader::SongDownloader::new(po_token, client.clone(), config);
-        let song_thumbnail_downloader =
-            song_thumbnail_downloader::SongThumbnailDownloader::new(client);
         let api_error_handler = api_error_handler::ApiErrorHandler::new();
         Server {
             api,
             player,
             song_downloader,
             api_error_handler,
-            song_thumbnail_downloader,
         }
     }
 }

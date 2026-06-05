@@ -22,6 +22,9 @@ pub enum AppEvent {
 }
 
 pub struct EventHandler {
+    /// Kept alive to prevent the channel from closing (drop signal).
+    /// When all Sender clones drop, the Receiver yields `None` and the event
+    /// loop exits. This clone is held for the lifetime of the event handler.
     _tx: Sender<AppEvent>,
     rx: Receiver<AppEvent>,
     _ticker: EventSpawner<Ticker>,
@@ -37,6 +40,7 @@ struct MediaControlsWatcher;
 
 struct EventSpawner<T> {
     _handler: JoinHandle<()>,
+    /// Kept alive to prevent the channel from closing (drop signal).
     _tx: Sender<AppEvent>,
     _spawner_type: T,
 }

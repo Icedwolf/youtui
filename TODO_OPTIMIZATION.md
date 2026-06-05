@@ -1,11 +1,11 @@
 # Youtui Optimization Roadmap
 
-**Last Updated**: 2026-04-28
-**Status**: Most critical optimizations COMPLETE
+**Last Updated**: 2026-06-05
+**Status**: Core optimizations active, performance regression fixed
 
 ---
 
-## ✅ COMPLETED OPTIMIZATIONS (v1.0)
+## ✅ COMPLETED OPTIMIZATIONS
 
 ### Network Performance
 - [x] **Connection pooling** - 8 idle connections, 90s timeout, TCP keepalive
@@ -16,29 +16,26 @@
 - [x] **Streaming** - Already streams via yt-dlp stdout
 
 ### Memory Optimization
-- [x] **Removed redundant fields** - `artists_string`, `track_no_string` now computed on-demand
-- [x] **Memory metrics** - Added `ServerMetrics` struct for tracking
+- [x] **Cached artists_string / track_no_string** - Pre-computed at song creation, returned via `Cow::Borrowed` in `get_field()`. **Do NOT remove** — was removed once causing per-frame allocation regression, then restored.
+- [x] **Lowercased search fields** - `title_lower`, `album_lower`, `artists_lower` cached for O(1) case-insensitive search
 
 ### Caching
-- [x] **Thumbnail LRU cache** - 100 entries in-memory cache
+- [x] **Thumbnail LRU cache** — Removed (the `song_thumbnail_downloader.rs` and `lru` crate were deleted). Notifications now skip remote thumbnails entirely for instant responsiveness — only `file://` URLs are used.
 - [x] **Metadata caching** - Already uses in-memory API reuse
-
-### Testing & Quality
-- [x] **86 tests passing** - All unit tests pass
-- [x] **TUI Buffer tests** - Render output validation
-- [x] **Fixed tests** - Updated for removed fields
 
 ### Code Quality
 - [x] **Error handling** - Uses anyhow consistently
-- [x] **Clean build** - No errors, warnings are mostly deprecated Google APIs
+- [x] **Clean build** - 0 errors, 1 warning (pre-existing dead code)
 
 ---
 
 ## 🚧 IN PROGRESS
 
-### Stats Tab (ABANDONED - Too Complex)
-- Tried to add new Stats tab but async-callback-manager integration was too risky
-- Could be revisited in future with more careful design
+### Test Infrastructure (from 2026-06-05 session)
+- [ ] **Criterion benchmarks** for `get_field` hot-path (perf regression detection)
+- [ ] **`TestBackend` render snapshot tests** for playlist + browser views
+- [ ] **`profile-render` feature flag** with per-draw timing (warn if >8ms)
+- [ ] **State-model integration tests** (keypress → expected state)
 
 ---
 
@@ -50,27 +47,7 @@
 
 ### Future Enhancements
 - [ ] Stats Tab in UI (new WindowContext)
-- [ ] Benchmark tests with mock data
-- [ ] Mock testing infrastructure
 - [ ] Extended metrics (CPU, memory, cache hit rates)
-
----
-
-## 📊 Changes Summary
-
-```
-Files changed: 8
-Insertions: +205
-Deletions: -55
-
-Key files:
-- server.rs (+59): Connection pooling, timeouts, ServerMetrics
-- song_downloader.rs (+94): Dynamic concurrency
-- song_thumbnail_downloader.rs (+45): LRU cache
-- structures.rs (+38): Removed redundant fields
-- tests.rs (+8): Fixed for changes
-- Cargo.toml (+1): Added lru crate
-```
 
 ---
 
@@ -78,22 +55,18 @@ Key files:
 
 | Metric | Target | Status |
 |--------|--------|--------|
-| Memory Usage | Reduce by 40% | ✅ Partial (removed redundant fields) |
-| Download Speed | Increase 30% | ✅ Dynamic concurrency |
-| Connection Overhead | Reduce | ✅ Pooling + timeouts |
-| Test Coverage | 95% | 86 tests (good) |
+| Per-frame allocation in `get_field` | Zero (Cow::Borrowed) | ✅ Cached fields restored |
+| Network connections | Pooled | ✅ 8 idle, 90s timeout |
+| Search responsiveness | O(1) per char | ✅ Pre-lowercased fields |
+| Notification latency | Instant (<100ms) | ✅ No thumbnail download in path |
 
 ---
 
 ## 🔧 Technical Debt
 
 | Area | Severity | Status |
-|------|-----------|--------|
+|------|----------|--------|
 | Async Architecture | High | ✅ Working, complex to refactor |
-| Memory Management | Medium | ✅ Optimized |
+| Memory Management | Medium | ✅ Cached hot-path fields |
+| Testing Infrastructure | Medium | 🔜 Criterion, snapshots, state tests planned |
 | Error Handling | Medium | ✅ Clean |
-| Testing | Medium | ✅ 86 tests |
-
----
-
-*End of completed roadmap. See above for remaining optional items.*

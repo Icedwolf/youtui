@@ -105,14 +105,16 @@ pub async fn command_to_query(
         Command::GetArtistAlbums {
             channel_id,
             browse_params,
+            max_pages,
         } => {
-            get_string_output_of_query(
+            get_string_output_of_streaming_query(
                 yt,
                 GetArtistAlbumsQuery::new(
                     ArtistChannelID::from_raw(channel_id),
                     BrowseParams::from_raw(browse_params),
                 ),
                 cli_query,
+                max_pages,
             )
             .await
         }

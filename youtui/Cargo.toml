@@ -19,10 +19,7 @@ clap = { version = "4.6.1", features = ["derive"] }
 clap_complete = "4.6.3"
 crossterm = { version = "0.29.0", features = ["event-stream", "serde"] }
 futures = "0.3.32"
-# Disable chafa feature which requires a platform dependency, for easier distribution.
-ratatui-image = { version = "10.0.8", default-features = false, features = [ "image-defaults", "crossterm" ] }
-# Required for ratatui-image
-image = "0.25.10"
+
 rat-text = "3.1.0"
 ratatui = { version = "0.30.0", features = ["all-widgets"] }
 tui-logger = { version = "0.18.2", features = ["tracing-support"] }
@@ -46,8 +43,9 @@ bytes = "1.11.1"
 anyhow = "1.0.102"
 chrono = { version = "0.4.44", features = ["serde"] }
 souvlaki = { version = "0.8.3", default-features = false, features = [
-  "use_zbus",
-] }
+    "use_zbus",
+  ] }
+notify-rust = "4.11.7"
 rand = "0.9"
 fs-err = { version = "3.3.0", features=["tokio"] }
 tokio-util = { version = "0.7.18", features = ["io"] }

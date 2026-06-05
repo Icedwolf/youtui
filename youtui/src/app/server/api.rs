@@ -17,8 +17,8 @@ use tracing::{error, info};
 use ytmapi_rs::auth::{BrowserToken, OAuthToken};
 use ytmapi_rs::common::{AlbumID, ArtistChannelID, PlaylistID, SearchSuggestion, Thumbnail};
 use ytmapi_rs::parse::{
-    AlbumSong, GetAlbum, GetArtistAlbums, ParsedSongAlbum, ParsedSongArtist, PlaylistItem,
-    SearchResultArtist, SearchResultPlaylist, SearchResultSong,
+    AlbumSong, GetAlbum, GetArtistAlbums, GetArtistAlbumsAlbum, ParsedSongAlbum,
+    ParsedSongArtist, PlaylistItem, SearchResultArtist, SearchResultPlaylist, SearchResultSong,
 };
 use ytmapi_rs::query::{GetAlbumQuery, GetArtistAlbumsQuery};
 
@@ -126,9 +126,9 @@ where
                     // anything.
                     let api_token_hash = api_locked.get_token_hash()?;
                     if api_token_hash == Some(token_hash) {
-                        // A task is spawned to refresh the token, to ensure that it still
-                        // refreshes even if this task is
-                        // cancelled.
+                        // Spawn to move the write guard into another task,
+                        // releasing the RwLock so other operations can proceed
+                        // during the long-running token refresh.
                         tokio::spawn(async {
                             info!("Refreshing oauth token");
                             let tok = api_locked.refresh_token().await?.expect("Expected to be able to refresh token if I got an OAuthTokenExpired error");
@@ -253,50 +253,64 @@ fn get_artist_songs(
                 return;
             }
         };
-        let Some(albums) = artist.top_releases.albums else {
-            tracing::info!("Telling caller no songs found (no params)");
-            send_or_error(tx, GetArtistSongsProgressUpdate::NoSongsFound).await;
-            return;
-        };
+        let mut browse_id_list: Vec<AlbumID<'static>> = Vec::new();
 
-        let GetArtistAlbums {
-            browse_id: artist_albums_browse_id,
-            params: artist_albums_params,
-            results: artist_albums_results,
-            ..
-        } = albums;
-        let browse_id_list: Vec<AlbumID> = if artist_albums_browse_id.is_none()
-            && artist_albums_params.is_none()
-            && !artist_albums_results.is_empty()
+        for albums in artist
+            .top_releases
+            .albums
+            .into_iter()
+            .chain(artist.top_releases.singles.into_iter())
         {
-            // Assume we already got all the albums from the search.
-            artist_albums_results
-                .into_iter()
-                .map(|r| r.album_id)
-                .collect()
-        } else if artist_albums_params.is_none() || artist_albums_browse_id.is_none() {
-            tracing::info!("Telling caller no songs found (no params or browse_id)");
-            send_or_error(&tx, GetArtistSongsProgressUpdate::NoSongsFound).await;
-            return;
-        } else {
-            // Must have params and browse_id
-            let Some(temp_browse_id) = artist_albums_browse_id else {
-                unreachable!("Checked not none above")
-            };
-            let Some(temp_params) = artist_albums_params else {
-                unreachable!("Checked not none above")
-            };
-            let query = GetArtistAlbumsQuery::new(temp_browse_id, temp_params);
-            let albums = match query_api_with_retry(&api, query).await {
-                Ok(r) => r,
-                Err(e) => {
-                    error!("Received error on get_artist_albums query \"{}\"", e);
-                    send_or_error(tx, GetArtistSongsProgressUpdate::GetArtistAlbumsError(e)).await;
-                    return;
+            let GetArtistAlbums {
+                browse_id,
+                params,
+                results,
+                ..
+            } = albums;
+            let ids: Vec<AlbumID<'static>> = if browse_id.is_none()
+                && params.is_none()
+                && !results.is_empty()
+            {
+                results.into_iter().map(|r| r.album_id).collect()
+            } else if params.is_none() || browse_id.is_none() {
+                Vec::new()
+            } else {
+                let query =
+                    GetArtistAlbumsQuery::new(browse_id.unwrap(), params.unwrap());
+                let album_pages_result = {
+                    let api_locked = api.read().await;
+                    api_locked
+                        .stream_browser_or_oauth::<
+                            GetArtistAlbumsQuery<'_>,
+                            Vec<GetArtistAlbumsAlbum>,
+                        >(&query, usize::MAX)
+                        .await
+                };
+                match album_pages_result {
+                    Ok(r) => r.into_iter().flatten().map(|a| a.browse_id).collect(),
+                    Err(e) => {
+                        error!("Received error on get_artist_albums query \"{}\"", e);
+                        send_or_error(
+                            tx,
+                            GetArtistSongsProgressUpdate::GetArtistAlbumsError(e),
+                        )
+                        .await;
+                        return;
+                    }
                 }
             };
-            albums.into_iter().map(|a| a.browse_id).collect()
-        };
+            for id in ids {
+                if !browse_id_list.contains(&id) {
+                    browse_id_list.push(id);
+                }
+            }
+        }
+
+        if browse_id_list.is_empty() {
+            tracing::info!("No songs found for artist");
+            send_or_error(&tx, GetArtistSongsProgressUpdate::NoSongsFound).await;
+            return;
+        }
         send_or_error(&tx, GetArtistSongsProgressUpdate::SongsFound).await;
         // Request all albums, concurrently but retaining order.
         // Future improvement: instead of using a FuturesOrdered, we could send

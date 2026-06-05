@@ -1,22 +1,17 @@
 use crate::app::queue_persistence::{CompactSongRef, CompactSavedQueue};
 use crate::app::server::song_downloader::InMemSong;
-use crate::app::server::song_thumbnail_downloader::SongThumbnailID;
-use crate::app::server::{DecodeSong, GetSongThumbnail, PlayDecodedSong, Stop, TaskMetadata};
+use crate::app::server::{DecodeSong, PlayDecodedSong, Stop, TaskMetadata};
 use crate::app::structures::{
-    AlbumArtState, DownloadStatus, ListSong, ListSongDisplayableField, ListSongID, ListStatus,
-    MaybeRc, PlayState,
+    DownloadStatus, ListSong, ListSongDisplayableField, ListSongID, ListStatus, PlayState,
 };
 use crate::app::ui::playlist::{
-    DownloadTask, HandleGetSongThumbnailError, HandleGetSongThumbnailOk,
-    HandlePlayUpdateError, HandlePlayUpdateOk, HandleStopped, Playlist, QueueState,
+    DownloadTask, HandlePlayUpdateError, HandlePlayUpdateOk, HandleStopped, Playlist, QueueState,
 };
-use crate::async_rodio_sink::{AllStopped, Stopped};
 use async_callback_manager::{AsyncTask, Constraint, TryBackendTaskExt};
 use pretty_assertions::assert_eq;
 use std::sync::{Arc, OnceLock};
-use std::time::Duration;
 use ytmapi_rs::auth::BrowserToken;
-use ytmapi_rs::common::{AlbumID, Thumbnail, VideoID, YoutubeID};
+use ytmapi_rs::common::{AlbumID, VideoID, YoutubeID};
 use ytmapi_rs::parse::{GetAlbum, ParsedSongAlbum};
 use ytmapi_rs::query::GetAlbumQuery;
 
@@ -25,10 +20,9 @@ static DUMMY_ALBUM: OnceLock<GetAlbum> = OnceLock::new();
 fn get_dummy_album() -> GetAlbum {
     DUMMY_ALBUM
         .get_or_init(|| {
-            let json =
-                std::fs::read_to_string("../ytmapi-rs/test_json/get_album_20240724.json").unwrap();
+            let json = include_str!("../../../../../ytmapi-rs/test_json/get_album_20240724.json");
             ytmapi_rs::process_json::<_, BrowserToken>(
-                json,
+                json.to_owned(),
                 GetAlbumQuery::new(AlbumID::from_raw("")),
             )
             .unwrap()
@@ -56,34 +50,6 @@ fn get_dummy_playlist() -> Playlist {
         vec![],
     );
     playlist
-}
-
-#[test]
-fn newly_added_song_downloads_album_art() {
-    let mut p = get_dummy_playlist();
-    let s = p.list.get_list_iter_mut().next().unwrap();
-    s.thumbnails = MaybeRc::Owned(vec![Thumbnail {
-        height: 0,
-        width: 0,
-        url: "dummy_url".to_string(),
-    }]);
-    let dummy_song = s.clone();
-    let thumbnail_id = SongThumbnailID::from(&dummy_song as &ListSong).into_owned();
-    let (_, effect) = p.push_song_list(vec![dummy_song]);
-    let expected_effect = AsyncTask::new_future_try(
-        GetSongThumbnail {
-            thumbnail_url: "dummy_url".to_string(),
-            thumbnail_id: thumbnail_id.clone(),
-        },
-        HandleGetSongThumbnailOk,
-        HandleGetSongThumbnailError(thumbnail_id),
-        None,
-    );
-    assert!(
-        effect.contains(&expected_effect),
-        "Expected Left to contain Right {}",
-        pretty_assertions::Comparison::new(&effect, &expected_effect)
-    );
 }
 
 #[test]

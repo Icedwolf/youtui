@@ -101,7 +101,7 @@ impl AlbumSongsPanel {
                 bail!(format!("Unable to sort column {}", c.column,));
             }
             self.list.sort(
-                get_adjusted_list_column(c.column, Self::subcolumns_of_vec())?,
+                get_adjusted_list_column(c.column, Self::subcolumns_of_vec()).unwrap(),
                 c.direction,
             );
         }
@@ -185,13 +185,12 @@ impl AlbumSongsPanel {
         self.clear_sort_commands();
     }
     pub fn handle_sort_cur_asc(&mut self) {
-        // TODO: Better error handling
-        let Some(column) = self.get_sortable_columns().get(self.sort.cur) else {
+        let Some(column) = self.get_sortable_columns().get(self.sort.cur).copied() else {
             warn!("Tried to index sortable columns but was out of range");
             return;
         };
         if let Err(e) = self.push_sort_command(TableSortCommand {
-            column: *column,
+            column,
             direction: SortDirection::Asc,
         }) {
             warn!("Tried to sort a column that is not sortable - error {e}")
@@ -199,13 +198,12 @@ impl AlbumSongsPanel {
         self.close_sort();
     }
     pub fn handle_sort_cur_desc(&mut self) {
-        // TODO: Better error handling
-        let Some(column) = self.get_sortable_columns().get(self.sort.cur) else {
+        let Some(column) = self.get_sortable_columns().get(self.sort.cur).copied() else {
             warn!("Tried to index sortable columns but was out of range");
             return;
         };
         if let Err(e) = self.push_sort_command(TableSortCommand {
-            column: *column,
+            column,
             direction: SortDirection::Desc,
         }) {
             warn!("Tried to sort a column that is not sortable - error {e}")
@@ -376,7 +374,7 @@ impl AdvancedTableView for AlbumSongsPanel {
         }
         // Map the column of ArtistAlbums to a column of List and sort
         self.list.sort(
-            get_adjusted_list_column(sort_command.column, Self::subcolumns_of_vec())?,
+            get_adjusted_list_column(sort_command.column, Self::subcolumns_of_vec()).unwrap(),
             sort_command.direction,
         );
         // Remove commands that already exist for the same column, as this new command

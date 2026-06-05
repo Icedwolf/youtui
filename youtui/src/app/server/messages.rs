@@ -2,9 +2,7 @@ use super::ArcServer;
 use super::api::GetArtistSongsProgressUpdate;
 use super::player::{DecodedInMemSong, Player};
 use super::song_downloader::{DownloadProgressUpdate, InMemSong};
-use super::song_thumbnail_downloader::SongThumbnail;
 use crate::app::server::api::GetPlaylistSongsProgressUpdate;
-use crate::app::server::song_thumbnail_downloader::SongThumbnailID;
 use crate::app::AudioQuality;
 use crate::app::structures::ListSongID;
 use crate::async_rodio_sink::rodio::decoder::DecoderError;
@@ -33,8 +31,34 @@ pub struct HandleApiError {
     pub message: String,
 }
 
+impl BackendTask<ArcServer> for HandleApiError {
+    type Output = ();
+    type MetadataType = TaskMetadata;
+    fn into_future(
+        self,
+        backend: &ArcServer,
+    ) -> impl Future<Output = Self::Output> + Send + 'static {
+        let Self { error, message } = self;
+        let backend = backend.clone();
+        async move {
+            backend.api_error_handler.handle_error(error, message).await;
+        }
+    }
+}
+
 #[derive(Debug, PartialEq)]
 pub struct GetSearchSuggestions(pub String);
+impl BackendTask<ArcServer> for GetSearchSuggestions {
+    type Output = Result<(Vec<SearchSuggestion>, String)>;
+    type MetadataType = TaskMetadata;
+    fn into_future(
+        self,
+        backend: &ArcServer,
+    ) -> impl Future<Output = Self::Output> + Send + 'static {
+        let backend = backend.clone();
+        async move { backend.api.get_search_suggestions(self.0).await }
+    }
+}
 #[derive(Debug, PartialEq)]
 pub struct SearchArtists(pub String);
 #[derive(Debug, PartialEq)]
@@ -54,7 +78,7 @@ pub struct DownloadSong(pub VideoID<'static>, pub ListSongID, pub Arc<Cancellati
 
 impl PartialEq for DownloadSong {
     fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0 && self.1 == other.1
+        self.0 == other.0 && self.1 == other.1 && self.3 == other.3
     }
 }
 
@@ -121,41 +145,6 @@ pub struct AutoplaySong {
 pub struct QueueSong {
     pub song: DecodedInMemSong,
     pub id: ListSongID,
-}
-#[derive(Debug, PartialEq)]
-pub struct GetSongThumbnail {
-    pub thumbnail_url: String,
-    pub thumbnail_id: SongThumbnailID<'static>,
-}
-
-impl BackendTask<ArcServer> for HandleApiError {
-    // Infallible - assumption is that even if this task fails, caller won't care.
-    type Output = ();
-    // TODO: Review if TaskMetadata needs new enum cases.
-    type MetadataType = TaskMetadata;
-    fn into_future(
-        self,
-        backend: &ArcServer,
-    ) -> impl Future<Output = Self::Output> + Send + 'static {
-        let Self { error, message } = self;
-        let backend = backend.clone();
-        async move {
-            backend.api_error_handler.handle_error(error, message).await;
-        }
-    }
-}
-
-impl BackendTask<ArcServer> for GetSearchSuggestions {
-    // TODO: Consider alternative where the text isn't returned back to the caller.
-    type Output = Result<(Vec<SearchSuggestion>, String)>;
-    type MetadataType = TaskMetadata;
-    fn into_future(
-        self,
-        backend: &ArcServer,
-    ) -> impl Future<Output = Self::Output> + Send + 'static {
-        let backend = backend.clone();
-        async move { backend.api.get_search_suggestions(self.0).await }
-    }
 }
 impl BackendTask<ArcServer> for SearchArtists {
     type Output = Result<Vec<SearchResultArtist>>;
@@ -387,22 +376,6 @@ impl BackendStreamingTask<ArcServer> for QueueSong {
         vec![TaskMetadata::PlayingSong]
     }
 }
-impl BackendTask<ArcServer> for GetSongThumbnail {
-    type Output = anyhow::Result<SongThumbnail>;
-    type MetadataType = TaskMetadata;
-    fn into_future(
-        self,
-        backend: &ArcServer,
-    ) -> impl Future<Output = Self::Output> + Send + 'static {
-        let backend = backend.clone();
-        async move {
-            backend
-                .song_thumbnail_downloader
-                .download_song_thumbnail(self.thumbnail_id, self.thumbnail_url)
-                .await
-        }
-    }
-}
 
 #[derive(PartialEq, Debug)]
 pub struct PlayDecodedSong(pub ListSongID);
@@ -441,34 +414,26 @@ impl MapFn<DecodedInMemSong> for QueueDecodedSong {
     }
 }
 
-/// It's not possible to compare some of these Tasks type due to the underlying
-/// type, but because tests and some ci run with async_callback_manager's
-/// "task-equality" enabled, a PartialEq impl is required. It's acceptable to
-/// panic as running .eq() on these types is a logic error AND should only occur
-/// during testing.
-#[cfg(any(test, clippy))]
-#[allow(unexpected_cfgs)]
-mod test_config {
-    use crate::app::server::{AutoplaySong, HandleApiError, PlaySong, QueueSong};
-
-    impl PartialEq for HandleApiError {
-        fn eq(&self, _: &Self) -> bool {
-            panic!("Unable to compare HandleApiError");
-        }
+// FusedTask in async-callback-manager derives PartialEq unconditionally,
+// so these task types must implement PartialEq in all build configurations.
+// We compare all fields except DecodedInMemSong (wraps a Decoder, not comparable).
+impl PartialEq for HandleApiError {
+    fn eq(&self, other: &Self) -> bool {
+        self.error.to_string() == other.error.to_string() && self.message == other.message
     }
-    impl PartialEq for PlaySong {
-        fn eq(&self, _: &Self) -> bool {
-            panic!("Unable to compare PlaySong");
-        }
+}
+impl PartialEq for PlaySong {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
     }
-    impl PartialEq for AutoplaySong {
-        fn eq(&self, _: &Self) -> bool {
-            panic!("Unable to compare AutoplaySong");
-        }
+}
+impl PartialEq for AutoplaySong {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
     }
-    impl PartialEq for QueueSong {
-        fn eq(&self, _: &Self) -> bool {
-            panic!("Unable to compare QueueSong");
-        }
+}
+impl PartialEq for QueueSong {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
     }
 }

@@ -1,5 +1,5 @@
 use super::{WindowContext, YoutuiWindow, footer, header};
-use crate::app::view::draw::{draw_panel_mut_impl, draw_table_impl};
+use crate::app::view::draw::{draw_panel_mut_impl, draw_table_impl, DrawTableConfig};
 use crate::app::view::{BasicConstraint, Drawable, DrawableMut};
 use crate::drawutils::{SELECTED_BORDER_COLOUR, TEXT_COLOUR, left_bottom_corner_rect};
 use crate::keyaction::{DisplayableKeyAction, DisplayableMode};
@@ -10,10 +10,7 @@ use ratatui::layout::{Constraint, Direction, Layout};
 use ratatui::prelude::Rect;
 use ratatui::style::Style;
 use ratatui::widgets::{Block, Borders, Clear, Row, Table};
-use ratatui_image::picker::Picker;
-
-// Add tests to try and draw app with oddly sized windows.
-pub fn draw_app(f: &mut Frame, w: &mut YoutuiWindow, terminal_image_capabilities: &Picker) {
+pub fn draw_app(f: &mut Frame, w: &mut YoutuiWindow) {
     let [header_chunk, window_chunk, footer_chunk] = Layout::default()
         .direction(Direction::Vertical)
         .margin(0)
@@ -42,7 +39,7 @@ pub fn draw_app(f: &mut Frame, w: &mut YoutuiWindow, terminal_image_capabilities
     if w.key_pending() {
         draw_popup(f, w, window_chunk);
     }
-    footer::draw_footer(f, w, footer_chunk, terminal_image_capabilities);
+    footer::draw_footer(f, w, footer_chunk);
 }
 
 fn draw_popup(f: &mut Frame, w: &YoutuiWindow, chunk: Rect) {
@@ -99,12 +96,9 @@ fn draw_popup(f: &mut Frame, w: &YoutuiWindow, chunk: Rect) {
 
 /// Draw the help page. The help page should show all visible commands for the
 /// current page.
+/// Draw the help page. The help page should show all visible commands for the
+/// current page.
 fn draw_help(f: &mut Frame, w: &mut YoutuiWindow, chunk: Rect) {
-    // XXX: Probably don't need to map then fold,
-    // just fold.
-    //
-    // XXX: Fold closure could be written as a function, then becomes
-    // testable.
     let (mut s_len, mut c_len, mut d_len, items) = w
         .get_help_list_items()
         .map(
@@ -123,9 +117,6 @@ fn draw_help(f: &mut Frame, w: &mut YoutuiWindow, chunk: Rect) {
     let width = s_len + c_len + d_len + 4;
     // Total block height required, including header and borders.
     let height = items + 3;
-    // Naive implementation
-    // XXX: We're running get_help_list_items a second time here.
-    // Better to move to the fold above.
     let table_constraints = [
         BasicConstraint::Length(s_len.try_into().unwrap_or(u16::MAX)),
         BasicConstraint::Length(c_len.try_into().unwrap_or(u16::MAX)),
@@ -151,20 +142,22 @@ fn draw_help(f: &mut Frame, w: &mut YoutuiWindow, chunk: Rect) {
                      keybinds,
                      context,
                      description,
-                 }| { [keybinds, context, description].into_iter() },
+                  }| { [keybinds, context, description].into_iter() },
             );
             let (new_state, effect) = draw_table_impl(
                 f,
                 chunk,
-                t.help.cur,
-                None,
-                &t.help.widget_state,
+                DrawTableConfig {
+                    cur: t.help.cur,
+                    secondary_highlighted_row: None,
+                    state: &t.help.widget_state,
+                    len: items,
+                    layout: &table_constraints,
+                    footer: None,
+                    cur_tick,
+                },
                 commands_table,
-                items,
-                &table_constraints,
                 headings,
-                None,
-                cur_tick,
             );
             t.help.widget_state = new_state;
             Some(effect)

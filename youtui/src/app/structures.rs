@@ -1,8 +1,6 @@
 use serde::{Serialize, Deserialize};
 use super::server::song_downloader::InMemSong;
-use super::server::song_thumbnail_downloader::SongThumbnail;
 use super::view::SortDirection;
-use crate::app::server::song_thumbnail_downloader::SongThumbnailID;
 use itertools::Itertools;
 use std::borrow::Cow;
 use std::ops::Deref;
@@ -61,17 +59,14 @@ pub struct ListSongID(#[cfg(test)] pub usize, #[cfg(not(test))] usize);
 #[derive(Clone, PartialEq, Copy, Debug, Default, PartialOrd, Serialize, Deserialize)]
 pub struct Percentage(pub u8);
 
-#[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
-pub enum AlbumArtState {
-    #[default]
-    Init,
-    #[serde(skip)]
-    Downloaded(Rc<SongThumbnail>),
-    None,
-    Error,
+fn duration_string_to_secs(s: &str) -> usize {
+    s.rsplit(':')
+        .flat_map(|n| n.parse::<usize>().ok())
+        .zip([1, 60, 3600])
+        .fold(0, |acc, (time, multiplier)| acc + time * multiplier)
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ListSong {
     pub video_id: VideoID<'static>,
     pub track_no: Option<usize>,
@@ -82,11 +77,40 @@ pub struct ListSong {
     pub id: ListSongID,
     pub duration_string: String,
     pub actual_duration: Option<Duration>,
+    #[serde(default)]
+    pub duration_secs: usize,
+    #[serde(skip)]
+    pub title_lower: String,
+    #[serde(skip)]
+    pub album_lower: String,
+    #[serde(skip)]
+    pub artists_lower: String,
+    #[serde(skip)]
+    pub artists_string: String,
+    #[serde(skip)]
+    pub track_no_string: String,
     pub year: Option<Rc<String>>,
-    pub album_art: AlbumArtState,
     pub artists: MaybeRc<Vec<ListSongArtist>>,
     pub thumbnails: MaybeRc<Vec<Thumbnail>>,
     pub album: Option<MaybeRc<ListSongAlbum>>,
+}
+
+impl PartialEq for ListSong {
+    fn eq(&self, other: &Self) -> bool {
+        self.video_id == other.video_id
+            && self.track_no == other.track_no
+            && self.plays == other.plays
+            && self.title == other.title
+            && self.explicit == other.explicit
+            && self.download_status == other.download_status
+            && self.id == other.id
+            && self.duration_string == other.duration_string
+            && self.actual_duration == other.actual_duration
+            && self.year == other.year
+            && self.artists == other.artists
+            && self.thumbnails == other.thumbnails
+            && self.album == other.album
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -236,7 +260,22 @@ fn compute_artists_string(artists: &[ListSongArtist]) -> String {
     Itertools::intersperse(artists.iter().map(|a| a.name.as_str()), ", ").collect()
 }
 
+fn compute_lowercached(title: &str, album: Option<&str>, artists: &[ListSongArtist]) -> (String, String, String) {
+    let title_lower = title.to_lowercase();
+    let album_lower = album.unwrap_or_default().to_lowercase();
+    let artists_lower = compute_artists_string(artists).to_lowercase();
+    (title_lower, album_lower, artists_lower)
+}
+
 impl ListSong {
+    pub fn ensure_cached_fields(&mut self) {
+        if self.artists_string.is_empty() {
+            self.artists_string = compute_artists_string(&self.artists);
+        }
+        if self.track_no_string.is_empty() {
+            self.track_no_string = self.track_no.map(|n| n.to_string()).unwrap_or_default();
+        }
+    }
     pub fn get_fields<const N: usize>(
         &self,
         fields: [ListSongDisplayableField; N],
@@ -248,12 +287,8 @@ impl ListSong {
             ListSongDisplayableField::DownloadStatus => {
                 Cow::Borrowed(self.download_status.list_icon_str())
             },
-            ListSongDisplayableField::TrackNo => self
-                .track_no
-                .map(|track_no| track_no.to_string())
-                .unwrap_or_default()
-                .into(),
-            ListSongDisplayableField::Artists => compute_artists_string(&self.artists).into(),
+            ListSongDisplayableField::TrackNo => Cow::Borrowed(self.track_no_string.as_str()),
+            ListSongDisplayableField::Artists => Cow::Borrowed(self.artists_string.as_str()),
             ListSongDisplayableField::Album => self
                 .album
                 .as_ref()
@@ -298,6 +333,9 @@ impl ListSong {
             name,
             id: AlbumOrUploadAlbumID::Album(AlbumID::from_raw("")),
         }));
+        let album_ref = list_album.as_ref().map(|a| a.as_ref().name.as_str());
+        let artists_string = compute_artists_string(&list_artists);
+        let (title_lower, album_lower, artists_lower) = compute_lowercached(&title, album_ref, &list_artists);
         ListSong {
             video_id,
             track_no: None,
@@ -306,10 +344,15 @@ impl ListSong {
             explicit: None,
             download_status: DownloadStatus::None,
             id: ListSongID(0),
+            duration_secs: duration_string_to_secs(&duration_string),
             duration_string,
             actual_duration: None,
+            title_lower,
+            album_lower,
+            artists_lower,
+            artists_string,
+            track_no_string: String::new(),
             year: None,
-            album_art: AlbumArtState::Init,
             artists: MaybeRc::Owned(list_artists),
             thumbnails: MaybeRc::Owned(thumb.unwrap_or_default()),
             album: list_album,
@@ -404,6 +447,10 @@ impl BrowserSongsList {
             explicit,
             ..
         } = song;
+        let artists_string = compute_artists_string(&artists);
+        let track_no_string = track_no.to_string();
+        let (title_lower, album_lower, artists_lower) =
+            compute_lowercached(&title, Some(&album.name), &artists);
         self.list.push(ListSong {
             download_status: DownloadStatus::None,
             id,
@@ -411,14 +458,20 @@ impl BrowserSongsList {
             artists: MaybeRc::Rc(artists),
             album: Some(MaybeRc::Rc(album)),
             actual_duration: None,
+            duration_secs: duration_string_to_secs(&duration),
             video_id,
             track_no: Some(track_no),
             plays,
             title,
             explicit: Some(explicit),
             duration_string: duration,
+            title_lower,
+            album_lower,
+            artists_lower,
+            artists_string,
+            track_no_string,
             thumbnails: MaybeRc::Rc(thumbnails),
-            album_art: Default::default(),
+
         });
         id
     }
@@ -429,30 +482,45 @@ impl BrowserSongsList {
             artist,
             album,
             duration,
-            plays: _,
+            plays,
             explicit,
             video_id,
             thumbnails,
             ..
         } = song;
+        let search_album = album.map(Into::<ListSongAlbum>::into).map(MaybeRc::Owned);
+        let search_artists = vec![ListSongArtist {
+            name: artist,
+            id: None,
+        }];
+        let artists_string = compute_artists_string(&search_artists);
+        let track_no_string = String::new();
+        let (title_lower, album_lower, artists_lower) = compute_lowercached(
+            &title,
+            search_album.as_ref().map(|a| a.as_ref().name.as_str()),
+            &search_artists,
+        );
         self.list.push(ListSong {
             download_status: DownloadStatus::None,
             id,
             year: None,
-            artists: MaybeRc::Owned(vec![ListSongArtist {
-                name: artist,
-                id: None,
-            }]),
-            album: album.map(Into::into).map(MaybeRc::Owned),
+            artists: MaybeRc::Owned(search_artists),
+            album: search_album,
             actual_duration: None,
+            duration_secs: duration_string_to_secs(&duration),
             video_id,
             track_no: None,
-            plays: String::new(),
+            plays,
             title,
             explicit: Some(explicit),
             duration_string: duration,
+            title_lower,
+            album_lower,
+            artists_lower,
+            artists_string,
+            track_no_string,
             thumbnails: MaybeRc::Owned(thumbnails),
-            album_art: Default::default(),
+
         });
         id
     }
@@ -521,6 +589,13 @@ impl BrowserSongsList {
                 None,
             ),
         };
+        let artists_string = compute_artists_string(&artists);
+        let track_no_string = track_no.to_string();
+        let (title_lower, album_lower, artists_lower) = compute_lowercached(
+            &title,
+            album.as_ref().map(|a: &ListSongAlbum| a.name.as_str()),
+            &artists,
+        );
         self.list.push(ListSong {
             download_status: DownloadStatus::None,
             id,
@@ -528,14 +603,20 @@ impl BrowserSongsList {
             artists: MaybeRc::Owned(artists),
             album: album.map(MaybeRc::Owned),
             actual_duration: None,
+            duration_secs: duration_string_to_secs(&duration),
             video_id,
             track_no: Some(track_no),
             plays: String::new(),
             title,
             explicit,
             duration_string: duration,
+            title_lower,
+            album_lower,
+            artists_lower,
+            artists_string,
+            track_no_string,
             thumbnails: MaybeRc::Owned(thumbnails),
-            album_art: Default::default(),
+
         });
         id
     }
@@ -544,10 +625,12 @@ impl BrowserSongsList {
         let mut iter = song_list.into_iter();
         if let Some(mut first) = iter.next() {
             first.id = first_id;
+            first.ensure_cached_fields();
             self.list.push(first);
         }
         for mut song in iter {
             song.id = self.create_next_id();
+            song.ensure_cached_fields();
             self.list.push(song);
         }
         first_id
@@ -565,31 +648,130 @@ impl BrowserSongsList {
         self.next_id.0 += 1;
         id
     }
-    pub fn add_song_thumbnail(&mut self, song_thumbnail: SongThumbnail) {
-        // Thumbnail is refcounted since it could be shared by multiple songs on the
-        // playlist (even if its a video thumbnail).
-        let thumbnail_shared = Rc::new(song_thumbnail);
-        for song in &mut self.list {
-            if !matches!(song.album_art, AlbumArtState::Downloaded(_))
-                && SongThumbnailID::from(&*song) == thumbnail_shared.song_thumbnail_id
-            {
-                song.album_art = AlbumArtState::Downloaded(thumbnail_shared.clone());
-            }
-            tracing::info!("Album art updated");
-        }
-    }
-    pub fn set_song_thumbnail_error(&mut self, thumbnail_id: SongThumbnailID<'_>) {
-        for song in &mut self.list {
-            if !matches!(song.album_art, AlbumArtState::Downloaded(_))
-                && SongThumbnailID::from(&*song) == thumbnail_id
-            {
-                song.album_art = AlbumArtState::Error;
-            }
-            tracing::info!("Album art updated");
-        }
-    }
     pub fn get_song_from_idx(&self, idx: usize) -> Option<&ListSong> {
         self.list.get(idx)
     }
 
+}
+
+#[cfg(test)]
+mod bench {
+    use super::*;
+    use ytmapi_rs::common::VideoID;
+
+    const ITERATIONS: usize = 10_000;
+
+    fn make_browser_songs(count: usize) -> Vec<ListSong> {
+        (0..count)
+            .map(|i| ListSong::create_with_metadata(
+                VideoID::from_raw(format!("video_{i}")),
+                format!("Song {i}"),
+                vec!["Artist A".into(), "Artist B".into()],
+                Some("Album".into()),
+                "3:30".into(),
+                None,
+            ))
+            .collect()
+    }
+
+    #[test]
+    fn bench_get_field_artists_cached() {
+        let songs = make_browser_songs(100);
+        let start = std::time::Instant::now();
+        for _ in 0..ITERATIONS {
+            for song in &songs {
+                let result = song.get_field(ListSongDisplayableField::Artists);
+                std::hint::black_box(&result);
+            }
+        }
+        let elapsed = start.elapsed();
+        let total_ns = elapsed.as_nanos() as f64;
+        let per_call = total_ns / (ITERATIONS as f64 * songs.len() as f64);
+        let total_ms = elapsed.as_secs_f64() * 1000.0;
+        assert!(per_call < 100.0, "get_field(Artists) too slow: {per_call:.1}ns/call");
+        eprintln!("[BENCH] get_field(Artists) — {ITERATIONS}×{} songs: {total_ms:.3}ms total, ~{per_call:.1}ns/call", songs.len());
+    }
+
+    #[test]
+    fn bench_get_field_track_no_cached() {
+        let songs = make_browser_songs(100);
+        let start = std::time::Instant::now();
+        for _ in 0..ITERATIONS {
+            for song in &songs {
+                let result = song.get_field(ListSongDisplayableField::TrackNo);
+                std::hint::black_box(&result);
+            }
+        }
+        let elapsed = start.elapsed();
+        let total_ns = elapsed.as_nanos() as f64;
+        let per_call = total_ns / (ITERATIONS as f64 * songs.len() as f64);
+        let total_ms = elapsed.as_secs_f64() * 1000.0;
+        assert!(per_call < 100.0, "get_field(TrackNo) too slow: {per_call:.1}ns/call");
+        eprintln!("[BENCH] get_field(TrackNo) — {ITERATIONS}×{} songs: {total_ms:.3}ms total, ~{per_call:.1}ns/call", songs.len());
+    }
+
+    #[test]
+    fn bench_get_fields_4col() {
+        let songs = make_browser_songs(100);
+        let fields = [
+            ListSongDisplayableField::Song,
+            ListSongDisplayableField::Artists,
+            ListSongDisplayableField::Album,
+            ListSongDisplayableField::Duration,
+        ];
+        let start = std::time::Instant::now();
+        for _ in 0..ITERATIONS {
+            for song in &songs {
+                let result = song.get_fields(fields);
+                std::hint::black_box(&result);
+            }
+        }
+        let elapsed = start.elapsed();
+        let total_ns = elapsed.as_nanos() as f64;
+        let per_call = total_ns / (ITERATIONS as f64 * songs.len() as f64);
+        let total_ms = elapsed.as_secs_f64() * 1000.0;
+        assert!(per_call < 500.0, "get_fields(4col) too slow: {per_call:.1}ns/call");
+        eprintln!("[BENCH] get_fields(4col) — {ITERATIONS}×{} songs: {total_ms:.3}ms total, ~{per_call:.1}ns/call", songs.len());
+    }
+
+    #[test]
+    fn bench_compute_lowercached() {
+        let artists = vec![
+            ListSongArtist { name: "Artist A".into(), id: None },
+            ListSongArtist { name: "Artist B".into(), id: None },
+        ];
+        let start = std::time::Instant::now();
+        for _ in 0..ITERATIONS {
+            let result = compute_lowercached("Song Title", Some("Album Name"), &artists);
+            std::hint::black_box(&result);
+        }
+        let elapsed = start.elapsed();
+        let total_ns = elapsed.as_nanos() as f64;
+        let per_call = total_ns / ITERATIONS as f64;
+        let total_ms = elapsed.as_secs_f64() * 1000.0;
+        assert!(per_call < 100_000.0, "compute_lowercached too slow: {per_call:.1}ns/call");
+        eprintln!("[BENCH] compute_lowercached — {ITERATIONS}×: {total_ms:.3}ms total, ~{per_call:.1}ns/call");
+    }
+
+    #[test]
+    fn bench_create_with_metadata() {
+        let start = std::time::Instant::now();
+        for _ in 0..ITERATIONS {
+            let result = ListSong::create_with_metadata(
+                VideoID::from_raw("video_id"),
+                "Song Title".into(),
+                vec!["Artist A".into(), "Artist B".into()],
+                Some("Album".into()),
+                "3:30".into(),
+                None,
+            );
+            std::hint::black_box(&result);
+        }
+        let elapsed = start.elapsed();
+        let total_ns = elapsed.as_nanos() as f64;
+        let per_call = total_ns / ITERATIONS as f64;
+        let total_ms = elapsed.as_secs_f64() * 1000.0;
+        assert!(per_call < 1_000_000.0, "create_with_metadata too slow: {per_call:.1}ns/call");
+        eprintln!("[BENCH] create_with_metadata — {ITERATIONS}×: {total_ms:.3}ms total, ~{per_call:.1}ns/call");
+    }
 }

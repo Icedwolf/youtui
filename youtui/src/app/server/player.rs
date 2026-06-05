@@ -101,7 +101,10 @@ impl Player {
     ) -> std::result::Result<DecodedInMemSong, DecoderError> {
         tokio::task::spawn_blocking(move || try_decode(song))
             .await
-            .expect("Try decode should not panic")
+            .map_err(|e| {
+                tracing::error!("spawn_blocking for decode failed: {e}");
+                DecoderError::UnrecognizedFormat
+            })?
     }
 }
 

@@ -13,7 +13,6 @@ use crossterm::terminal::{
 use media_controls::MediaController;
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
-use ratatui_image::picker::Picker;
 use server::{ArcServer, Server, TaskMetadata};
 use std::borrow::Cow;
 use std::fmt::Display;
@@ -21,16 +20,16 @@ use std::io;
 use std::sync::Arc;
 pub use structures::AudioQuality;
 use structures::ListSong;
-use tracing::{debug, error, info};
+use tracing::{error, info, warn};
 use tracing_subscriber::prelude::*;
 use ui::{WindowContext, YoutuiWindow};
 
 #[macro_use]
 pub mod component;
 mod media_controls;
+pub mod queue_persistence;
 mod server;
 mod structures;
-pub mod queue_persistence;
 pub mod ui;
 pub mod view;
 
@@ -55,9 +54,6 @@ pub struct Youtui {
     terminal: Terminal<CrosstermBackend<io::Stdout>>,
     // Optional as may be disabled at runtime.
     media_controls: Option<MediaController>,
-    /// Capabilities of the user's terminal in regards to image rendering - ie,
-    /// font size / kitty protocal etc. This
-    terminal_image_capabilities: Picker,
 }
 
 #[derive(PartialEq)]
@@ -133,12 +129,6 @@ impl Youtui {
         let server = Arc::new(server::Server::new(api_key, po_token, &config));
         let backend = CrosstermBackend::new(stdout);
         let terminal = Terminal::new(backend)?;
-        // The docs for this function state that it must be run after entering alternate
-        // screen but before events are read, therefore this is hoisted for
-        // visibility. Note that this may briefly block, delaying startup, but likely
-        // unavoidable.
-        let terminal_image_capabilities = Picker::from_query_stdio()?;
-        debug!("Terminal info: {terminal_image_capabilities:#?}");
         let (media_controls, media_control_event_stream) = if disable_media_controls {
             (None, None)
         } else {
@@ -148,10 +138,29 @@ impl Youtui {
             (Some(media_controls), Some(media_control_event_stream))
         };
         let event_handler = EventHandler::new(EVENT_CHANNEL_SIZE, media_control_event_stream)?;
-        let (window_state, effect) = YoutuiWindow::new(config);
+        let (mut window_state, effect) = YoutuiWindow::new(config);
         // Even the creation of a YoutuiWindow causes an effect. We'll spawn it straight
         // away.
         task_manager.spawn_task(&server, effect);
+
+        // Auto-load playlist from previous session (if any)
+        match queue_persistence::auto_load(&mut window_state.playlist) {
+            Ok(load_effect) => {
+                let song_count = window_state.playlist.list.get_list_iter().count();
+                info!(
+                    "Auto-loaded {} songs from __autosave.json",
+                    song_count
+                );
+                task_manager.spawn_task(
+                    &server,
+                    load_effect.map_frontend(|w: &mut YoutuiWindow| &mut w.playlist),
+                );
+            }
+            Err(e) => {
+                warn!("Auto-load failed ({}). Starting with empty playlist.", e);
+            }
+        }
+
         Ok(Youtui {
             status: AppStatus::Running,
             event_handler,
@@ -160,7 +169,6 @@ impl Youtui {
             server,
             terminal,
             media_controls,
-            terminal_image_capabilities,
         })
     }
     pub async fn run(&mut self) -> Result<()> {
@@ -172,11 +180,7 @@ impl Youtui {
                     // instantly react to.
                     // Draw occurs before the first event, to ensure up loads immediately.
                     self.terminal.draw(|f| {
-                        ui::draw::draw_app(
-                            f,
-                            &mut self.window_state,
-                            &self.terminal_image_capabilities,
-                        );
+                        ui::draw::draw_app(f, &mut self.window_state);
                     })?;
                     if let Some(media_controls) = &mut self.media_controls {
                         media_controls.update_controls(
@@ -314,9 +318,9 @@ async fn init_tracing(debug: bool, logging: bool) -> Result<()> {
     } else {
         (tracing::Level::INFO, tui_logger::LevelFilter::Info)
     };
-    let context_layer =
-        tracing_subscriber::filter::Targets::new().with_target("youtui", tracing_log_level);
     if logging {
+        let context_layer =
+            tracing_subscriber::filter::Targets::new().with_target("youtui", tracing_log_level);
         let (log_file, log_file_name) = get_limited_sequential_file(
             &get_data_dir()?,
             LOG_FILE_NAME,
@@ -335,11 +339,11 @@ async fn init_tracing(debug: bool, logging: bool) -> Result<()> {
             .init();
         info!("Logging to {:?}.", log_file_name);
     } else {
-        let context_layer =
-            tracing_subscriber::filter::Targets::new().with_target("youtui", tracing_log_level);
         tracing_subscriber::registry()
             .with(tui_logger_layer)
-            .with(context_layer)
+            .with(
+                tracing_subscriber::filter::Targets::new().with_target("youtui", tracing_log_level),
+            )
             .init();
     }
     tui_logger::init_logger(tui_logger_log_level)

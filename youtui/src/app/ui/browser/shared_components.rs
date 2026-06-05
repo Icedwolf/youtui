@@ -1,7 +1,6 @@
 use crate::app::component::actionhandler::{Action, ComponentEffect, Suggestable, TextHandler};
 use crate::app::server::{GetSearchSuggestions, HandleApiError};
 use crate::app::view::{TableFilterCommand, TableSortCommand};
-use anyhow::Context;
 use async_callback_manager::{AsyncTask, Constraint, NoOpHandler};
 use rat_text::text_input::{TextInputState, handle_events};
 use ratatui::widgets::ListState;
@@ -16,8 +15,7 @@ pub struct SearchBlock {
 }
 impl_youtui_component!(SearchBlock);
 
-// TODO: refactor
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct FilterManager {
     pub filter_commands: Vec<TableFilterCommand>,
     pub filter_text: TextInputState,
@@ -25,8 +23,17 @@ pub struct FilterManager {
 }
 impl_youtui_component!(FilterManager);
 
-// TODO: refactor
-#[derive(Clone, Default)]
+impl Default for FilterManager {
+    fn default() -> Self {
+        Self {
+            filter_commands: Vec::new(),
+            filter_text: TextInputState::new(),
+            shown: false,
+        }
+    }
+}
+
+#[derive(Clone)]
 pub struct SortManager {
     pub sort_commands: Vec<TableSortCommand>,
     pub shown: bool,
@@ -34,6 +41,17 @@ pub struct SortManager {
     pub state: ListState,
 }
 impl_youtui_component!(SortManager);
+
+impl Default for SortManager {
+    fn default() -> Self {
+        Self {
+            sort_commands: Vec::new(),
+            shown: false,
+            cur: 0,
+            state: ListState::default(),
+        }
+    }
+}
 
 #[derive(PartialEq, Clone, Copy, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -139,7 +157,7 @@ impl TextHandler for FilterManager {
     ) -> Option<ComponentEffect<Self>> {
         match handle_events(&mut self.filter_text, true, event) {
             rat_text::event::TextOutcome::Continue => None,
-            rat_text::event::TextOutcome::Unchanged => Some(AsyncTask::new_no_op()),
+            rat_text::event::TextOutcome::Unchanged => None,
             rat_text::event::TextOutcome::Changed => Some(AsyncTask::new_no_op()),
             rat_text::event::TextOutcome::TextChanged => Some(AsyncTask::new_no_op()),
         }
@@ -266,13 +284,8 @@ impl_youtui_task_handler!(
 pub fn get_adjusted_list_column<T: Copy, const N: usize>(
     target_col: usize,
     adjusted_cols: [T; N],
-) -> anyhow::Result<T> {
-    adjusted_cols
-        .get(target_col)
-        .with_context(|| {
-            format!("Unable to sort column, doesn't match up with underlying list. {target_col}",)
-        })
-        .copied()
+) -> Option<T> {
+    adjusted_cols.get(target_col).copied()
 }
 
 #[cfg(test)]
@@ -295,7 +308,7 @@ mod tests {
     }
     #[test]
     fn test_get_adjusted_list_column_out_of_bounds() {
-        assert!(get_adjusted_list_column(3, [3, 1, 2]).is_err())
+        assert!(get_adjusted_list_column(3, [3, 1, 2]).is_none())
     }
     #[test]
     fn test_dont_fetch_search_suggestions_when_empty() {

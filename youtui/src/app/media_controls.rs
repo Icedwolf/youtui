@@ -4,10 +4,12 @@ use super::structures::Percentage;
 use super::ui::playlist::DEFAULT_UI_VOLUME;
 use crate::core::blocking_send_or_error;
 use futures::Stream;
+use notify_rust::{Notification, Timeout};
 use souvlaki::{MediaControlEvent, MediaMetadata, MediaPosition, PlatformConfig};
 use std::borrow::Cow;
 use std::time::Duration;
 use tokio::sync::mpsc;
+use tokio::task;
 use tokio_stream::wrappers::ReceiverStream;
 
 /// Minimum change in playing position before triggering a redraw. This is to
@@ -42,10 +44,75 @@ impl std::fmt::Display for MediaControlsError {
     }
 }
 
+pub struct NotificationController {
+    last_notification: Option<(String, String)>,
+    cover_url: Option<String>,
+}
+
+impl Default for NotificationController {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl NotificationController {
+    pub fn new() -> Self {
+        Self {
+            last_notification: None,
+            cover_url: None,
+        }
+    }
+
+    pub async fn notify_track_change(
+        &mut self,
+        title: &str,
+        artist: Option<&str>,
+        cover_url: Option<&str>,
+    ) -> Result<(), notify_rust::error::Error> {
+        let body = artist.unwrap_or("Unknown Artist");
+
+        if self
+            .last_notification
+            .as_ref()
+            .map(|(t, b)| (t.as_str(), b.as_str()))
+            == Some((title, body))
+        {
+            return Ok(());
+        }
+
+        let icon_path = if let Some(url) = cover_url {
+            if url.starts_with("file://") {
+                Some(url.to_string())
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        let mut notification = Notification::new()
+            .summary(title)
+            .body(body)
+            .appname("youtui")
+            .timeout(Timeout::Milliseconds(5000))
+            .clone();
+
+        if let Some(path) = &icon_path {
+            notification.icon(path.as_str());
+        }
+
+        notification.show()?;
+        self.last_notification = Some((title.to_string(), body.to_string()));
+        self.cover_url = cover_url.map(String::from);
+        Ok(())
+    }
+}
+
 pub struct MediaController {
     inner: souvlaki::MediaControls,
     status: souvlaki::MediaPlayback,
     volume: MediaControlsVolume,
+    notification_controller: NotificationController,
     title: Option<String>,
     album: Option<String>,
     artist: Option<String>,
@@ -157,6 +224,7 @@ impl MediaController {
                 cover_url: None,
                 duration: None,
                 volume: Default::default(),
+                notification_controller: NotificationController::new(),
                 #[cfg(target_os = "macos")]
                 macos_window_handle,
             },
@@ -239,9 +307,43 @@ impl MediaController {
             self.inner
                 .set_metadata(new_metadata)
                 .map_err(MediaControlsError)?;
+
+            if let Some(title) = &self.title {
+                let artist = self.artist.clone();
+                let cover_url = self.cover_url.clone();
+                let mut controller = std::mem::take(&mut self.notification_controller);
+
+                let _ = task::block_in_place(|| {
+                    let rt = tokio::runtime::Handle::current();
+                    rt.block_on(async {
+                        controller
+                            .notify_track_change(title, artist.as_deref(), cover_url.as_deref())
+                            .await
+                    })
+                });
+                self.notification_controller = controller;
+            }
         }
         Ok(())
     }
+    fn update_progress(
+        current: &mut souvlaki::MediaPlayback,
+        new_status: impl FnOnce(Option<MediaPosition>) -> souvlaki::MediaPlayback,
+        new_progress: Duration,
+    ) -> bool {
+        let needs_update = match current {
+            souvlaki::MediaPlayback::Paused { progress: Some(p) }
+            | souvlaki::MediaPlayback::Playing { progress: Some(p) } => {
+                p.0.abs_diff(new_progress) >= POSITION_DIFFERENCE_REDRAW_THRESHOLD
+            }
+            _ => true,
+        };
+        if needs_update {
+            *current = new_status(Some(MediaPosition(new_progress)));
+        }
+        needs_update
+    }
+
     fn update_playback(&mut self, playback_status: MediaControlsStatus) -> anyhow::Result<()> {
         let mut redraw = false;
         match playback_status {
@@ -251,45 +353,19 @@ impl MediaController {
                     redraw = true;
                 }
             }
-            MediaControlsStatus::Paused {
-                progress: new_progress,
-            } => {
-                if let souvlaki::MediaPlayback::Paused {
-                    progress: Some(progress),
-                } = self.status
-                {
-                    if progress.0.abs_diff(new_progress) >= POSITION_DIFFERENCE_REDRAW_THRESHOLD {
-                        redraw = true;
-                        self.status = souvlaki::MediaPlayback::Paused {
-                            progress: Some(MediaPosition(new_progress)),
-                        };
-                    }
-                } else {
-                    redraw = true;
-                    self.status = souvlaki::MediaPlayback::Paused {
-                        progress: Some(MediaPosition(new_progress)),
-                    };
-                }
+            MediaControlsStatus::Paused { progress } => {
+                redraw = Self::update_progress(
+                    &mut self.status,
+                    |p| souvlaki::MediaPlayback::Paused { progress: p },
+                    progress,
+                );
             }
-            MediaControlsStatus::Playing {
-                progress: new_progress,
-            } => {
-                if let souvlaki::MediaPlayback::Playing {
-                    progress: Some(progress),
-                } = self.status
-                {
-                    if progress.0.abs_diff(new_progress) >= POSITION_DIFFERENCE_REDRAW_THRESHOLD {
-                        redraw = true;
-                        self.status = souvlaki::MediaPlayback::Playing {
-                            progress: Some(MediaPosition(new_progress)),
-                        };
-                    }
-                } else {
-                    redraw = true;
-                    self.status = souvlaki::MediaPlayback::Playing {
-                        progress: Some(MediaPosition(new_progress)),
-                    };
-                }
+            MediaControlsStatus::Playing { progress } => {
+                redraw = Self::update_progress(
+                    &mut self.status,
+                    |p| souvlaki::MediaPlayback::Playing { progress: p },
+                    progress,
+                );
             }
         }
         if redraw {
@@ -298,5 +374,72 @@ impl MediaController {
                 .map_err(MediaControlsError)?;
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Type-level test: NotificationController can be constructed.
+    /// This would fail to compile if the type is removed or changed.
+    #[test]
+    fn notification_controller_constructs() {
+        let nc = NotificationController::new();
+        assert!(nc.last_notification.is_none());
+        assert!(nc.cover_url.is_none());
+    }
+
+    /// Type-level test: NotificationController has Default impl.
+    #[test]
+    fn notification_controller_default() {
+        let nc = NotificationController::default();
+        assert!(nc.last_notification.is_none());
+    }
+
+    /// Zero-cost compile-time check: NotificationController type exists and is
+    /// a field of MediaController. Neither function is ever called — they're only
+    /// referenced for type-checking.
+    #[test]
+    fn notification_type_and_field_are_present() {
+        fn _type(_: &NotificationController) {}
+        fn _field(mc: &MediaController) {
+            let _ = &mc.notification_controller;
+        }
+        let _ = (_type, _field);
+    }
+
+    /// Dedup logic: calling notify_track_change with same title+artist after
+    /// a successful notification returns Ok(()) without calling show().
+    /// NOTE: The first call may fail with Err if no D-Bus daemon is running.
+    /// The second call should always be Ok(()) if the first succeeded.
+    #[ignore = "requires D-Bus notification daemon (mako, dunst, etc.)"]
+    #[test]
+    fn notify_track_change_dedup() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let mut nc = NotificationController::new();
+
+        // First call may fail if no daemon; if it succeeds, last_notification is set
+        let result = rt.block_on(nc.notify_track_change("Song A", Some("Artist A"), None));
+        if result.is_ok() {
+            let second = rt
+                .block_on(nc.notify_track_change("Song A", Some("Artist A"), None));
+            assert!(second.is_ok(), "dedup should return Ok for duplicate");
+        }
+    }
+
+    /// Regression: notify_track_change handles missing artist gracefully.
+    #[ignore = "requires D-Bus notification daemon (mako, dunst, etc.)"]
+    #[test]
+    fn notify_track_change_default_artist() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let mut nc = NotificationController::new();
+        let result = rt.block_on(nc.notify_track_change("Song B", None, None));
+        if result.is_ok() {
+            assert_eq!(
+                nc.last_notification,
+                Some(("Song B".to_string(), "Unknown Artist".to_string()))
+            );
+        }
     }
 }

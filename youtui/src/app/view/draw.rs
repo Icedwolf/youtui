@@ -174,36 +174,40 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
+pub struct DrawTableConfig<'a> {
+    pub cur: usize,
+    pub secondary_highlighted_row: Option<usize>,
+    pub state: &'a ScrollingTableState,
+    pub len: usize,
+    pub layout: &'a [BasicConstraint],
+    pub footer: Option<String>,
+    pub cur_tick: u64,
+}
+
 pub fn draw_table_impl<'a>(
     f: &mut Frame,
     chunk: Rect,
-    cur: usize,
-    secondary_highlighted_row: Option<usize>,
-    state: &ScrollingTableState,
+    cfg: DrawTableConfig<'a>,
     items: impl Iterator<Item = impl Iterator<Item = Cow<'a, str>> + 'a> + 'a,
-    len: usize,
-    layout: &'a [BasicConstraint],
     headings: impl Iterator<Item = impl Into<Cell<'static>>>,
-    footer: Option<String>,
-    cur_tick: u64,
 ) -> (ScrollingTableState, PanelEffect<'static>) {
     // TableState is cheap to clone
     // Set the state to the currently selected item.
-    let mut new_state = state.clone();
-    new_state.select(Some(cur), cur_tick);
+    let mut new_state = cfg.state.clone();
+    new_state.select(Some(cfg.cur), cfg.cur_tick);
     let table_height = chunk.height as usize;
-    let table_widths = basic_constraints_to_table_constraints(layout, chunk.width, 1);
-    let table_widget = ScrollingTable::new(items, headings, table_widths, cur_tick)
+    let table_widths = basic_constraints_to_table_constraints(cfg.layout, chunk.width, 1);
+    let table_widget = ScrollingTable::new(items, headings, table_widths, cfg.cur_tick)
         .style(Style::new().fg(TEXT_COLOUR))
         .secondary_row_highlight_style(Style::default().bold().italic())
         .row_highlight_style(Style::default().bg(ROW_HIGHLIGHT_COLOUR))
         .headings_style(Style::default().bold().fg(TABLE_HEADINGS_COLOUR))
-        .secondary_highlight_row(secondary_highlighted_row)
+        .secondary_highlight_row(cfg.secondary_highlighted_row)
         .min_ticker_gap(6)
         .max_times_to_scroll(Some(MAX_TIMES_TO_SCROLL_LIST))
         .column_spacing(1);
-    let scrollable_lines = len.saturating_sub(table_height);
-    let pos = state.offset().min(scrollable_lines);
+    let scrollable_lines = cfg.len.saturating_sub(table_height);
+    let pos = new_state.offset().min(scrollable_lines);
     let new_state = move_render_stateful_widget(f, table_widget, chunk, new_state);
     // Call this after rendering table, as offset is mutated.
     let scrollbar_state = ScrollbarState::default()
@@ -212,7 +216,7 @@ pub fn draw_table_impl<'a>(
     (
         new_state,
         PanelEffect {
-            footer: footer.map(Into::into),
+            footer: cfg.footer.map(Into::into),
             scrollbar: Some(scrollbar_state),
         },
     )
@@ -234,15 +238,17 @@ where
     let (new_table_state, effect) = draw_table_impl(
         f,
         chunk,
-        table.get_selected_item(),
-        table.get_highlighted_row(),
-        table.get_state(),
+        DrawTableConfig {
+            cur: table.get_selected_item(),
+            secondary_highlighted_row: table.get_highlighted_row(),
+            state: table.get_state(),
+            len,
+            layout: table.get_layout(),
+            footer: None,
+            cur_tick,
+        },
         items,
-        len,
-        table.get_layout(),
         table.get_headings(),
-        None,
-        cur_tick,
     );
 
     *table.get_mut_state() = new_table_state;
@@ -297,15 +303,17 @@ pub fn draw_advanced_table(
     let (new_table_state, effect) = draw_table_impl(
         f,
         chunk,
-        table.get_selected_item(),
-        table.get_highlighted_row(),
-        &new_table_state,
+        DrawTableConfig {
+            cur: table.get_selected_item(),
+            secondary_highlighted_row: table.get_highlighted_row(),
+            state: &new_table_state,
+            len: number_items,
+            layout: table.get_layout(),
+            footer: Some(filter_string),
+            cur_tick,
+        },
         table.get_filtered_items(),
-        number_items,
-        table.get_layout(),
         combined_headings,
-        Some(filter_string),
-        cur_tick,
     );
     *table.get_mut_state() = new_table_state;
 

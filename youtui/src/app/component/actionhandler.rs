@@ -6,6 +6,7 @@ use crate::keybind::Keybind;
 use async_callback_manager::AsyncTask;
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers, MouseEvent};
 use std::borrow::Cow;
+use tracing::trace;
 use ytmapi_rs::common::SearchSuggestion;
 
 /// Convenience type alias for an effect for a type implementing Component
@@ -63,6 +64,7 @@ pub struct YoutuiEffect<C: Component> {
 }
 impl<C: Component> YoutuiEffect<C> {
     pub fn new_no_op() -> Self {
+        trace!("no-op effect created");
         YoutuiEffect {
             effect: AsyncTask::new_no_op(),
             callback: None,

@@ -1,6 +1,5 @@
 use crate::app::component::actionhandler::ComponentEffect;
 use crate::app::server::song_downloader::{DownloadProgressUpdate, DownloadProgressUpdateType};
-use crate::app::server::song_thumbnail_downloader::{SongThumbnail, SongThumbnailID};
 use crate::app::server::{ArcServer, TaskMetadata};
 use crate::app::structures::ListSongID;
 use crate::app::ui::playlist::Playlist;
@@ -22,15 +21,11 @@ pub struct HandleSetSongPlayProgress;
 #[derive(Debug, PartialEq)]
 pub struct HandleVolumeUpdate;
 #[derive(Debug, PartialEq)]
-pub struct HandleGetSongThumbnailOk;
-#[derive(Debug, PartialEq)]
 pub struct HandlePausePlayResponse;
 #[derive(Debug, PartialEq)]
 pub struct HandleResumeResponse;
 #[derive(Debug, PartialEq)]
 pub struct HandlePausedResponse;
-#[derive(Debug, PartialEq)]
-pub struct HandleGetSongThumbnailError(pub SongThumbnailID<'static>);
 #[derive(Debug, PartialEq, Clone)]
 pub struct HandlePlayUpdateOk;
 #[derive(Debug, PartialEq, Clone)]
@@ -59,8 +54,6 @@ enum PlaylistEffect {
         kind: DownloadProgressUpdateType,
         id: ListSongID,
     },
-    SetSongThumbnailError(SongThumbnailID<'static>),
-    AddSongThumbnail(SongThumbnail),
 }
 impl_youtui_task_handler!(HandleStopped, Stopped<ListSongID>, Playlist, |_, input| {
     PlaylistEffect::StopSongID(input)
@@ -114,23 +107,6 @@ impl_youtui_task_handler!(
     }
 );
 impl_youtui_task_handler!(
-    HandleGetSongThumbnailOk,
-    SongThumbnail,
-    Playlist,
-    |_, input| PlaylistEffect::AddSongThumbnail(input)
-);
-impl_youtui_task_handler!(
-    HandleGetSongThumbnailError,
-    anyhow::Error,
-    Playlist,
-    |this: HandleGetSongThumbnailError, input| {
-        error!("Error {input} getting album art");
-        // TODO: if GetSongThumbnail error sends back it's ID, one less clone
-        // is required.
-        PlaylistEffect::SetSongThumbnailError(this.0)
-    }
-);
-impl_youtui_task_handler!(
     HandlePausePlayResponse,
     PausePlayResponse<ListSongID>,
     Playlist,
@@ -180,8 +156,6 @@ impl FrontendEffect<Playlist, ArcServer, TaskMetadata> for PlaylistEffect {
             PlaylistEffect::HandleSongDownloadProgressUpdate { kind, id } => {
                 return target.handle_song_download_progress_update(kind, id);
             }
-            PlaylistEffect::SetSongThumbnailError(msg) => target.list.set_song_thumbnail_error(msg),
-            PlaylistEffect::AddSongThumbnail(msg) => target.list.add_song_thumbnail(msg),
         }
         AsyncTask::new_no_op()
     }

@@ -58,17 +58,16 @@ pub async fn get_limited_sequential_file(
     }
     let get_valid_entry = |entry: DirEntry| {
         let entry_file_name = entry.file_name().into_string().ok()?;
+        if !entry_file_name.starts_with(filename) || !entry_file_name.ends_with(fileext) {
+            return None;
+        }
         let file_number = entry_file_name
             .trim_start_matches(filename)
             .trim_end_matches(fileext)
             .trim_end_matches(".")
             .parse::<usize>()
             .ok()?;
-        if entry_file_name.starts_with(filename) && entry_file_name.ends_with(fileext) {
-            Some(ValidEntry { entry, file_number })
-        } else {
-            None
-        }
+        Some(ValidEntry { entry, file_number })
     };
     let mut entries = ReadDirStream::new(stream)
         .filter_map(|try_entry| {
@@ -89,7 +88,7 @@ pub async fn get_limited_sequential_file(
         // Add an additional 1, as we are going to create a file bringing us up to max_files.
         .add(1)
         .saturating_sub(max_files as usize);
-    let _files_deleted = entries
+    let _deleted_count: usize = entries
         .into_iter()
         .take(surplus_files)
         .map(|entry| fs_err::tokio::remove_file(entry.entry.path()))
@@ -107,6 +106,7 @@ pub async fn get_limited_sequential_file(
 /// Either creates a new directory at dir, or deletes all files in the directory
 /// starting with managed_file_prefix that are older (last modified) than
 /// max_age. Returns the number of files cleaned up, if any.
+#[allow(dead_code)]
 pub async fn create_or_clean_directory(
     dir: &Path,
     managed_file_prefix: impl AsRef<str>,
@@ -116,11 +116,12 @@ pub async fn create_or_clean_directory(
     let time_now = SystemTime::now();
     let album_art_dir_reader = tokio::fs::read_dir(dir).await?;
     let filename_prefix_matches = |entry: &DirEntry| {
-        let matches = entry
-            .file_name()
-            .to_str()
-            .is_some_and(|s| s.starts_with(managed_file_prefix.as_ref()));
-        async move { matches }
+        futures::future::ready(
+            entry
+                .file_name()
+                .to_str()
+                .is_some_and(|s| s.starts_with(managed_file_prefix.as_ref())),
+        )
     };
     let delete_file_if_aged = |entry: DirEntry| async move {
         let last_modified = entry.metadata().await?.modified()?;
@@ -144,6 +145,7 @@ pub async fn create_or_clean_directory(
 
 /// Update the modified and accessed timestamps of a file that exists with
 /// `timestamp`, asynchronously.
+#[allow(dead_code)]
 pub async fn touch_file_with_timestamp(
     path: impl Into<PathBuf>,
     timestamp: SystemTime,
@@ -152,10 +154,6 @@ pub async fn touch_file_with_timestamp(
     // Polyfill for missing tokio equivalent to std
     //
     // https://github.com/tokio-rs/tokio/issues/6368
-    #[expect(
-        clippy::unwrap_used,
-        reason = "The two ways the task can error is if I have cancelled it (I haven't) or it's panicked which should both be true panics"
-    )]
     tokio::task::spawn_blocking(move || {
         let times = std::fs::FileTimes::new()
             .set_accessed(timestamp)
@@ -165,12 +163,13 @@ pub async fn touch_file_with_timestamp(
         Ok::<_, std::io::Error>(())
     })
     .await
-    .unwrap()?;
+    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))??;
     Ok(())
 }
 
 /// Get a stream of the paths of all files in a directory  or any errors
 /// encountered when traversing files.
+#[allow(dead_code)]
 pub async fn get_dir_file_paths(
     dir: &Path,
 ) -> std::io::Result<impl futures::Stream<Item = std::io::Result<PathBuf>> + 'static> {
@@ -215,7 +214,7 @@ where
         where
             E: de::Error,
         {
-            Ok(FromStr::from_str(value).unwrap())
+            Ok(FromStr::from_str(value).unwrap_or_else(|e| match e {}))
         }
         fn visit_map<M>(self, map: M) -> std::result::Result<T, M::Error>
         where

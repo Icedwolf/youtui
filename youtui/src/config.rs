@@ -189,161 +189,19 @@ raisevolume = {action = "vol_up", visiblity = "hidden"}"#;
             yt_dlp_command,
         } = toml::from_str(&config_file).unwrap();
         let keybinds = YoutuiKeymap::try_from_stringy_exact(keybinds, mode_names).unwrap();
-        let YoutuiKeymap {
-            global,
-            playlist,
-            browser,
-            browser_artists,
-            browser_search,
-            browser_songs,
-            browser_artist_songs,
-            help,
-            sort,
-            filter,
-            text_entry,
-            list,
-            log,
-            browser_playlists,
-            browser_playlist_songs,
-        } = keybinds;
-        let Config {
-            auth_type: def_auth_type,
-            keybinds: def_keybinds,
-            downloader_type: def_downloader_type,
-            yt_dlp_command: def_yt_dlp_command,
-        } = Config::default();
-        let YoutuiKeymap {
-            global: def_global,
-            playlist: def_playlist,
-            browser: def_browser,
-            browser_artists: def_browser_artists,
-            browser_search: def_browser_search,
-            browser_artist_songs: def_browser_artist_songs,
-            browser_songs: def_browser_songs,
-            help: def_help,
-            sort: def_sort,
-            filter: def_filter,
-            text_entry: def_text_entry,
-            list: def_list,
-            log: def_log,
-            browser_playlists: def_browser_playlists,
-            browser_playlist_songs: def_browser_playlist_songs,
-        } = def_keybinds;
-        // Assertions are split up here, to better narrow down errors.
-        assert_eq!(auth_type, def_auth_type, "auth_type doesn't match");
-        assert_eq!(
-            downloader_type, def_downloader_type,
-            "downloader_type doesn't match"
-        );
-        assert_eq!(
-            yt_dlp_command, def_yt_dlp_command,
-            "yt_dlp_command doesn't match"
-        );
-        assert_eq!(global, def_global, "global keybinds don't match");
-        assert_eq!(playlist, def_playlist, "playlist keybinds don't match");
-        assert_eq!(browser, def_browser, "browser keybinds don't match");
-        assert_eq!(
-            browser_artists, def_browser_artists,
-            "browser_artists keybinds don't match"
-        );
-        assert_eq!(
-            browser_artist_songs, def_browser_artist_songs,
-            "browser_artist_songs keybinds don't match"
-        );
-        assert_eq!(
-            browser_playlists, def_browser_playlists,
-            "browser_playlists keybinds don't match"
-        );
-        assert_eq!(
-            browser_playlist_songs, def_browser_playlist_songs,
-            "browser_playlist_songs keybinds don't match"
-        );
-        assert_eq!(
-            browser_search, def_browser_search,
-            "browser_search keybinds don't match"
-        );
-        assert_eq!(
-            browser_songs, def_browser_songs,
-            "browser_songs keybinds don't match"
-        );
-        assert_eq!(help, def_help, "help keybinds don't match");
-        assert_eq!(sort, def_sort, "sort keybinds don't match");
-        assert_eq!(filter, def_filter, "filter keybinds don't match");
-        assert_eq!(
-            text_entry, def_text_entry,
-            "text_entry keybinds don't match"
-        );
-        assert_eq!(list, def_list, "list keybinds don't match");
-        assert_eq!(log, def_log, "log keybinds don't match");
-    }
-    #[tokio::test]
-    async fn test_default_config_equals_blank_config() {
-        let ir: ConfigIR = toml::from_str("").unwrap();
-        let Config {
+        let config = Config {
             auth_type,
             keybinds,
             downloader_type,
             yt_dlp_command,
-        } = Config::try_from(ir).unwrap();
-        let YoutuiKeymap {
-            global,
-            playlist,
-            browser,
-            browser_artists,
-            browser_artist_songs,
-            browser_search,
-            browser_songs,
-            help,
-            sort,
-            filter,
-            text_entry,
-            list,
-            log,
-            browser_playlists,
-            browser_playlist_songs,
-        } = keybinds;
-        let Config {
-            auth_type: def_auth_type,
-            keybinds: def_keybinds,
-            downloader_type: def_downloader_type,
-            yt_dlp_command: def_yt_dlp_command,
-        } = Config::default();
-        let YoutuiKeymap {
-            global: def_global,
-            playlist: def_playlist,
-            browser: def_browser,
-            browser_artists: def_browser_artists,
-            browser_search: def_browser_search,
-            browser_songs: def_browser_songs,
-            browser_artist_songs: def_browser_artist_songs,
-            help: def_help,
-            sort: def_sort,
-            filter: def_filter,
-            text_entry: def_text_entry,
-            list: def_list,
-            log: def_log,
-            browser_playlists: def_browser_playlists,
-            browser_playlist_songs: def_browser_playlist_songs,
-        } = def_keybinds;
-        // Assertions are split up here, to better narrow down errors.
-        assert_eq!(auth_type, def_auth_type);
-        assert_eq!(downloader_type, def_downloader_type);
-        assert_eq!(yt_dlp_command, def_yt_dlp_command);
-        assert_eq!(global, def_global);
-        assert_eq!(playlist, def_playlist);
-        assert_eq!(browser, def_browser);
-        assert_eq!(browser_artists, def_browser_artists);
-        assert_eq!(browser_playlists, def_browser_playlists);
-        assert_eq!(browser_search, def_browser_search);
-        assert_eq!(browser_songs, def_browser_songs);
-        assert_eq!(browser_artist_songs, def_browser_artist_songs);
-        assert_eq!(browser_playlist_songs, def_browser_playlist_songs);
-        assert_eq!(help, def_help);
-        assert_eq!(sort, def_sort);
-        assert_eq!(filter, def_filter);
-        assert_eq!(text_entry, def_text_entry);
-        assert_eq!(list, def_list);
-        assert_eq!(log, def_log);
+        };
+        assert_eq!(config, Config::default());
+    }
+    #[tokio::test]
+    async fn test_default_config_equals_blank_config() {
+        let ir: ConfigIR = toml::from_str("").unwrap();
+        let config = Config::try_from(ir).unwrap();
+        assert_eq!(config, Config::default());
     }
     #[tokio::test]
     async fn test_different_config_to_default() {

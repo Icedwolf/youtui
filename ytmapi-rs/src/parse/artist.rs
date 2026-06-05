@@ -5,9 +5,10 @@ use super::{
 };
 use crate::Result;
 use crate::common::{
-    AlbumID, AlbumType, ArtistChannelID, BrowseParams, Explicit, LibraryManager, LibraryStatus,
-    LikeStatus, PlaylistID, VideoID,
+    AlbumID, AlbumType, ArtistChannelID, BrowseParams, ContinuationParams, Explicit,
+    LibraryManager, LibraryStatus, LikeStatus, PlaylistID, VideoID,
 };
+use crate::continuations::ParseFromContinuable;
 use crate::nav_consts::*;
 use crate::query::*;
 use const_format::concatcp;
@@ -221,6 +222,7 @@ enum ArtistTopReleaseCategory {
     #[serde(alias = "albums")]
     Albums,
     #[serde(alias = "singles")]
+    #[serde(alias = "Singles & EPs")]
     Singles,
     #[serde(alias = "videos")]
     Videos,
@@ -310,7 +312,17 @@ fn parse_artist_top_releases_from_section_list_contents(
         match category {
             ArtistTopReleaseCategory::Related => (),
             ArtistTopReleaseCategory::Videos => (),
-            ArtistTopReleaseCategory::Singles => (),
+            ArtistTopReleaseCategory::Singles => {
+                let mut results = Vec::new();
+                for i in r.navigate_pointer("/contents")?.try_iter_mut()? {
+                    results.push(parse_album_from_mtrir(i.navigate_pointer(MTRIR)?)?);
+                }
+                top_releases.singles = Some(GetArtistAlbums {
+                    browse_id,
+                    params,
+                    results,
+                });
+            }
             ArtistTopReleaseCategory::Albums => {
                 let mut results = Vec::new();
                 for i in r.navigate_pointer("/contents")?.try_iter_mut()? {
@@ -418,36 +430,53 @@ pub(crate) fn parse_library_management_items_from_menu(
     }))
 }
 
-impl<'a> ParseFrom<GetArtistAlbumsQuery<'a>> for Vec<GetArtistAlbumsAlbum> {
-    fn parse_from(p: ProcessedResult<GetArtistAlbumsQuery<'a>>) -> crate::Result<Self> {
+fn parse_artist_album_item(mut r: impl JsonCrawler) -> crate::Result<GetArtistAlbumsAlbum> {
+    let browse_id = r.take_value_pointer(concatcp!(TITLE, NAVIGATION_BROWSE_ID))?;
+    let playlist_id = r.take_value_pointer(MENU_PLAYLIST_ID).ok();
+    let title = r.take_value_pointer(TITLE_TEXT)?;
+    let thumbnails = r.take_value_pointer(THUMBNAIL_RENDERER)?;
+    let category = r.take_value_pointer(SUBTITLE).ok();
+    Ok(GetArtistAlbumsAlbum {
+        browse_id,
+        year: None,
+        title,
+        category,
+        thumbnails,
+        playlist_id,
+    })
+}
+
+fn parse_artist_albums_from_grid(
+    mut grid_renderer: JsonCrawlerOwned,
+) -> crate::Result<(Vec<GetArtistAlbumsAlbum>, Option<ContinuationParams<'static>>)> {
+    let continuation_params = grid_renderer.take_value_pointer(CONTINUATION_PARAMS).ok();
+    let albums = grid_renderer
+        .navigate_pointer("/items")?
+        .try_into_iter()?
+        .flat_map(|i| i.navigate_pointer(MTRIR))
+        .map(parse_artist_album_item)
+        .collect::<crate::Result<_>>()?;
+    Ok((albums, continuation_params))
+}
+
+impl<'a> ParseFromContinuable<GetArtistAlbumsQuery<'a>> for Vec<GetArtistAlbumsAlbum> {
+    fn parse_from_continuable(
+        p: ProcessedResult<GetArtistAlbumsQuery<'a>>,
+    ) -> crate::Result<(Self, Option<ContinuationParams<'static>>)> {
         let json_crawler: JsonCrawlerOwned = p.into();
-        let mut albums = Vec::new();
-        let mut json_crawler = json_crawler.navigate_pointer(concatcp!(
+        let grid_renderer = json_crawler.navigate_pointer(concatcp!(
             SINGLE_COLUMN_TAB,
             SECTION_LIST_ITEM,
-            GRID_ITEMS
+            GRID
         ))?;
-        for mut r in json_crawler
-            .borrow_mut()
-            .try_into_iter()?
-            .flat_map(|i| i.navigate_pointer(MTRIR))
-        {
-            let browse_id = r.take_value_pointer(concatcp!(TITLE, NAVIGATION_BROWSE_ID))?;
-            let playlist_id = r.take_value_pointer(MENU_PLAYLIST_ID).ok();
-            let title = r.take_value_pointer(TITLE_TEXT)?;
-            let thumbnails = r.take_value_pointer(THUMBNAIL_RENDERER)?;
-            // TODO: category
-            let category = r.take_value_pointer(SUBTITLE).ok();
-            albums.push(GetArtistAlbumsAlbum {
-                browse_id,
-                year: None,
-                title,
-                category,
-                thumbnails,
-                playlist_id,
-            });
-        }
-        Ok(albums)
+        parse_artist_albums_from_grid(grid_renderer)
+    }
+    fn parse_continuation(
+        p: ProcessedResult<GetContinuationsQuery<'_, GetArtistAlbumsQuery<'a>>>,
+    ) -> crate::Result<(Self, Option<ContinuationParams<'static>>)> {
+        let json_crawler: JsonCrawlerOwned = p.into();
+        let grid_renderer = json_crawler.navigate_pointer(GRID_CONTINUATION)?;
+        parse_artist_albums_from_grid(grid_renderer)
     }
 }
 #[cfg(test)]

@@ -25,7 +25,8 @@ pub struct DownloadProgressUpdate {
 
 // Maximum number of concurrent yt-dlp downloads.
 const MAX_CONCURRENT_DOWNLOADS: usize = 4;
-static DOWNLOAD_SEMAPHORE: OnceLock<Arc<Semaphore>> = OnceLock::new();
+static DOWNLOAD_SEMAPHORE: std::sync::LazyLock<std::sync::Mutex<Arc<Semaphore>>> =
+    std::sync::LazyLock::new(|| std::sync::Mutex::new(Arc::new(Semaphore::new(MAX_CONCURRENT_DOWNLOADS))));
 
 /// Tracks download performance for dynamic concurrency adjustment.
 static DOWNLOAD_STATS: OnceLock<std::sync::Mutex<DownloadStats>> = OnceLock::new();
@@ -69,19 +70,18 @@ fn get_download_semaphore() -> Arc<Semaphore> {
     // Dynamic concurrency: faster downloads = more concurrent, slower = less concurrent
     // When stats are empty (0), use default for initial warm-up period
     let target_permits = if avg_time == 0 || avg_time < 4000 {
-        // Very fast downloads or uninitialized - can handle more concurrent
         MAX_CONCURRENT_DOWNLOADS
     } else if avg_time < 7000 {
-        // Normal downloads - use slightly reduced concurrency
         3
     } else {
-        // Slow downloads - reduce concurrency to avoid network saturation
         1
     };
     
-    DOWNLOAD_SEMAPHORE
-        .get_or_init(|| Arc::new(Semaphore::new(target_permits)))
-        .clone()
+    let mut sem = DOWNLOAD_SEMAPHORE.lock().unwrap_or_else(|e| e.into_inner());
+    if sem.available_permits() != target_permits {
+        *sem = Arc::new(Semaphore::new(target_permits));
+    }
+    sem.clone()
 }
 
 #[derive(Debug, PartialEq)]

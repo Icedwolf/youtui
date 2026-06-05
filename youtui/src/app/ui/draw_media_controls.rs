@@ -1,10 +1,8 @@
 use super::YoutuiWindow;
-use super::footer::parse_simple_time_to_secs;
 use crate::app::media_controls::{MediaControlsStatus, MediaControlsUpdate, MediaControlsVolume};
-use crate::app::structures::{AlbumArtState, PlayState};
+use crate::app::structures::PlayState;
 use itertools::Itertools;
 use std::time::Duration;
-use tracing::debug;
 
 pub fn draw_app_media_controls(w: &YoutuiWindow) -> MediaControlsUpdate<'_> {
     let mut duration = 0;
@@ -14,10 +12,9 @@ pub fn draw_app_media_controls(w: &YoutuiWindow) -> MediaControlsUpdate<'_> {
             duration = w
                 .playlist
                 .get_song_from_id(*id)
-                .map(|s| &s.duration_string)
-                .map(parse_simple_time_to_secs)
+                .map(|s| s.duration_secs)
                 .unwrap_or(0);
-            progress = w.playlist.cur_played_dur.unwrap_or_default();
+            progress = w.playlist.get_cur_played_dur().unwrap_or_default();
             (progress.as_secs_f64() / duration as f64).clamp(0.0, 1.0)
         }
         _ => 0.0,
@@ -38,19 +35,8 @@ pub fn draw_app_media_controls(w: &YoutuiWindow) -> MediaControlsUpdate<'_> {
         .unwrap_or_default();
     
     let cover_url = cur_active_song.and_then(|s| {
-        if let AlbumArtState::Downloaded(album_art) = &s.album_art {
-            debug!("draw_media_controls: using local album art: {:?}", album_art.on_disk_path);
-            Some(format!("file://{}", &album_art.on_disk_path.display()))
-        } else {
-            let thumb = s.thumbnails.iter().max_by_key(|t| t.height * t.width);
-            if let Some(t) = thumb {
-                debug!("draw_media_controls: using thumbnail URL: {}", t.url);
-                Some(t.url.clone())
-            } else {
-                debug!("draw_media_controls: no thumbnail available");
-                None
-            }
-        }
+        let thumb = s.thumbnails.iter().max_by_key(|t| t.height * t.width);
+        thumb.map(|t| t.url.clone())
     });
     let artist_title = cur_active_song
         .map(|s| s.artists.as_ref())

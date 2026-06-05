@@ -42,6 +42,7 @@ use crate::query::{
     SetTasteProfileQuery, SubscribeArtistQuery, UnsubscribeArtistsQuery,
 };
 use crate::{Result, YtMusic};
+use futures::stream::TryStreamExt;
 
 impl<A: AuthToken> YtMusic<A> {
     /// API Search Query that returns results for each category if available.
@@ -265,7 +266,10 @@ impl<A: AuthToken> YtMusic<A> {
         browse_params: U,
     ) -> Result<Vec<GetArtistAlbumsAlbum>> {
         let query = GetArtistAlbumsQuery::new(channel_id.into(), browse_params.into());
-        self.query(query).await
+        self.stream(&query)
+            .try_collect::<Vec<_>>()
+            .await
+            .map(|pages| pages.into_iter().flatten().collect())
     }
     /// Gets information about an album and its tracks.
     /// ```no_run

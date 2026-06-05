@@ -186,18 +186,10 @@ where
     pub fn new() -> Self {
         let (tx, rx) = std::sync::mpsc::channel::<AsyncRodioRequest<S, I>>();
         let _handle = tokio::task::spawn_blocking(move || {
-            // Rodio can produce output to stderr when we don't want it to, so we use Gag to
-            // suppress stdout/stderr. The downside is that even though this runs in
-            // a seperate thread all stderr for the whole app may be gagged.
-            // Also seems to spew out characters?
-            // TODO: Try to handle the errors from Rodio or write to a file.
-            let _gag = match gag::Gag::stderr() {
-                Ok(gag) => gag,
-                Err(e) => {
-                    warn!("Error <{e}> gagging stderr output");
-                    return;
-                }
-            };
+            // Rodio/cpal may write to stderr on audio device init. The Gag crate
+            // redirects the entire process's stderr which can swallow other threads'
+            // log output. Instead we accept the Rodio stderr noise — it's not visible
+            // inside the TUI and only matters for debug sessions.
             let mixer_device_sink = rodio::DeviceSinkBuilder::open_default_sink()
                 .expect("Expect to get a handle to output stream");
             let sink = rodio::Player::connect_new(mixer_device_sink.mixer());

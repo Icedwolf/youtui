@@ -289,7 +289,7 @@ impl AdvancedTableView for SongSearchBrowser {
         }
         // Map the column of ArtistAlbums to a column of List and sort
         self.song_list.sort(
-            get_adjusted_list_column(sort_command.column, Self::subcolumns_of_vec())?,
+            get_adjusted_list_column(sort_command.column, Self::subcolumns_of_vec()).unwrap(),
             sort_command.direction,
         );
         // Remove commands that already exist for the same column, as this new command
@@ -383,7 +383,8 @@ impl SongSearchBrowser {
                 bail!(format!("Unable to sort column {}", c.column,));
             }
             self.song_list.sort(
-                get_adjusted_list_column(c.column, Self::subcolumns_of_vec())?,
+                get_adjusted_list_column(c.column, Self::subcolumns_of_vec())
+                    .ok_or_else(|| anyhow::anyhow!("Unable to sort column, doesn't match up with underlying list. {}", c.column))?,
                 c.direction,
             );
         }
@@ -467,13 +468,12 @@ impl SongSearchBrowser {
         self.clear_sort_commands();
     }
     pub fn handle_sort_cur_asc(&mut self) {
-        // TODO: Better error handling
-        let Some(column) = self.get_sortable_columns().get(self.sort.cur) else {
+        let Some(column) = self.get_sortable_columns().get(self.sort.cur).copied() else {
             warn!("Tried to index sortable columns but was out of range");
             return;
         };
         if let Err(e) = self.push_sort_command(TableSortCommand {
-            column: *column,
+            column,
             direction: SortDirection::Asc,
         }) {
             warn!("Tried to sort a column that is not sortable - error {e}")
@@ -481,13 +481,12 @@ impl SongSearchBrowser {
         self.close_sort();
     }
     pub fn handle_sort_cur_desc(&mut self) {
-        // TODO: Better error handling
-        let Some(column) = self.get_sortable_columns().get(self.sort.cur) else {
+        let Some(column) = self.get_sortable_columns().get(self.sort.cur).copied() else {
             warn!("Tried to index sortable columns but was out of range");
             return;
         };
         if let Err(e) = self.push_sort_command(TableSortCommand {
-            column: *column,
+            column,
             direction: SortDirection::Desc,
         }) {
             warn!("Tried to sort a column that is not sortable - error {e}")

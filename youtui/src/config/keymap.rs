@@ -152,217 +152,10 @@ impl Default for YoutuiKeymap {
 }
 
 impl YoutuiKeymap {
-    pub fn try_from_stringy(keys: YoutuiKeymapIR, mode_names: YoutuiModeNamesIR) -> Result<Self> {
-        let YoutuiKeymapIR {
-            global,
-            playlist,
-            browser,
-            browser_artists,
-            browser_search,
-            browser_songs,
-            help,
-            sort,
-            filter,
-            text_entry,
-            list,
-            log,
-            browser_artist_songs,
-            browser_playlists,
-            browser_playlist_songs,
-        } = keys;
-        let YoutuiModeNamesIR {
-            global: mut global_mode_names,
-            playlist: mut playlist_mode_names,
-            browser: mut browser_mode_names,
-            browser_artists: mut browser_artists_mode_names,
-            browser_search: mut browser_search_mode_names,
-            browser_songs: mut browser_songs_mode_names,
-            help: mut help_mode_names,
-            sort: mut sort_mode_names,
-            filter: mut filter_mode_names,
-            text_entry: mut text_entry_mode_names,
-            list: mut list_mode_names,
-            log: mut log_mode_names,
-            browser_artist_songs: mut browser_artist_songs_mode_names,
-            browser_playlists: mut browser_playlists_mode_names,
-            browser_playlist_songs: mut browser_playlist_songs_mode_names,
-        } = mode_names;
-
-        let global = global
-            .into_iter()
-            .map(move |(k, v)| {
-                let v = KeyActionTree::try_from_stringy(&k, v, Some(&mut global_mode_names))?;
-                Ok((k, v))
-            })
-            .collect::<Result<BTreeMap<_, _>>>()
-            .context("Global keybinds parse failed")?;
-        let playlist = playlist
-            .into_iter()
-            .map(|(k, v)| {
-                let v = KeyActionTree::try_from_stringy(&k, v, Some(&mut playlist_mode_names))?;
-                Ok((k, v))
-            })
-            .collect::<Result<BTreeMap<_, _>>>()
-            .context("Playlist keybinds parse failed")?;
-        let browser = browser
-            .into_iter()
-            .map(|(k, v)| {
-                let v = KeyActionTree::try_from_stringy(&k, v, Some(&mut browser_mode_names))?;
-                Ok((k, v))
-            })
-            .collect::<Result<BTreeMap<_, _>>>()
-            .context("Browser keybinds parse failed")?;
-        let browser_artists = browser_artists
-            .into_iter()
-            .map(|(k, v)| {
-                let v =
-                    KeyActionTree::try_from_stringy(&k, v, Some(&mut browser_artists_mode_names))?;
-                Ok((k, v))
-            })
-            .collect::<Result<BTreeMap<_, _>>>()
-            .context("Browser artists keybinds parse failed")?;
-        let browser_playlists = browser_playlists
-            .into_iter()
-            .map(|(k, v)| {
-                let v = KeyActionTree::try_from_stringy(
-                    &k,
-                    v,
-                    Some(&mut browser_playlists_mode_names),
-                )?;
-                Ok((k, v))
-            })
-            .collect::<Result<BTreeMap<_, _>>>()
-            .context("Browser playlists keybinds parse failed")?;
-        let browser_search = browser_search
-            .into_iter()
-            .map(|(k, v)| {
-                let v =
-                    KeyActionTree::try_from_stringy(&k, v, Some(&mut browser_search_mode_names))?;
-                Ok((k, v))
-            })
-            .collect::<Result<BTreeMap<_, _>>>()
-            .context("Browser search keybinds parse failed")?;
-        let browser_songs = browser_songs
-            .into_iter()
-            .map(|(k, v)| {
-                let v =
-                    KeyActionTree::try_from_stringy(&k, v, Some(&mut browser_songs_mode_names))?;
-                Ok((k, v))
-            })
-            .collect::<Result<BTreeMap<_, _>>>()
-            .context("Browser songs keybinds parse failed")?;
-        let browser_artist_songs = browser_artist_songs
-            .into_iter()
-            .map(|(k, v)| {
-                let v = KeyActionTree::try_from_stringy(
-                    &k,
-                    v,
-                    Some(&mut browser_artist_songs_mode_names),
-                )?;
-                Ok((k, v))
-            })
-            .collect::<Result<BTreeMap<_, _>>>()
-            .context("Browser artist songs keybinds parse failed")?;
-        let browser_playlist_songs = browser_playlist_songs
-            .into_iter()
-            .map(|(k, v)| {
-                let v = KeyActionTree::try_from_stringy(
-                    &k,
-                    v,
-                    Some(&mut browser_playlist_songs_mode_names),
-                )?;
-                Ok((k, v))
-            })
-            .collect::<Result<BTreeMap<_, _>>>()
-            .context("Browser playlist songs keybinds parse failed")?;
-        let text_entry = text_entry
-            .into_iter()
-            .map(|(k, v)| {
-                let v = KeyActionTree::try_from_stringy(&k, v, Some(&mut text_entry_mode_names))?;
-                Ok((k, v))
-            })
-            .collect::<Result<BTreeMap<_, _>>>()
-            .context("Text entry keybinds parse failed")?;
-        let help = help
-            .into_iter()
-            .map(|(k, v)| {
-                let v = KeyActionTree::try_from_stringy(&k, v, Some(&mut help_mode_names))?;
-                Ok((k, v))
-            })
-            .collect::<Result<BTreeMap<_, _>>>()
-            .context("Help keybinds parse failed")?;
-        let sort = sort
-            .into_iter()
-            .map(|(k, v)| {
-                let v = KeyActionTree::try_from_stringy(&k, v, Some(&mut sort_mode_names))?;
-                Ok((k, v))
-            })
-            .collect::<Result<BTreeMap<_, _>>>()
-            .context("Sort keybinds parse failed")?;
-        let filter = filter
-            .into_iter()
-            .map(|(k, v)| {
-                let v = KeyActionTree::try_from_stringy(&k, v, Some(&mut filter_mode_names))?;
-                Ok((k, v))
-            })
-            .collect::<Result<BTreeMap<_, _>>>()
-            .context("Filter keybinds parse failed")?;
-        let list = list
-            .into_iter()
-            .map(|(k, v)| {
-                let v = KeyActionTree::try_from_stringy(&k, v, Some(&mut list_mode_names))?;
-                Ok((k, v))
-            })
-            .collect::<Result<BTreeMap<_, _>>>()
-            .context("List keybinds parse failed")?;
-        let log = log
-            .into_iter()
-            .map(|(k, v)| {
-                let v = KeyActionTree::try_from_stringy(&k, v, Some(&mut log_mode_names))?;
-                Ok((k, v))
-            })
-            .collect::<Result<BTreeMap<_, _>>>()
-            .context("Log keybinds parse failed")?;
-        let mut keymap = YoutuiKeymap::default();
-        merge_keymaps(&mut keymap.global, global);
-        merge_keymaps(&mut keymap.playlist, playlist);
-        merge_keymaps(&mut keymap.browser, browser);
-        merge_keymaps(&mut keymap.browser_artists, browser_artists);
-        merge_keymaps(&mut keymap.browser_playlists, browser_playlists);
-        merge_keymaps(&mut keymap.browser_search, browser_search);
-        merge_keymaps(&mut keymap.browser_songs, browser_songs);
-        merge_keymaps(&mut keymap.browser_artist_songs, browser_artist_songs);
-        merge_keymaps(&mut keymap.browser_playlist_songs, browser_playlist_songs);
-        merge_keymaps(&mut keymap.text_entry, text_entry);
-        merge_keymaps(&mut keymap.help, help);
-        merge_keymaps(&mut keymap.sort, sort);
-        merge_keymaps(&mut keymap.filter, filter);
-        merge_keymaps(&mut keymap.list, list);
-        merge_keymaps(&mut keymap.log, log);
-        remove_action_from_keymap(&mut keymap.global, &AppAction::NoOp);
-        remove_action_from_keymap(&mut keymap.playlist, &AppAction::NoOp);
-        remove_action_from_keymap(&mut keymap.browser, &AppAction::NoOp);
-        remove_action_from_keymap(&mut keymap.browser_artists, &AppAction::NoOp);
-        remove_action_from_keymap(&mut keymap.browser_playlists, &AppAction::NoOp);
-        remove_action_from_keymap(&mut keymap.browser_search, &AppAction::NoOp);
-        remove_action_from_keymap(&mut keymap.browser_songs, &AppAction::NoOp);
-        remove_action_from_keymap(&mut keymap.browser_artist_songs, &AppAction::NoOp);
-        remove_action_from_keymap(&mut keymap.browser_playlist_songs, &AppAction::NoOp);
-        remove_action_from_keymap(&mut keymap.text_entry, &AppAction::NoOp);
-        remove_action_from_keymap(&mut keymap.help, &AppAction::NoOp);
-        remove_action_from_keymap(&mut keymap.sort, &AppAction::NoOp);
-        remove_action_from_keymap(&mut keymap.filter, &AppAction::NoOp);
-        remove_action_from_keymap(&mut keymap.list, &AppAction::NoOp);
-        remove_action_from_keymap(&mut keymap.log, &AppAction::NoOp);
-        Ok(keymap)
-    }
-    #[cfg(test)]
-    /// The regular try_from_stringy function merges the IR with the default
-    /// config - ie it's additive to the default keybinds. This version
-    /// replaces the default config
-    pub fn try_from_stringy_exact(
+    fn try_from_stringy_inner(
         keys: YoutuiKeymapIR,
         mode_names: YoutuiModeNamesIR,
+        merge_into_defaults: bool,
     ) -> Result<Self> {
         let YoutuiKeymapIR {
             global,
@@ -399,158 +192,98 @@ impl YoutuiKeymap {
             browser_playlist_songs: mut browser_playlist_songs_mode_names,
         } = mode_names;
 
-        let global = global
-            .into_iter()
-            .map(move |(k, v)| {
-                let v = KeyActionTree::try_from_stringy(&k, v, Some(&mut global_mode_names))?;
-                Ok((k, v))
+        #[rustfmt::skip]
+        macro_rules! parse_category {
+            ($ir:ident, $names:ident, $label:literal) => {
+                $ir.into_iter()
+                    .map(|(k, v)| {
+                        let v = KeyActionTree::try_from_stringy(&k, v, Some(&mut $names))?;
+                        Ok((k, v))
+                    })
+                    .collect::<Result<BTreeMap<_, _>>>()
+                    .context(concat!($label, " keybinds parse failed"))?
+            };
+        }
+
+        let global = parse_category!(global, global_mode_names, "Global");
+        let playlist = parse_category!(playlist, playlist_mode_names, "Playlist");
+        let browser = parse_category!(browser, browser_mode_names, "Browser");
+        let browser_artists = parse_category!(browser_artists, browser_artists_mode_names, "Browser artists");
+        let browser_playlists = parse_category!(browser_playlists, browser_playlists_mode_names, "Browser playlists");
+        let browser_search = parse_category!(browser_search, browser_search_mode_names, "Browser search");
+        let browser_songs = parse_category!(browser_songs, browser_songs_mode_names, "Browser songs");
+        let browser_artist_songs = parse_category!(browser_artist_songs, browser_artist_songs_mode_names, "Browser artist songs");
+        let browser_playlist_songs = parse_category!(browser_playlist_songs, browser_playlist_songs_mode_names, "Browser playlist songs");
+        let text_entry = parse_category!(text_entry, text_entry_mode_names, "Text entry");
+        let help = parse_category!(help, help_mode_names, "Help");
+        let sort = parse_category!(sort, sort_mode_names, "Sort");
+        let filter = parse_category!(filter, filter_mode_names, "Filter");
+        let list = parse_category!(list, list_mode_names, "List");
+        let log = parse_category!(log, log_mode_names, "Log");
+
+        if merge_into_defaults {
+            let mut keymap = YoutuiKeymap::default();
+            merge_keymaps(&mut keymap.global, global);
+            merge_keymaps(&mut keymap.playlist, playlist);
+            merge_keymaps(&mut keymap.browser, browser);
+            merge_keymaps(&mut keymap.browser_artists, browser_artists);
+            merge_keymaps(&mut keymap.browser_playlists, browser_playlists);
+            merge_keymaps(&mut keymap.browser_search, browser_search);
+            merge_keymaps(&mut keymap.browser_songs, browser_songs);
+            merge_keymaps(&mut keymap.browser_artist_songs, browser_artist_songs);
+            merge_keymaps(&mut keymap.browser_playlist_songs, browser_playlist_songs);
+            merge_keymaps(&mut keymap.text_entry, text_entry);
+            merge_keymaps(&mut keymap.help, help);
+            merge_keymaps(&mut keymap.sort, sort);
+            merge_keymaps(&mut keymap.filter, filter);
+            merge_keymaps(&mut keymap.list, list);
+            merge_keymaps(&mut keymap.log, log);
+            remove_action_from_keymap(&mut keymap.global, &AppAction::NoOp);
+            remove_action_from_keymap(&mut keymap.playlist, &AppAction::NoOp);
+            remove_action_from_keymap(&mut keymap.browser, &AppAction::NoOp);
+            remove_action_from_keymap(&mut keymap.browser_artists, &AppAction::NoOp);
+            remove_action_from_keymap(&mut keymap.browser_playlists, &AppAction::NoOp);
+            remove_action_from_keymap(&mut keymap.browser_search, &AppAction::NoOp);
+            remove_action_from_keymap(&mut keymap.browser_songs, &AppAction::NoOp);
+            remove_action_from_keymap(&mut keymap.browser_artist_songs, &AppAction::NoOp);
+            remove_action_from_keymap(&mut keymap.browser_playlist_songs, &AppAction::NoOp);
+            remove_action_from_keymap(&mut keymap.text_entry, &AppAction::NoOp);
+            remove_action_from_keymap(&mut keymap.help, &AppAction::NoOp);
+            remove_action_from_keymap(&mut keymap.sort, &AppAction::NoOp);
+            remove_action_from_keymap(&mut keymap.filter, &AppAction::NoOp);
+            remove_action_from_keymap(&mut keymap.list, &AppAction::NoOp);
+            remove_action_from_keymap(&mut keymap.log, &AppAction::NoOp);
+            Ok(keymap)
+        } else {
+            Ok(YoutuiKeymap {
+                global,
+                playlist,
+                browser,
+                browser_artists,
+                browser_search,
+                browser_songs,
+                browser_artist_songs,
+                help,
+                sort,
+                filter,
+                text_entry,
+                list,
+                log,
+                browser_playlists,
+                browser_playlist_songs,
             })
-            .collect::<Result<BTreeMap<_, _>>>()
-            .context("Global keybinds parse failed")?;
-        let playlist = playlist
-            .into_iter()
-            .map(|(k, v)| {
-                let v = KeyActionTree::try_from_stringy(&k, v, Some(&mut playlist_mode_names))?;
-                Ok((k, v))
-            })
-            .collect::<Result<BTreeMap<_, _>>>()
-            .context("Playlist keybinds parse failed")?;
-        let browser = browser
-            .into_iter()
-            .map(|(k, v)| {
-                let v = KeyActionTree::try_from_stringy(&k, v, Some(&mut browser_mode_names))?;
-                Ok((k, v))
-            })
-            .collect::<Result<BTreeMap<_, _>>>()
-            .context("Browser keybinds parse failed")?;
-        let browser_artists = browser_artists
-            .into_iter()
-            .map(|(k, v)| {
-                let v =
-                    KeyActionTree::try_from_stringy(&k, v, Some(&mut browser_artists_mode_names))?;
-                Ok((k, v))
-            })
-            .collect::<Result<BTreeMap<_, _>>>()
-            .context("Browser artists keybinds parse failed")?;
-        let browser_playlists = browser_playlists
-            .into_iter()
-            .map(|(k, v)| {
-                let v = KeyActionTree::try_from_stringy(
-                    &k,
-                    v,
-                    Some(&mut browser_playlists_mode_names),
-                )?;
-                Ok((k, v))
-            })
-            .collect::<Result<BTreeMap<_, _>>>()
-            .context("Browser playlists keybinds parse failed")?;
-        let browser_search = browser_search
-            .into_iter()
-            .map(|(k, v)| {
-                let v =
-                    KeyActionTree::try_from_stringy(&k, v, Some(&mut browser_search_mode_names))?;
-                Ok((k, v))
-            })
-            .collect::<Result<BTreeMap<_, _>>>()
-            .context("Browser search keybinds parse failed")?;
-        let browser_songs = browser_songs
-            .into_iter()
-            .map(|(k, v)| {
-                let v =
-                    KeyActionTree::try_from_stringy(&k, v, Some(&mut browser_songs_mode_names))?;
-                Ok((k, v))
-            })
-            .collect::<Result<BTreeMap<_, _>>>()
-            .context("Browser songs keybinds parse failed")?;
-        let browser_artist_songs = browser_artist_songs
-            .into_iter()
-            .map(|(k, v)| {
-                let v = KeyActionTree::try_from_stringy(
-                    &k,
-                    v,
-                    Some(&mut browser_artist_songs_mode_names),
-                )?;
-                Ok((k, v))
-            })
-            .collect::<Result<BTreeMap<_, _>>>()
-            .context("Browser artist songs keybinds parse failed")?;
-        let browser_playlist_songs = browser_playlist_songs
-            .into_iter()
-            .map(|(k, v)| {
-                let v = KeyActionTree::try_from_stringy(
-                    &k,
-                    v,
-                    Some(&mut browser_playlist_songs_mode_names),
-                )?;
-                Ok((k, v))
-            })
-            .collect::<Result<BTreeMap<_, _>>>()
-            .context("Browser playlist songs keybinds parse failed")?;
-        let text_entry = text_entry
-            .into_iter()
-            .map(|(k, v)| {
-                let v = KeyActionTree::try_from_stringy(&k, v, Some(&mut text_entry_mode_names))?;
-                Ok((k, v))
-            })
-            .collect::<Result<BTreeMap<_, _>>>()
-            .context("Text entry keybinds parse failed")?;
-        let help = help
-            .into_iter()
-            .map(|(k, v)| {
-                let v = KeyActionTree::try_from_stringy(&k, v, Some(&mut help_mode_names))?;
-                Ok((k, v))
-            })
-            .collect::<Result<BTreeMap<_, _>>>()
-            .context("Help keybinds parse failed")?;
-        let sort = sort
-            .into_iter()
-            .map(|(k, v)| {
-                let v = KeyActionTree::try_from_stringy(&k, v, Some(&mut sort_mode_names))?;
-                Ok((k, v))
-            })
-            .collect::<Result<BTreeMap<_, _>>>()
-            .context("Sort keybinds parse failed")?;
-        let filter = filter
-            .into_iter()
-            .map(|(k, v)| {
-                let v = KeyActionTree::try_from_stringy(&k, v, Some(&mut filter_mode_names))?;
-                Ok((k, v))
-            })
-            .collect::<Result<BTreeMap<_, _>>>()
-            .context("Filter keybinds parse failed")?;
-        let list = list
-            .into_iter()
-            .map(|(k, v)| {
-                let v = KeyActionTree::try_from_stringy(&k, v, Some(&mut list_mode_names))?;
-                Ok((k, v))
-            })
-            .collect::<Result<BTreeMap<_, _>>>()
-            .context("List keybinds parse failed")?;
-        let log = log
-            .into_iter()
-            .map(|(k, v)| {
-                let v = KeyActionTree::try_from_stringy(&k, v, Some(&mut log_mode_names))?;
-                Ok((k, v))
-            })
-            .collect::<Result<BTreeMap<_, _>>>()
-            .context("Log keybinds parse failed")?;
-        Ok(YoutuiKeymap {
-            global,
-            playlist,
-            browser,
-            browser_artists,
-            browser_search,
-            browser_songs,
-            browser_artist_songs,
-            help,
-            sort,
-            filter,
-            text_entry,
-            list,
-            log,
-            browser_playlists,
-            browser_playlist_songs,
-        })
+        }
+    }
+
+    pub fn try_from_stringy(keys: YoutuiKeymapIR, mode_names: YoutuiModeNamesIR) -> Result<Self> {
+        Self::try_from_stringy_inner(keys, mode_names, true)
+    }
+    #[cfg(test)]
+    pub fn try_from_stringy_exact(
+        keys: YoutuiKeymapIR,
+        mode_names: YoutuiModeNamesIR,
+    ) -> Result<Self> {
+        Self::try_from_stringy_inner(keys, mode_names, false)
     }
 }
 
