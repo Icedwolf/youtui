@@ -1,6 +1,6 @@
 # Youtui Backlog
 
-**Build:** 0 errors, 1 warning (pre-existing `parse_simple_time_to_secs` dead code) | **Tests:** 97 passed, 5 ignored | **Last updated:** 2026-06-05
+**Build:** 0 errors, 1 warning (pre-existing `parse_simple_time_to_secs` dead code) | **Tests:** 102 passed, 5 ignored | **Last updated:** 2026-06-05
 
 ---
 
@@ -27,7 +27,7 @@
 | 7 | `playlist.rs` | 78 | `std::sync::Mutex` in async (invariant documented) | 🔒 Invariant OK |
 | 11 | `draw.rs` | 101–163 | `draw_help` two-pass (lifetime constraint) | ⏳ Postponed |
 | — | `shared_components.rs` | — | Sort popup allocation per open | ⏳ TBD |
-| — | `structures.rs` | — | `get_field` benchmark baseline established via criterion | 🔜 Planned |
+| — | `structures.rs` | — | ✅ `get_field` benchmark baseline: Artists ~1.3ns, TrackNo ~1.0ns, 4col ~14.4ns per song (release, `cargo test --release -- bench --show-output`) | ✅ Done |
 
 ## P2 — Code Quality / Maintainability
 

@@ -94,7 +94,6 @@ pub enum BasicConstraint {
     Percentage(Percentage),
 }
 
-// TODO: Add more tests
 /// Use basic constraints to construct dynamic column widths for a table.
 pub fn basic_constraints_to_table_constraints(
     basic_constraints: &[BasicConstraint],
@@ -201,32 +200,102 @@ mod tests {
     use ratatui::prelude::Constraint;
 
     #[test]
-    fn test_constraints() {
-        let basic_constraints = &[
-            BasicConstraint::Length(5),
-            BasicConstraint::Length(5),
-            BasicConstraint::Percentage(Percentage(100)),
-        ];
-        let constraints = vec![
-            Constraint::Length(5),
-            Constraint::Length(5),
-            Constraint::Length(10),
-        ];
-        let converted = basic_constraints_to_table_constraints(basic_constraints, 20, 0);
-        assert_eq!(converted, constraints);
-        let basic_constraints = &[
-            BasicConstraint::Length(5),
-            BasicConstraint::Length(5),
-            BasicConstraint::Percentage(Percentage(50)),
-            BasicConstraint::Percentage(Percentage(50)),
-        ];
-        let constraints = vec![
-            Constraint::Length(5),
-            Constraint::Length(5),
-            Constraint::Length(5),
-            Constraint::Length(5),
-        ];
-        let converted = basic_constraints_to_table_constraints(basic_constraints, 20, 0);
-        assert_eq!(converted, constraints);
+    fn empty_constraints() {
+        let result = basic_constraints_to_table_constraints(&[], 100, 0);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn single_length() {
+        let result = basic_constraints_to_table_constraints(&[BasicConstraint::Length(10)], 100, 0);
+        assert_eq!(result, vec![Constraint::Length(10)]);
+    }
+
+    #[test]
+    fn single_percentage_full() {
+        let result = basic_constraints_to_table_constraints(&[BasicConstraint::Percentage(Percentage(100))], 80, 0);
+        assert_eq!(result, vec![Constraint::Length(80)]);
+    }
+
+    #[test]
+    fn all_lengths_no_margin() {
+        let result = basic_constraints_to_table_constraints(
+            &[BasicConstraint::Length(5), BasicConstraint::Length(5)],
+            20, 0,
+        );
+        assert_eq!(result, vec![Constraint::Length(5), Constraint::Length(5)]);
+    }
+
+    #[test]
+    fn all_percentages() {
+        let result = basic_constraints_to_table_constraints(
+            &[BasicConstraint::Percentage(Percentage(30)), BasicConstraint::Percentage(Percentage(70))],
+            100, 0,
+        );
+        assert_eq!(result, vec![Constraint::Length(30), Constraint::Length(70)]);
+    }
+
+    #[test]
+    fn mixed_with_margin() {
+        let result = basic_constraints_to_table_constraints(
+            &[BasicConstraint::Length(10), BasicConstraint::Percentage(Percentage(50))],
+            50, 2,
+        );
+        // sum_lengths = 10 + 2 (length) + 0 + 2 (percentage) = 14
+        // percentage = 50 * (50 - 14) / 100 = 18
+        assert_eq!(result, vec![Constraint::Length(10), Constraint::Length(18)]);
+    }
+
+    #[test]
+    fn total_smaller_than_length_sum() {
+        let result = basic_constraints_to_table_constraints(
+            &[BasicConstraint::Length(20), BasicConstraint::Percentage(Percentage(50))],
+            10, 0,
+        );
+        // sum_lengths = 20
+        // percentage = 50 * 10.saturating_sub(20) / 100 = 50 * 0 / 100 = 0
+        assert_eq!(result, vec![Constraint::Length(20), Constraint::Length(0)]);
+    }
+
+    #[test]
+    fn multiple_percentages_partial() {
+        let result = basic_constraints_to_table_constraints(
+            &[
+                BasicConstraint::Length(5),
+                BasicConstraint::Percentage(Percentage(25)),
+                BasicConstraint::Percentage(Percentage(25)),
+            ],
+            30, 0,
+        );
+        // sum_lengths = 5
+        // remaining = 30 - 5 = 25
+        // p1 = 25 * 25 / 100 = 6
+        // p2 = 25 * 25 / 100 = 6
+        assert_eq!(
+            result,
+            vec![
+                Constraint::Length(5),
+                Constraint::Length(6),
+                Constraint::Length(6),
+            ]
+        );
+    }
+
+    #[test]
+    fn zero_total_width() {
+        let result = basic_constraints_to_table_constraints(
+            &[BasicConstraint::Percentage(Percentage(50))],
+            0, 0,
+        );
+        assert_eq!(result, vec![Constraint::Length(0)]);
+    }
+
+    #[test]
+    fn single_percentage_mixed_with_length() {
+        let result = basic_constraints_to_table_constraints(
+            &[BasicConstraint::Length(3), BasicConstraint::Percentage(Percentage(100))],
+            20, 0,
+        );
+        assert_eq!(result, vec![Constraint::Length(3), Constraint::Length(17)]);
     }
 }
