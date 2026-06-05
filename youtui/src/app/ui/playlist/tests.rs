@@ -209,6 +209,128 @@ fn list_song_create_with_metadata_no_album() {
     assert!(!song.thumbnails.is_empty());
 }
 
+#[cfg(test)]
+mod render_tests {
+    use super::*;
+    use crate::app::structures::{ListSong, ListStatus};
+    use crate::app::ui::playlist::Playlist;
+    use crate::app::view::DrawableMut;
+    use ratatui::backend::TestBackend;
+    use ratatui::prelude::Rect;
+    use ratatui::Terminal;
+    use ytmapi_rs::common::VideoID;
+
+    fn make_test_song(title: &str, artists: Vec<&str>, album: Option<&str>) -> ListSong {
+        ListSong::create_with_metadata(
+            VideoID::from_raw("id"),
+            title.to_string(),
+            artists.into_iter().map(String::from).collect(),
+            album.map(String::from),
+            "3:30".to_string(),
+            None,
+        )
+    }
+
+    fn render_playlist(songs: Vec<ListSong>) -> String {
+        let (mut playlist, _) = Playlist::new();
+        playlist.list.state = ListStatus::Loaded;
+        playlist.list.push_song_list(songs);
+        let backend = TestBackend::new(120, 20);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal
+            .draw(|f| {
+                playlist.draw_mut_chunk(f, Rect::new(0, 0, 120, 20), true, 0);
+            })
+            .unwrap();
+        let buffer = terminal.backend().buffer();
+        (0..20)
+            .map(|row| {
+                (0..120)
+                    .map(|col| buffer[(col as u16, row as u16)].symbol())
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    /// Verify that the artist column renders comma-separated artist names.
+    #[test]
+    fn render_shows_artist_names() {
+        let songs = vec![make_test_song("Song A", vec!["Artist 1", "Artist 2"], Some("Album X"))];
+        let output = render_playlist(songs);
+        assert!(
+            output.contains("Artist 1, Artist 2"),
+            "Artist names should appear comma-separated in rendered output.\nGot:\n{output}"
+        );
+        assert!(
+            output.contains("Song A"),
+            "Song title should appear in rendered output.\nGot:\n{output}"
+        );
+    }
+
+    /// Verify that the album name renders correctly.
+    #[test]
+    fn render_shows_album_name() {
+        let songs = vec![make_test_song("Song B", vec!["Artist"], Some("My Album"))];
+        let output = render_playlist(songs);
+        assert!(
+            output.contains("My Album"),
+            "Album name should appear in rendered output.\nGot:\n{output}"
+        );
+    }
+
+    /// Verify that songs without an album don't crash and render gracefully.
+    #[test]
+    fn render_no_album_does_not_crash() {
+        let songs = vec![make_test_song("Song C", vec!["Artist"], None)];
+        let output = render_playlist(songs);
+        assert!(
+            output.contains("Song C"),
+            "Song without album should still render.\nGot:\n{output}"
+        );
+    }
+
+    /// Verify that the artists_string cache works in rendered output
+    /// (multiple artists joined by comma).
+    #[test]
+    fn render_multiple_artists_joined_by_comma() {
+        let songs = vec![make_test_song(
+            "Multi Art",
+            vec!["Alpha", "Beta", "Gamma"],
+            Some("Various"),
+        )];
+        let output = render_playlist(songs);
+        assert!(
+            output.contains("Alpha, Beta, Gamma"),
+            "Three artists should be joined by comma+space.\nGot:\n{output}"
+        );
+    }
+
+    /// Regression test: empty artists vec should not crash.
+    #[test]
+    fn render_empty_artists_does_not_crash() {
+        let songs = vec![make_test_song("No Artist", vec![], Some("Lonely"))];
+        let output = render_playlist(songs);
+        assert!(
+            output.contains("No Artist"),
+            "Song with no artists should still render.\nGot:\n{output}"
+        );
+    }
+
+    /// Verify the column headings are present.
+    #[test]
+    fn render_shows_column_headings() {
+        let songs = vec![make_test_song("Any", vec!["A"], Some("B"))];
+        let output = render_playlist(songs);
+        for heading in &["p#", "t#", "Artist", "Album", "Song", "Duration", "Year"] {
+            assert!(
+                output.contains(heading),
+                "Column heading '{heading}' should appear.\nGot:\n{output}"
+            );
+        }
+    }
+}
+
 #[test]
 fn songs_ahead_buffer_is_2() {
     assert_eq!(crate::app::ui::playlist::SONGS_AHEAD_TO_BUFFER, 2);

@@ -1,6 +1,6 @@
 # Youtui Backlog
 
-**Build:** 0 errors, 1 warning (pre-existing `parse_simple_time_to_secs` dead code) | **Tests:** 102 passed, 5 ignored | **Last updated:** 2026-06-05
+**Build:** 0 errors, 1 warning (pre-existing `parse_simple_time_to_secs` dead code) | **Tests:** 111 passed, 5 ignored | **Last updated:** 2026-06-05
 
 ---
 
@@ -35,8 +35,8 @@
 |---|------|-------|--------|
 | 21 | `shared_components.rs` | FilterManager/SortManager XXX refactor | ✅ Fixed |
 | 22 | `actionhandler.rs` | Library/binary API split | ⏳ Pending |
-| 23 | `playlist.rs` 68 | `pub cur_played_dur` → getter | ⏳ Pending |
-| 24 | `playlist.rs` 889–891 | `HashMap<ListSongID, usize>` for O(1) index lookup | ⏳ Pending |
+| 23 | `playlist.rs` 68 | `pub cur_played_dur` → getter | ✅ Already done |
+| 24 | `playlist.rs` 889–891 | `HashMap<ListSongID, usize>` for O(1) index lookup | ✅ Already done |
 
 ## P3 — Architecture / Design
 
@@ -48,7 +48,7 @@
 
 | # | File | Issue | Status |
 |---|------|-------|--------|
-| 26 | `view.rs` 97 | TODO: more tests | ⏳ Pending |
+| 26 | `view.rs` 97 | TODO: more tests → 10 edge-case tests added (empty, single, margin, zero-width, over-total) | ✅ Done |
 | 27 | `ytmapi-rs/` | 54 live integration test failures (pre-existing) | 🔒 External |
 | — | `youtui/` | ✅ Add criterion benchmark for `get_field` hot-path (perf regression detection) | 🔜 Planned |
 | — | `youtui/` | ✅ Add `TestBackend` render snapshot tests for playlist + browser views | 🔜 Planned |
