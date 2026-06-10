@@ -50,7 +50,7 @@ pub fn draw_app_media_controls(w: &YoutuiWindow) -> MediaControlsUpdate<'_> {
         PlayState::Paused(_) => MediaControlsStatus::Paused { progress },
         _ => MediaControlsStatus::Stopped,
     };
-    let volume = MediaControlsVolume::from_percentage_clamped(w.playlist.volume);
+    let volume = MediaControlsVolume::from_percentage_clamped(w.playlist.volume());
     MediaControlsUpdate {
         title: Some(song_title.into()),
         album: Some(album_title.into()),

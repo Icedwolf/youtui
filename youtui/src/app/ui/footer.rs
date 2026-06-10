@@ -10,6 +10,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Gauge, Paragraph};
 use std::time::Duration;
 
+#[allow(dead_code)]
 pub fn parse_simple_time_to_secs<S: AsRef<str>>(time_string: S) -> usize {
     time_string
         .as_ref()
@@ -61,6 +62,20 @@ pub fn draw_footer(
         | PlayState::Buffering(id) => w.playlist.get_song_from_id(id),
         PlayState::NotPlaying | PlayState::Stopped => None,
     };
+    let block = Block::default()
+        .title("Status")
+        .title(Line::from("Youtui").right_aligned())
+        .borders(Borders::ALL);
+    let block_inner = block.inner(chunk);
+    let [progress_bar_section, vol_bar_chunk] = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Min(1), Constraint::Length(6)])
+        .areas(block_inner);
+    let [song_text_chunk, progress_bar_chunk] = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(2), Constraint::Max(1)])
+        .areas(progress_bar_section);
+
     let song_and_artists_string = cur_active_song
         .map(|song| {
             let mut s = format!(
@@ -81,9 +96,22 @@ pub fn draw_footer(
         .and_then(|s| s.album.as_ref())
         .map(|s| s.name.as_str())
         .unwrap_or_default();
+    // Truncate text to available width to avoid visual overflow.
+    let max_text_width = song_text_chunk.width.saturating_sub(2) as usize;
+    let truncate = |s: &str| -> String {
+        if s.len() <= max_text_width {
+            s.to_string()
+        } else {
+            let mut t: String = s.chars().take(max_text_width.saturating_sub(1)).collect();
+            t.push('…');
+            t
+        }
+    };
+    let song_line = truncate(&song_and_artists_string);
+    let album_line = truncate(album_title);
     let footer = Paragraph::new(vec![
-        Line::from(song_and_artists_string),
-        Line::from(album_title),
+        Line::from(song_line),
+        Line::from(album_line),
     ]);
     let bar = Gauge::default()
         .label(bar_str)
@@ -113,7 +141,7 @@ pub fn draw_footer(
                 .add_modifier(Modifier::BOLD),
         ),
     ]));
-    let vol = w.playlist.volume.0;
+    let vol = w.playlist.volume().0;
     let vol_bar_spans = vec![
         Line::from(Span::styled(
             " + ",
@@ -131,21 +159,7 @@ pub fn draw_footer(
                 .add_modifier(Modifier::BOLD),
         )),
     ];
-    let block = Block::default()
-        .title("Status")
-        .title(Line::from("Youtui").right_aligned())
-        .borders(Borders::ALL);
     let vol_bar = Paragraph::new(vol_bar_spans).alignment(Alignment::Right);
-
-    let block_inner = block.inner(chunk);
-    let [progress_bar_section, vol_bar_chunk] = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Min(1), Constraint::Length(4)])
-        .areas(block_inner);
-    let [song_text_chunk, progress_bar_chunk] = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Min(2), Constraint::Max(1)])
-        .areas(progress_bar_section);
     let [left_arrow_chunk, progress_bar_chunk, right_arrow_chunk] = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Max(4), Constraint::Min(1), Constraint::Max(4)])

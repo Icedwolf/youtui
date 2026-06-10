@@ -377,6 +377,7 @@ async fn main() -> ExitCode {
 // Main function is refactored here so that we can pretty print errors.
 // Regular main function returns debug errors so not as friendly.
 async fn try_main() -> anyhow::Result<()> {
+    let _start = std::time::Instant::now();
     let args = Arguments::parse();
     let Arguments {
         debug,
@@ -485,8 +486,9 @@ pub async fn run_app(rt: RuntimeInfo) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Returns the data directory path. Override with `YOUTUI_DATA_DIR` env var.
+/// Defaults to the OS‑specific data directory (e.g. `~/.local/share/youtui` on Linux).
 pub fn get_data_dir() -> anyhow::Result<PathBuf> {
-    // TODO: Document that directory can be set by environment variable.
     let directory = if let Ok(s) = std::env::var("YOUTUI_DATA_DIR") {
         PathBuf::from(s)
     } else if let Some(proj_dirs) = ProjectDirs::from("com", "nick42", "youtui") {
@@ -497,8 +499,9 @@ pub fn get_data_dir() -> anyhow::Result<PathBuf> {
     Ok(directory)
 }
 
+/// Returns the config directory path. Override with `YOUTUI_CONFIG_DIR` env var.
+/// Defaults to the OS‑specific config directory (e.g. `~/.config/youtui` on Linux).
 pub fn get_config_dir() -> anyhow::Result<PathBuf> {
-    // TODO: Document that directory can be set by environment variable.
     let directory = if let Ok(s) = std::env::var("YOUTUI_CONFIG_DIR") {
         PathBuf::from(s)
     } else if let Some(proj_dirs) = ProjectDirs::from("com", "nick42", "youtui") {

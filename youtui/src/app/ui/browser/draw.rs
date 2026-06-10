@@ -282,20 +282,50 @@ fn draw_search_suggestions(f: &mut Frame, search: &SearchBlock, chunk: Rect, max
         .constraints([Constraint::Length(1), Constraint::Min(0)])
         .areas(suggestion_chunk);
     let mut list_state = ListState::default().with_selected(search.suggestions_cur);
+    // Cap max text width to avoid visual overflow.
+    let max_suggestion_width = suggestion_list_chunk.width.saturating_sub(2) as usize;
     let list_items = suggestions.iter().map(|s| {
-        ListItem::new(Line::from_iter(
-            std::iter::once(s.suggestion_type)
-                .map(|ty| match ty {
-                    SuggestionType::History => Span::raw(" "),
-                    SuggestionType::Prediction => Span::raw(" "),
-                })
-                .chain(s.runs.iter().map(|s| match s {
+        let icon = match s.suggestion_type {
+            SuggestionType::History => Span::raw(" "),
+            SuggestionType::Prediction => Span::raw(" "),
+        };
+        let icon_width = match s.suggestion_type {
+            SuggestionType::History => 3,
+            SuggestionType::Prediction => 3,
+        };
+        let avail = max_suggestion_width.saturating_sub(icon_width);
+        let mut remaining = avail;
+        let mut spans: Vec<Span> = Vec::new();
+        spans.push(icon);
+        for run in &s.runs {
+            if remaining == 0 {
+                break;
+            }
+            let text = match run {
+                TextRun::Bold(s) | TextRun::Normal(s) => s,
+            };
+            if text.len() <= remaining {
+                spans.push(match run {
                     TextRun::Bold(str) => {
-                        Span::styled(str, Style::new().add_modifier(Modifier::BOLD))
+                        Span::styled(str.clone(), Style::new().add_modifier(Modifier::BOLD))
                     }
-                    TextRun::Normal(str) => Span::raw(str),
-                })),
-        ))
+                    TextRun::Normal(str) => Span::raw(str.clone()),
+                });
+                remaining = remaining.saturating_sub(text.len());
+            } else {
+                let truncated: String = text.chars().take(remaining.saturating_sub(1)).collect();
+                let mut t = truncated;
+                t.push('…');
+                spans.push(match run {
+                    TextRun::Bold(_) => {
+                        Span::styled(t, Style::new().add_modifier(Modifier::BOLD))
+                    }
+                    TextRun::Normal(_) => Span::raw(t),
+                });
+                remaining = 0;
+            }
+        }
+        ListItem::new(Line::from_iter(spans))
     });
     let block = List::new(list_items)
         .style(Style::new().fg(TEXT_COLOUR))

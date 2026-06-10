@@ -20,7 +20,7 @@ use std::io;
 use std::sync::Arc;
 pub use structures::AudioQuality;
 use structures::ListSong;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 use tracing_subscriber::prelude::*;
 use ui::{WindowContext, YoutuiWindow};
 
@@ -29,7 +29,7 @@ pub mod component;
 mod media_controls;
 pub mod queue_persistence;
 mod server;
-mod structures;
+pub(crate) mod structures;
 pub mod ui;
 pub mod view;
 
@@ -126,7 +126,9 @@ impl Youtui {
                     task.type_debug, task.type_id, task.constraint
                 )
             });
+        let t_server = std::time::Instant::now();
         let server = Arc::new(server::Server::new(api_key, po_token, &config));
+        debug!("startup_timing: Server::new() = {}ms", t_server.elapsed().as_millis());
         let backend = CrosstermBackend::new(stdout);
         let terminal = Terminal::new(backend)?;
         let (media_controls, media_control_event_stream) = if disable_media_controls {
@@ -144,13 +146,19 @@ impl Youtui {
         task_manager.spawn_task(&server, effect);
 
         // Auto-load playlist from previous session (if any)
+        let t_load = std::time::Instant::now();
         match queue_persistence::auto_load(&mut window_state.playlist) {
             Ok(load_effect) => {
                 let song_count = window_state.playlist.list.get_list_iter().count();
                 info!(
-                    "Auto-loaded {} songs from __autosave.json",
-                    song_count
+                    "Auto-loaded {} songs from __autosave.json in {}ms",
+                    song_count,
+                    t_load.elapsed().as_millis()
                 );
+                // If a saved queue was loaded, open on the playlist view
+                if window_state.playlist.loaded_from_autosave() {
+                    window_state.handle_change_context(WindowContext::Playlist);
+                }
                 task_manager.spawn_task(
                     &server,
                     load_effect.map_frontend(|w: &mut YoutuiWindow| &mut w.playlist),
@@ -171,36 +179,43 @@ impl Youtui {
             media_controls,
         })
     }
+    async fn render_and_process_events(&mut self) -> Result<()> {
+        #[cfg(feature = "profile-render")]
+        let _render_start = std::time::Instant::now();
+        self.terminal.draw(|f| {
+            ui::draw::draw_app(f, &mut self.window_state);
+        })?;
+        #[cfg(feature = "profile-render")]
+        {
+            let elapsed = _render_start.elapsed();
+            if elapsed.as_millis() > 8 {
+                tracing::warn!(
+                    "profile-render: draw took {}ms (>8ms threshold)",
+                    elapsed.as_millis()
+                );
+            }
+        }
+        if let Some(media_controls) = &mut self.media_controls {
+            media_controls.update_controls(
+                ui::draw_media_controls::draw_app_media_controls(&self.window_state),
+            )?;
+        }
+        tokio::select! {
+            Some(event) = self.event_handler.next() =>
+                self.handle_event(event).await,
+            Some(outcome) = self.task_manager.get_next_response() =>
+                self.handle_effect(outcome),
+        }
+        Ok(())
+    }
+
     pub async fn run(&mut self) -> Result<()> {
         loop {
             match &self.status {
                 AppStatus::Running => {
-                    // Write to terminal, using UI state as the input
-                    // We draw after handling the event, as the event could be a keypress we want to
-                    // instantly react to.
-                    // Draw occurs before the first event, to ensure up loads immediately.
-                    self.terminal.draw(|f| {
-                        ui::draw::draw_app(f, &mut self.window_state);
-                    })?;
-                    if let Some(media_controls) = &mut self.media_controls {
-                        media_controls.update_controls(
-                            ui::draw_media_controls::draw_app_media_controls(&self.window_state),
-                        )?;
-                    }
-                    // When running, the app is event based, and will block until one of the
-                    // following 2 message types is received.
-                    tokio::select! {
-                        // Get the next event from the event_handler and process it.
-                        // TODO: Consider checking here if redraw is required.
-                        Some(event) = self.event_handler.next() =>
-                            self.handle_event(event).await,
-                        // Process the next manager event.
-                        Some(outcome) = self.task_manager.get_next_response() =>
-                            self.handle_effect(outcome),
-                    }
+                    self.render_and_process_events().await?;
                 }
                 AppStatus::Exiting(s) => {
-                    // Once we're done running, destruct the terminal and print the exit message.
                     destruct_terminal()?;
                     println!("{s}");
                     break;
@@ -316,7 +331,7 @@ async fn init_tracing(debug: bool, logging: bool) -> Result<()> {
     let (tracing_log_level, tui_logger_log_level) = if debug {
         (tracing::Level::DEBUG, tui_logger::LevelFilter::Debug)
     } else {
-        (tracing::Level::INFO, tui_logger::LevelFilter::Info)
+        (tracing::Level::WARN, tui_logger::LevelFilter::Warn)
     };
     if logging {
         let context_layer =

@@ -13,15 +13,9 @@ use std::path::Path;
 /// list on YTM.
 const ALLOWED_UPLOAD_EXTENSIONS: &[&str] = &["mp3", "m4a", "wma", "flac", "ogg"];
 
-/// Upload a song to your YouTube Music Library.
-pub async fn upload_song(
-    file_path: impl AsRef<Path>,
-    token: &BrowserToken,
-    client: &Client,
-) -> Result<ApiOutcome> {
-    let file_path = file_path.as_ref();
+const MAX_UPLOAD_FILESIZE_MB: u64 = 300;
 
-    // Internal validation first
+pub(crate) fn validate_upload_path(file_path: &Path) -> Result<(tokio::fs::File, u64)> {
     let upload_fileext = file_path
         .extension()
         .and_then(OsStr::to_str)
@@ -37,16 +31,32 @@ pub async fn upload_song(
             format!("Fileext not in allowed list. Allowed values: {ALLOWED_UPLOAD_EXTENSIONS:?}"),
         ));
     }
-    let song_file = tokio::fs::File::open(&file_path).await?;
-    let upload_filesize_bytes = song_file.metadata().await?.len();
-    const MAX_UPLOAD_FILESIZE_MB: u64 = 300;
-    if upload_filesize_bytes > MAX_UPLOAD_FILESIZE_MB * (1024 * 1024) {
-        panic!(
+    let max_bytes = MAX_UPLOAD_FILESIZE_MB * (1024 * 1024);
+    let metadata = std::fs::metadata(file_path).map_err(|e| {
+        Error::web(format!("Failed to read file metadata: {e}"))
+    })?;
+    let upload_filesize_bytes = metadata.len();
+    if upload_filesize_bytes > max_bytes {
+        return Err(Error::web(format!(
             "Unable to upload song greater than {} MB, size is {} MB",
             MAX_UPLOAD_FILESIZE_MB,
             upload_filesize_bytes / (1024 * 1024)
-        );
+        )));
     }
+    let file = std::fs::File::open(file_path)
+        .map(|f| tokio::fs::File::from(f))
+        .map_err(|e| Error::web(format!("Failed to open file: {e}")))?;
+    Ok((file, upload_filesize_bytes))
+}
+
+/// Upload a song to your YouTube Music Library.
+pub async fn upload_song(
+    file_path: impl AsRef<Path>,
+    token: &BrowserToken,
+    client: &Client,
+) -> Result<ApiOutcome> {
+    let file_path = file_path.as_ref();
+    let (song_file, upload_filesize_bytes) = validate_upload_path(file_path)?;
 
     // Headers to get upload url
     let additional_headers: [(&str, Cow<str>); 4] = [
@@ -106,7 +116,58 @@ pub async fn upload_song(
     {
         Ok(ApiOutcome::Success)
     } else {
-        // Consider returning the error code here.
         Ok(ApiOutcome::Failure)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::path::PathBuf;
+
+    fn tmp_path(name: &str) -> PathBuf {
+        std::env::temp_dir().join(name)
+    }
+
+    #[test]
+    fn test_validate_rejects_disallowed_extension() {
+        let path = tmp_path("song.exe");
+        fs::write(&path, b"not a real song").unwrap();
+        let result = validate_upload_path(&path);
+        fs::remove_file(&path).unwrap();
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("Fileext"), "Expected extension error, got: {err}");
+    }
+
+    #[test]
+    fn test_validate_rejects_oversized_file() {
+        let path = tmp_path("huge.mp3");
+        // 301 MB file (above 300 MB limit)
+        let size = 301 * 1024 * 1024;
+        let file = fs::File::create(&path).unwrap();
+        file.set_len(size).unwrap();
+        let result = validate_upload_path(&path);
+        fs::remove_file(&path).unwrap();
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("Unable to upload"), "Expected size error, got: {err}");
+    }
+
+    #[test]
+    fn test_validate_accepts_valid_file() {
+        let path = tmp_path("valid_song.mp3");
+        fs::write(&path, b"fake audio content").unwrap();
+        let result = validate_upload_path(&path);
+        fs::remove_file(&path).unwrap();
+        assert!(result.is_ok(), "Expected Ok, got: {:?}", result.err());
+    }
+
+    #[test]
+    fn test_validate_rejects_nonexistent_file() {
+        let path = tmp_path("nonexistent.mp3");
+        let result = validate_upload_path(&path);
+        assert!(result.is_err());
     }
 }

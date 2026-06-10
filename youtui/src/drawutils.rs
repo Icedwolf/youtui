@@ -15,15 +15,15 @@ pub const ROW_HIGHLIGHT_COLOUR: Color = Color::Blue;
 
 /// Helper function to create a popup at bottom corner of chunk.
 pub fn left_bottom_corner_rect(height: u16, width: u16, r: Rect) -> Rect {
-    let r_x2 = r.x + r.width;
-    let r_y2 = r.y + r.height;
+    let r_x2 = r.x.saturating_add(r.width);
+    let r_y2 = r.y.saturating_add(r.height);
     let x = r_x2.saturating_sub(width).max(r.x);
     let y = r_y2.saturating_sub(height).max(r.y);
     Rect {
         x,
         y,
-        width: width.min(r_x2 - x),
-        height: height.min(r_y2 - y),
+        width: width.min(r_x2.saturating_sub(x)),
+        height: height.min(r_y2.saturating_sub(y)),
     }
 }
 /// Helper function to create a popup below a chunk.
@@ -31,7 +31,7 @@ pub fn left_bottom_corner_rect(height: u16, width: u16, r: Rect) -> Rect {
 //  to avoid returning a Rect that is not drawable.
 // TODO: Add a test to ensure this is returning correct area
 pub fn below_left_rect(height: u16, width: u16, r: Rect, max_bounds: Rect) -> Rect {
-    let y = r.y + r.height - 1;
+    let y = r.y.saturating_add(r.height.saturating_sub(1));
     Rect {
         x: r.x,
         y,
@@ -49,12 +49,11 @@ pub fn centered_rect(height: u16, width: u16, r: Rect) -> Rect {
     }
 }
 /// Helper function to get the bottom line of a chunk, ignoring side borders.
-/// Warning: Not currently bounds checked.
 pub fn bottom_of_rect(r: Rect) -> Rect {
     Rect {
-        x: r.x + 1,
-        y: r.y + r.height - 1,
-        width: r.width - 2,
+        x: r.x.saturating_add(1),
+        y: r.y.saturating_add(r.height.saturating_sub(1)),
+        width: r.width.saturating_sub(2),
         height: 1,
     }
 }
@@ -64,7 +63,7 @@ pub fn bottom_of_rect(r: Rect) -> Rect {
 pub fn middle_of_rect(r: Rect) -> Rect {
     Rect {
         x: r.x,
-        y: r.y + (r.height - 1) / 2,
+        y: r.y + r.height.saturating_sub(1) / 2,
         width: r.width,
         height: 1,
     }
@@ -104,7 +103,7 @@ pub fn get_offset_after_list_resize(
 
 #[cfg(test)]
 mod tests {
-    use super::{below_left_rect, centered_rect, left_bottom_corner_rect};
+    use super::{below_left_rect, bottom_of_rect, centered_rect, left_bottom_corner_rect};
     use crate::drawutils::{get_offset_after_list_resize, middle_of_rect};
     use ratatui::layout::Rect;
 
@@ -202,6 +201,27 @@ mod tests {
     }
     // These don't actually do anything as they don't try to draw...
     #[test]
+    fn test_centered_rect_zero_height() {
+        let chunk = Rect { x: 0, y: 0, width: 10, height: 10 };
+        let c = centered_rect(0, 5, chunk);
+        assert_eq!(c.width, 5);
+        assert_eq!(c.height, 0);
+    }
+    #[test]
+    fn test_centered_rect_larger_than_chunk() {
+        let chunk = Rect { x: 0, y: 0, width: 10, height: 10 };
+        let c = centered_rect(100, 100, chunk);
+        assert_eq!(c.width, 10);
+        assert_eq!(c.height, 10);
+    }
+    #[test]
+    fn test_left_bottom_corner_rect_larger_than_chunk() {
+        let chunk = Rect { x: 0, y: 0, width: 10, height: 10 };
+        let c = left_bottom_corner_rect(100, 100, chunk);
+        assert_eq!(c.width, 10);
+        assert_eq!(c.height, 10);
+    }
+    #[test]
     fn bounds_check_left_bottom_corner_rect() {
         left_bottom_corner_rect(
             u16::MAX,
@@ -283,6 +303,39 @@ mod tests {
         bounds_check_rect(r4, t_r4);
     }
     #[test]
+    fn test_bottom_of_rect_normal() {
+        let r = Rect { x: 5, y: 10, width: 20, height: 5 };
+        let b = bottom_of_rect(r);
+        assert_eq!(b.x, 6);
+        assert_eq!(b.y, 14);
+        assert_eq!(b.width, 18);
+        assert_eq!(b.height, 1);
+    }
+    #[test]
+    fn test_bottom_of_rect_zero_height() {
+        let r = Rect { x: 0, y: 0, width: 10, height: 0 };
+        let b = bottom_of_rect(r);
+        assert_eq!(b.y, 0);
+        assert_eq!(b.width, 8);
+        assert_eq!(b.height, 1);
+    }
+    #[test]
+    fn test_bottom_of_rect_zero_width() {
+        let r = Rect { x: 0, y: 0, width: 0, height: 10 };
+        let b = bottom_of_rect(r);
+        assert_eq!(b.x, 1);
+        assert_eq!(b.y, 9);
+        assert_eq!(b.width, 0);
+        assert_eq!(b.height, 1);
+    }
+    #[test]
+    fn test_middle_of_rect_zero_height() {
+        let r = Rect { x: 0, y: 0, width: 10, height: 0 };
+        let m = middle_of_rect(r);
+        assert_eq!(m.y, 0);
+        assert_eq!(m.height, 1);
+    }
+    #[test]
     fn test_middle_of_rect() {
         let r1 = Rect {
             x: 0,
@@ -329,6 +382,17 @@ mod tests {
                 height: 1
             }
         );
+    }
+    #[test]
+    fn test_below_left_rect_zero_height() {
+        let chunk = Rect { x: 0, y: 0, width: 10, height: 0 };
+        let max = Rect { x: 0, y: 0, width: 50, height: 50 };
+        // height 0 chunk: y = 0 + 0 - 1 = 0 (saturated)
+        let b = below_left_rect(5, 10, chunk, max);
+        assert_eq!(b.x, 0);
+        assert_eq!(b.y, 0);
+        assert_eq!(b.width, 10);
+        assert!(b.height <= max.height);
     }
     #[test]
     fn bounds_check_below_left_rect() {

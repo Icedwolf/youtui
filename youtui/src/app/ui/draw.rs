@@ -73,8 +73,10 @@ fn draw_popup(f: &mut Frame, w: &YoutuiWindow, chunk: Rect) {
             )
         },
     );
-    let width = shortcut_len + description_len + 3;
-    let height = commands_vec.len() + 2;
+    let width = shortcut_len
+        .saturating_add(description_len)
+        .saturating_add(3);
+    let height = commands_vec.len().saturating_add(2);
     let table_constraints = [
         Constraint::Min(shortcut_len.try_into().unwrap_or(u16::MAX)),
         Constraint::Min(description_len.try_into().unwrap_or(u16::MAX)),
@@ -99,24 +101,22 @@ fn draw_popup(f: &mut Frame, w: &YoutuiWindow, chunk: Rect) {
 /// Draw the help page. The help page should show all visible commands for the
 /// current page.
 fn draw_help(f: &mut Frame, w: &mut YoutuiWindow, chunk: Rect) {
-    let (mut s_len, mut c_len, mut d_len, items) = w
-        .get_help_list_items()
-        .map(
-            |DisplayableKeyAction {
-                 keybinds,
-                 context,
-                 description,
-             }| (keybinds.len(), context.len(), description.len()),
-        )
-        .fold((0, 0, 0, 0), |(smax, cmax, dmax, n), (s, c, d)| {
-            (smax.max(s), cmax.max(c), dmax.max(d), n + 1)
-        });
+    let mut s_len = 0usize;
+    let mut c_len = 0usize;
+    let mut d_len = 0usize;
+    let mut items = 0usize;
+    for action in w.get_help_list_items() {
+        items = items.saturating_add(1);
+        s_len = s_len.max(action.keybinds.len());
+        c_len = c_len.max(action.context.len());
+        d_len = d_len.max(action.description.len());
+    }
     // Ensure the width of each column is at least as wide as header.
     (s_len, c_len, d_len) = (s_len.max(3), c_len.max(7), d_len.max(7));
     // Total block width required, including padding and borders.
-    let width = s_len + c_len + d_len + 4;
+    let width = s_len.saturating_add(c_len).saturating_add(d_len).saturating_add(4);
     // Total block height required, including header and borders.
-    let height = items + 3;
+    let height = items.saturating_add(3);
     let table_constraints = [
         BasicConstraint::Length(s_len.try_into().unwrap_or(u16::MAX)),
         BasicConstraint::Length(c_len.try_into().unwrap_or(u16::MAX)),
