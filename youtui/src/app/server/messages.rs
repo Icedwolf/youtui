@@ -437,3 +437,75 @@ impl PartialEq for QueueSong {
         self.id == other.id
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ytmapi_rs::common::YoutubeID;
+
+    fn make_download_song() -> DownloadSong {
+        DownloadSong(
+            VideoID::from_raw("test"),
+            ListSongID(1),
+            Arc::new(CancellationToken::new()),
+            AudioQuality::Best,
+        )
+    }
+
+    #[test]
+    fn handle_api_error_partial_eq() {
+        let a = HandleApiError {
+            error: Error::msg("disk full"),
+            message: "write failed".into(),
+        };
+        let b = HandleApiError {
+            error: Error::msg("disk full"),
+            message: "write failed".into(),
+        };
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn handle_api_error_partial_eq_differs_on_message() {
+        let a = HandleApiError {
+            error: Error::msg("disk full"),
+            message: "write failed".into(),
+        };
+        let b = HandleApiError {
+            error: Error::msg("disk full"),
+            message: "different".into(),
+        };
+        assert_ne!(a, b);
+    }
+
+    #[test]
+    fn download_song_partial_eq_matches() {
+        let a = make_download_song();
+        let b = make_download_song();
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn download_song_partial_eq_differs_on_quality() {
+        let a = make_download_song();
+        let b = DownloadSong(
+            VideoID::from_raw("test"),
+            ListSongID(1),
+            Arc::new(CancellationToken::new()),
+            AudioQuality::High,
+        );
+        assert_ne!(a, b);
+    }
+
+    #[test]
+    fn download_song_partial_eq_differs_on_video_id() {
+        let a = make_download_song();
+        let b = DownloadSong(
+            VideoID::from_raw("other"),
+            ListSongID(1),
+            Arc::new(CancellationToken::new()),
+            AudioQuality::Best,
+        );
+        assert_ne!(a, b);
+    }
+}

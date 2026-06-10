@@ -14,7 +14,7 @@ use rusty_ytdl::reqwest;
 use std::future::Future;
 use std::sync::{Arc, OnceLock};
 use tokio::sync::Semaphore;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 use ytmapi_rs::common::{VideoID, YoutubeID};
 
 #[derive(Debug, PartialEq)]
@@ -109,7 +109,7 @@ pub enum SongDownloader {
 }
 
 impl SongDownloader {
-    pub fn new(po_token: Option<String>, client: reqwest::Client, config: &Config) -> Self {
+    pub fn new(po_token: Option<String>, cookie_str: Option<String>, client: reqwest::Client, config: &Config) -> Self {
         match config.downloader_type {
             DownloaderType::Native => {
                 info!(
@@ -124,12 +124,23 @@ impl SongDownloader {
                 ))
             }
             DownloaderType::YtDlp => {
-                info!(
-                    "Initiating yt-dlp downloader using yt-dlp path `{}`",
-                    config.yt_dlp_command
+                debug!(
+                    "Initiating yt-dlp downloader using yt-dlp path `{}`. Has po_token: {}, has cookies: {}",
+                    config.yt_dlp_command,
+                    po_token.is_some(),
+                    cookie_str.is_some(),
                 );
-                let downloader = YtDlpDownloader::new(config.yt_dlp_command.clone(), po_token.clone(), AudioQuality::default());
-                let downloader_clone = YtDlpDownloader::new(config.yt_dlp_command.clone(), po_token.clone(), AudioQuality::default());
+                // Browser source and JS runtime are detected lazily on first stream_song call
+                let downloader = YtDlpDownloader::new(
+                    config.yt_dlp_command.clone(),
+                    po_token,
+                    cookie_str,
+                    AudioQuality::default(),
+                    None,
+                    None,
+                );
+                // Clone is cheap (Arc-based), avoids a second write_netscape_cookie_file call
+                let downloader_clone = downloader.clone();
                 tokio::task::spawn(async {
                     let output = downloader_clone.get_version().await;
                     match output {

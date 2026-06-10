@@ -1,6 +1,7 @@
 //! Provides an asynchronous handle to a rodio sink, specifically designed to
 //! handle gapless playback.
 //! This module has been designed to be implemented as a library in future.
+use crate::app::structures::Percentage;
 use async_callback_manager::PanickingReceiverStream;
 use futures::Stream;
 use rodio::Source;
@@ -18,14 +19,6 @@ pub mod rodio {
 
 const PROGRESS_UPDATE_DELAY: Duration = Duration::from_millis(100);
 const PLAYER_MSG_QUEUE_SIZE: usize = 50;
-
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub struct Percentage(u8);
-impl From<Percentage> for u8 {
-    fn from(value: Percentage) -> Self {
-        value.0
-    }
-}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum SeekDirection {
@@ -49,7 +42,7 @@ enum AsyncRodioRequest<S, I> {
     SeekTo(Duration, I, RodioOneshot<(Duration, I)>),
 }
 #[derive(Debug)]
-enum AsyncRodioResponse {
+pub(crate) enum AsyncRodioResponse {
     ProgressUpdate(Duration),
     StartedPlaying(Option<Duration>),
     Queued(Option<Duration>),
@@ -190,8 +183,9 @@ where
             // redirects the entire process's stderr which can swallow other threads'
             // log output. Instead we accept the Rodio stderr noise — it's not visible
             // inside the TUI and only matters for debug sessions.
-            let mixer_device_sink = rodio::DeviceSinkBuilder::open_default_sink()
+            let mut mixer_device_sink = rodio::DeviceSinkBuilder::open_default_sink()
                 .expect("Expect to get a handle to output stream");
+            mixer_device_sink.log_on_drop(false);
             let sink = rodio::Player::connect_new(mixer_device_sink.mixer());
             // Hopefully someone else can't create a song with the same ID?!
             let mut cur_song_duration = None;
@@ -737,6 +731,36 @@ where
     }
 }
 
+pub(crate) fn map_to_play_update<I: Debug + PartialEq + Copy>(msg: AsyncRodioResponse, id: I) -> PlayUpdate<I> {
+    match msg {
+        AsyncRodioResponse::ProgressUpdate(d) => PlayUpdate::PlayProgress(d, id),
+        AsyncRodioResponse::Queued(_) => PlayUpdate::Error("Received Queued message, but I wasn't queued...".into()),
+        AsyncRodioResponse::AutoplayingQueued => PlayUpdate::Error("Received AutoPlayingQueued message, but I asked to play...".into()),
+        AsyncRodioResponse::StartedPlaying(d) => PlayUpdate::Playing(d, id),
+        AsyncRodioResponse::StoppedPlaying => PlayUpdate::DonePlaying(id),
+    }
+}
+
+pub(crate) fn map_to_queue_update<I: Debug + PartialEq + Copy>(msg: AsyncRodioResponse, id: I) -> QueueUpdate<I> {
+    match msg {
+        AsyncRodioResponse::ProgressUpdate(d) => QueueUpdate::PlayProgress(d, id),
+        AsyncRodioResponse::Queued(d) => QueueUpdate::Queued(d, id),
+        AsyncRodioResponse::AutoplayingQueued => QueueUpdate::Error("Received AutoPlayingQueued message, but I asked to queue...".into()),
+        AsyncRodioResponse::StartedPlaying(_) => QueueUpdate::Error("Received StartedPlaying message, but I asked to queue...".into()),
+        AsyncRodioResponse::StoppedPlaying => QueueUpdate::DonePlaying(id),
+    }
+}
+
+pub(crate) fn map_to_autoplay_update<I: Debug + PartialEq + Copy>(msg: AsyncRodioResponse, id: I) -> AutoplayUpdate<I> {
+    match msg {
+        AsyncRodioResponse::ProgressUpdate(d) => AutoplayUpdate::PlayProgress(d, id),
+        AsyncRodioResponse::Queued(_) => AutoplayUpdate::Error("Received queued message, but I wasn't queued...".into()),
+        AsyncRodioResponse::AutoplayingQueued => AutoplayUpdate::AutoplayQueued(id),
+        AsyncRodioResponse::StartedPlaying(d) => AutoplayUpdate::Playing(d, id),
+        AsyncRodioResponse::StoppedPlaying => AutoplayUpdate::DonePlaying(id),
+    }
+}
+
 /// Specific helper function to generate a source that sends a stopped playing
 /// message to the sender.
 fn on_done_cb(tx: &RodioMpscSender<AsyncRodioResponse>) -> EmptyCallback {
@@ -790,3 +814,125 @@ pub fn oneshot_send_or_error<T: Debug, S: Into<oneshot::Sender<T>>>(tx: S, msg: 
         .unwrap_or_else(|e| error!("Error received when sending message {:?}", e));
 }
 /* #### ABOVE CODE COPIED FROM youtui::core #### */
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Duration;
+
+    #[test]
+    fn map_play_update_progress() {
+        let id = 42u64;
+        let result = map_to_play_update(AsyncRodioResponse::ProgressUpdate(Duration::from_secs(5)), id);
+        assert_eq!(result, PlayUpdate::PlayProgress(Duration::from_secs(5), 42));
+    }
+
+    #[test]
+    fn map_play_update_queued_is_error() {
+        let result = map_to_play_update(AsyncRodioResponse::Queued(Some(Duration::from_secs(10))), 1u64);
+        assert!(matches!(result, PlayUpdate::Error(_)));
+    }
+
+    #[test]
+    fn map_play_update_autoplay_queued_is_error() {
+        let result = map_to_play_update(AsyncRodioResponse::AutoplayingQueued, 1u64);
+        assert!(matches!(result, PlayUpdate::Error(_)));
+    }
+
+    #[test]
+    fn map_play_update_started_playing() {
+        let result = map_to_play_update(AsyncRodioResponse::StartedPlaying(Some(Duration::from_secs(30))), 2u64);
+        assert_eq!(result, PlayUpdate::Playing(Some(Duration::from_secs(30)), 2));
+    }
+
+    #[test]
+    fn map_play_update_started_playing_none() {
+        let result = map_to_play_update(AsyncRodioResponse::StartedPlaying(None), 2u64);
+        assert_eq!(result, PlayUpdate::Playing(None, 2));
+    }
+
+    #[test]
+    fn map_play_update_stopped() {
+        let result = map_to_play_update(AsyncRodioResponse::StoppedPlaying, 3u64);
+        assert_eq!(result, PlayUpdate::DonePlaying(3));
+    }
+
+    #[test]
+    fn map_queue_update_progress() {
+        let result = map_to_queue_update(AsyncRodioResponse::ProgressUpdate(Duration::from_secs(5)), 1u64);
+        assert_eq!(result, QueueUpdate::PlayProgress(Duration::from_secs(5), 1));
+    }
+
+    #[test]
+    fn map_queue_update_queued() {
+        let result = map_to_queue_update(AsyncRodioResponse::Queued(Some(Duration::from_secs(10))), 1u64);
+        assert_eq!(result, QueueUpdate::Queued(Some(Duration::from_secs(10)), 1));
+    }
+
+    #[test]
+    fn map_queue_update_queued_none() {
+        let result = map_to_queue_update(AsyncRodioResponse::Queued(None), 1u64);
+        assert_eq!(result, QueueUpdate::Queued(None, 1));
+    }
+
+    #[test]
+    fn map_queue_update_autoplay_queued_is_error() {
+        let result = map_to_queue_update(AsyncRodioResponse::AutoplayingQueued, 1u64);
+        assert!(matches!(result, QueueUpdate::Error(_)));
+    }
+
+    #[test]
+    fn map_queue_update_started_playing_is_error() {
+        let result = map_to_queue_update(AsyncRodioResponse::StartedPlaying(Some(Duration::from_secs(30))), 1u64);
+        assert!(matches!(result, QueueUpdate::Error(_)));
+    }
+
+    #[test]
+    fn map_queue_update_stopped() {
+        let result = map_to_queue_update(AsyncRodioResponse::StoppedPlaying, 2u64);
+        assert_eq!(result, QueueUpdate::DonePlaying(2));
+    }
+
+    #[test]
+    fn map_autoplay_update_progress() {
+        let result = map_to_autoplay_update(AsyncRodioResponse::ProgressUpdate(Duration::from_millis(500)), 1u64);
+        assert_eq!(result, AutoplayUpdate::PlayProgress(Duration::from_millis(500), 1));
+    }
+
+    #[test]
+    fn map_autoplay_update_queued_is_error() {
+        let result = map_to_autoplay_update(AsyncRodioResponse::Queued(Some(Duration::from_secs(10))), 1u64);
+        assert!(matches!(result, AutoplayUpdate::Error(_)));
+    }
+
+    #[test]
+    fn map_autoplay_update_autoplay_queued() {
+        let result = map_to_autoplay_update(AsyncRodioResponse::AutoplayingQueued, 1u64);
+        assert_eq!(result, AutoplayUpdate::AutoplayQueued(1));
+    }
+
+    #[test]
+    fn map_autoplay_update_started_playing() {
+        let result = map_to_autoplay_update(AsyncRodioResponse::StartedPlaying(Some(Duration::from_secs(30))), 2u64);
+        assert_eq!(result, AutoplayUpdate::Playing(Some(Duration::from_secs(30)), 2));
+    }
+
+    #[test]
+    fn map_autoplay_update_stopped() {
+        let result = map_to_autoplay_update(AsyncRodioResponse::StoppedPlaying, 3u64);
+        assert_eq!(result, AutoplayUpdate::DonePlaying(3));
+    }
+
+    #[test]
+    fn percentage_into_u8() {
+        let p = Percentage(75);
+        let val = p.0;
+        assert_eq!(val, 75);
+    }
+
+    #[test]
+    fn percentage_equality() {
+        assert_eq!(Percentage(50), Percentage(50));
+        assert_ne!(Percentage(50), Percentage(100));
+    }
+}
