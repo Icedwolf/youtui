@@ -2,6 +2,7 @@
 auth_type = "Browser"
 downloader_type = "Native"
 yt_dlp_command = "yt-dlp"
+notifications_enabled = true
 
 # Global keybinds
 [keybinds.global]

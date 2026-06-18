@@ -1,3 +1,4 @@
+use crate::app::structures::AudioQuality;
 use crate::get_config_dir;
 use anyhow::{Context, Result};
 use clap::ValueEnum;
@@ -50,16 +51,27 @@ pub enum DownloaderType {
     YtDlp,
 }
 
+fn default_volume() -> u8 {
+    50
+}
+
+fn default_yt_dlp_command() -> String {
+    String::from("yt-dlp")
+}
+
+fn default_notifications_enabled() -> bool {
+    true
+}
+
 #[derive(Debug, PartialEq)]
 pub struct Config {
     pub auth_type: AuthType,
     pub downloader_type: DownloaderType,
     pub yt_dlp_command: String,
     pub keybinds: YoutuiKeymap,
-}
-
-fn default_yt_dlp_command() -> String {
-    String::from("yt-dlp")
+    pub volume: u8,
+    pub audio_quality: AudioQuality,
+    pub notifications_enabled: bool,
 }
 
 impl Default for Config {
@@ -69,6 +81,9 @@ impl Default for Config {
             downloader_type: Default::default(),
             yt_dlp_command: default_yt_dlp_command(),
             keybinds: Default::default(),
+            volume: default_volume(),
+            audio_quality: AudioQuality::default(),
+            notifications_enabled: true,
         }
     }
 }
@@ -83,6 +98,11 @@ pub struct ConfigIR {
     pub yt_dlp_command: String,
     pub keybinds: YoutuiKeymapIR,
     pub mode_names: YoutuiModeNamesIR,
+    #[serde(default = "default_volume")]
+    pub volume: u8,
+    pub audio_quality: AudioQuality,
+    #[serde(default = "default_notifications_enabled")]
+    pub notifications_enabled: bool,
 }
 
 impl TryFrom<ConfigIR> for Config {
@@ -94,12 +114,18 @@ impl TryFrom<ConfigIR> for Config {
             keybinds,
             mode_names,
             yt_dlp_command,
+            volume,
+            audio_quality,
+            notifications_enabled,
         } = value;
         Ok(Config {
             auth_type,
             downloader_type,
             keybinds: YoutuiKeymap::try_from_stringy(keybinds, mode_names)?,
             yt_dlp_command,
+            volume,
+            audio_quality,
+            notifications_enabled,
         })
     }
 }
@@ -187,6 +213,9 @@ raisevolume = {action = "vol_up", visiblity = "hidden"}"#;
             mode_names,
             downloader_type,
             yt_dlp_command,
+            volume: _,
+            audio_quality: _,
+            ..
         } = toml::from_str(&config_file).unwrap();
         let keybinds = YoutuiKeymap::try_from_stringy_exact(keybinds, mode_names).unwrap();
         let config = Config {
@@ -194,6 +223,9 @@ raisevolume = {action = "vol_up", visiblity = "hidden"}"#;
             keybinds,
             downloader_type,
             yt_dlp_command,
+            volume: super::default_volume(),
+            audio_quality: super::AudioQuality::default(),
+            notifications_enabled: true,
         };
         assert_eq!(config, Config::default());
     }

@@ -113,6 +113,7 @@ pub struct MediaController {
     status: souvlaki::MediaPlayback,
     volume: MediaControlsVolume,
     notification_controller: NotificationController,
+    notifications_enabled: bool,
     title: Option<String>,
     album: Option<String>,
     artist: Option<String>,
@@ -162,7 +163,7 @@ impl MediaControlsVolume {
 }
 
 impl MediaController {
-    pub fn new() -> anyhow::Result<(Self, impl Stream<Item = MediaControlEvent>)> {
+    pub fn new(notifications_enabled: bool) -> anyhow::Result<(Self, impl Stream<Item = MediaControlEvent>)> {
         let (tx, rx) = mpsc::channel(super::EVENT_CHANNEL_SIZE);
 
         // On windows, a hwnd window handle is required, so we create a non-visible
@@ -225,6 +226,7 @@ impl MediaController {
                 duration: None,
                 volume: Default::default(),
                 notification_controller: NotificationController::new(),
+                notifications_enabled,
                 #[cfg(target_os = "macos")]
                 macos_window_handle,
             },
@@ -311,17 +313,19 @@ impl MediaController {
             if let Some(title) = &self.title {
                 let artist = self.artist.clone();
                 let cover_url = self.cover_url.clone();
-                let mut controller = std::mem::take(&mut self.notification_controller);
+                if self.notifications_enabled {
+                    let mut controller = std::mem::take(&mut self.notification_controller);
 
-                let _ = task::block_in_place(|| {
-                    let rt = tokio::runtime::Handle::current();
-                    rt.block_on(async {
-                        controller
-                            .notify_track_change(title, artist.as_deref(), cover_url.as_deref())
-                            .await
-                    })
-                });
-                self.notification_controller = controller;
+                    let _ = task::block_in_place(|| {
+                        let rt = tokio::runtime::Handle::current();
+                        rt.block_on(async {
+                            controller
+                                .notify_track_change(title, artist.as_deref(), cover_url.as_deref())
+                                .await
+                        })
+                    });
+                    self.notification_controller = controller;
+                }
             }
         }
         Ok(())
