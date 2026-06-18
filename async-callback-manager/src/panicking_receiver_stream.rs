@@ -6,8 +6,8 @@ use tokio_stream::Stream;
 use tokio_stream::wrappers::ReceiverStream; // or std::future::Future
 
 /// A modification to tokio's ReceiverStream that awaits a JoinHandle prior to
-/// reporting closed, rethrowing the panic if there was one. Use this when the
-/// ReceiverStream is driven by a task that may panic.
+/// reporting closed, logging the panic if there was one instead of rethrowing
+/// it. Use this when the ReceiverStream is driven by a task that may panic.
 pub struct PanickingReceiverStream<T> {
     pub inner: ReceiverStream<T>,
     pub handle: JoinHandle<()>,
@@ -32,9 +32,17 @@ impl<T> Stream for PanickingReceiverStream<T> {
                 match Pin::new(&mut self.handle).poll(cx) {
                     // Task is still tearing down; wait for it to finish to capture the panic.
                     Poll::Pending => Poll::Pending,
-                    // Task panicked! Rethrow it.
+                    // Task panicked! Log the panic instead of resuming unwind,
+                    // which would abort the current task on recoverable errors.
                     Poll::Ready(Err(e)) if e.is_panic() => {
-                        std::panic::resume_unwind(e.into_panic());
+                        let panic = e.into_panic();
+                        let msg = panic
+                            .downcast_ref::<&str>()
+                            .copied()
+                            .or_else(|| panic.downcast_ref::<String>().map(|s| s.as_str()))
+                            .unwrap_or("unknown panic");
+                        tracing::error!("Background task panicked: {msg}");
+                        Poll::Ready(None)
                     }
                     // Task finished normally or was cancelled.
                     _ => Poll::Ready(None),
@@ -68,19 +76,20 @@ mod tests {
     }
 
     #[tokio::test]
-    #[should_panic]
-    async fn panicking_receiver_stream_should_panic_if_task_panics() {
+    async fn panicking_receiver_stream_logs_panic_instead_of_resuming() {
         let (tx, rx) = tokio::sync::mpsc::channel(30);
         let handle = tokio::spawn(async move {
             for i in 0..=10 {
                 if i == 6 {
-                    panic!();
+                    panic!("test panic message");
                 }
                 tx.send(i).await.unwrap();
             }
         });
         let stream = PanickingReceiverStream::new(rx, handle);
         let output: Vec<_> = stream.collect().await;
+        // The 6th message was never sent because the task panicked at i == 6.
+        // The panic is logged, not resumed, so the stream ends normally.
         assert_eq!(output, vec![0, 1, 2, 3, 4, 5]);
     }
 }

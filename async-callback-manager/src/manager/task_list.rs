@@ -1,5 +1,5 @@
 use crate::task::dyn_task::DynStateMutation;
-use crate::{Constraint, ConstraitType, TaskId};
+use crate::{Constraint, ConstraintType, TaskId};
 use futures::stream::FuturesUnordered;
 use std::any::TypeId;
 use std::sync::Arc;
@@ -62,7 +62,7 @@ pub enum TaskOutcome<Frntend, Bkend, Md> {
         type_debug: Arc<String>,
         task_id: TaskId,
     },
-    /// No task was recieved because the next task panicked.
+    /// No task was received because the next task panicked.
     TaskPanicked {
         error: JoinError,
         type_id: TypeId,
@@ -179,13 +179,13 @@ impl<Bkend, Frntend, Md: PartialEq> TaskList<Frntend, Bkend, Md> {
         let task_doesnt_match_metadata =
             |task: &SpawnedTask<_, _, _>, constraint| !task.metadata.contains(constraint);
         match constraint.constraint_type {
-            ConstraitType::BlockMatchingMetatdata(metadata) => self
+            ConstraintType::BlockMatchingMetatdata(metadata) => self
                 .inner
                 .retain(|task| task_doesnt_match_metadata(task, &metadata)),
-            ConstraitType::BlockSameType => {
+            ConstraintType::BlockSameType => {
                 self.inner.retain(task_doesnt_match_constraint);
             }
-            ConstraitType::KillSameType => self.inner.retain_mut(|task| {
+            ConstraintType::KillSameType => self.inner.retain_mut(|task| {
                 if !task_doesnt_match_constraint(task) {
                     task.receiver.kill();
                     return false;
