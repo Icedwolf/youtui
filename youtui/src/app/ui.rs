@@ -4,15 +4,15 @@ use self::playlist::Playlist;
 use super::AppCallback;
 use super::component::actionhandler::{
     ActionHandler, ComponentEffect, DominantKeyRouter, KeyHandleAction, KeyRouter, Scrollable,
-    TextHandler, YoutuiEffect, apply_action_mapped, get_visible_keybinds_as_readable_iter,
+    TextHandler, YoutuiEffect, apply_action_mapped,
     handle_key_stack,
 };
 use super::server::{IncreaseVolume, SetVolume};
-use super::structures::ListSong;
+use super::structures::{ListSong, Percentage};
 use crate::async_rodio_sink::{SeekDirection, VolumeUpdate};
 use crate::config::Config;
 use crate::config::keymap::Keymap;
-use crate::keyaction::{DisplayableKeyAction, DisplayableMode};
+use crate::keyaction::{DisplayableKeyAction, DisplayableMode, flatten_keybinds_as_readable};
 use crate::widgets::ScrollingTableState;
 use action::{AppAction, ListAction, PAGE_KEY_LINES, SEEK_AMOUNT, TextEntryAction};
 use async_callback_manager::{AsyncTask, Constraint};
@@ -299,7 +299,10 @@ impl ActionHandler<AppAction> for YoutuiWindow {
 
 impl YoutuiWindow {
     pub fn new(config: Config) -> (YoutuiWindow, ComponentEffect<YoutuiWindow>) {
-        let (playlist, task) = Playlist::new();
+        let (playlist, task) = Playlist::new(
+            Percentage(config.volume),
+            config.audio_quality,
+        );
         let this = YoutuiWindow {
             context: WindowContext::Browser,
             prev_context: WindowContext::Browser,
@@ -317,18 +320,18 @@ impl YoutuiWindow {
         )
     }
     pub fn get_help_list_items(&self) -> impl Iterator<Item = DisplayableKeyAction<'_>> {
-        match self.context {
-            WindowContext::Browser => Either::Left(Either::Right(
-                get_visible_keybinds_as_readable_iter(self.browser.get_all_keybinds(&self.config)),
-            )),
-            WindowContext::Playlist => Either::Right(get_visible_keybinds_as_readable_iter(
+        let base: Vec<DisplayableKeyAction<'_>> = match self.context {
+            WindowContext::Browser => flatten_keybinds_as_readable(
+                self.browser.get_all_keybinds(&self.config),
+            ),
+            WindowContext::Playlist => flatten_keybinds_as_readable(
                 self.playlist.get_all_keybinds(&self.config),
-            )),
-            WindowContext::Logs => Either::Left(Either::Left(
-                get_visible_keybinds_as_readable_iter(self.logger.get_all_keybinds(&self.config)),
-            )),
-        }
-        .chain(get_visible_keybinds_as_readable_iter(
+            ),
+            WindowContext::Logs => flatten_keybinds_as_readable(
+                self.logger.get_all_keybinds(&self.config),
+            ),
+        };
+        base.into_iter().chain(flatten_keybinds_as_readable(
             std::iter::once(&self.config.keybinds.global)
                 .chain(std::iter::once(&self.config.keybinds.list))
                 .chain(std::iter::once(&self.config.keybinds.text_entry)),
@@ -425,7 +428,7 @@ impl YoutuiWindow {
                         match self.context {
                             WindowContext::Browser => self.browser.go_to_first(),
                             WindowContext::Playlist => self.playlist.go_to_first(),
-                            WindowContext::Logs => self.browser.go_to_first(),
+                            WindowContext::Logs => (),
                         }
                     }
                 }
@@ -436,7 +439,7 @@ impl YoutuiWindow {
                         match self.context {
                             WindowContext::Browser => self.browser.go_to_last(),
                             WindowContext::Playlist => self.playlist.go_to_last(),
-                            WindowContext::Logs => self.browser.go_to_last(),
+                            WindowContext::Logs => (),
                         }
                     }
                 }
