@@ -33,7 +33,7 @@ impl Default for FilterManager {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct SortManager {
     pub sort_commands: Vec<TableSortCommand>,
     pub shown: bool,
@@ -41,17 +41,6 @@ pub struct SortManager {
     pub state: ListState,
 }
 impl_youtui_component!(SortManager);
-
-impl Default for SortManager {
-    fn default() -> Self {
-        Self {
-            sort_commands: Vec::new(),
-            shown: false,
-            cur: 0,
-            state: ListState::default(),
-        }
-    }
-}
 
 #[derive(PartialEq, Clone, Copy, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -93,7 +82,7 @@ impl Action for FilterAction {
 
 impl Action for SortAction {
     fn context(&self) -> std::borrow::Cow<'_, str> {
-        "Filter".into()
+        "Sort".into()
     }
     fn describe(&self) -> std::borrow::Cow<'_, str> {
         match self {
@@ -272,7 +261,7 @@ impl_youtui_task_handler!(
             error,
             // To avoid needing to clone search query to use in the error message, this
             // error message is minimal.
-            message: "Error recieved getting search suggestions".to_string(),
+            message: "Error received getting search suggestions".to_string(),
         },
         NoOpHandler,
         None,
@@ -349,3 +338,5 @@ mod tests {
         assert_eq!(effect, expected_effect)
     }
 }
+
+

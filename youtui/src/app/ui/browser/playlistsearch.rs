@@ -293,7 +293,6 @@ impl PlaylistSearchBrowser {
         )
     }
     pub fn play_song(&mut self) -> impl Into<YoutuiEffect<Self>> + use<> {
-        // Consider how resource intensive this is as it runs in the main thread.
         let cur_song_idx = self.playlist_songs_panel.get_selected_item();
         if let Some(cur_song) = self.playlist_songs_panel.get_song_from_idx(cur_song_idx) {
             return (
@@ -306,7 +305,6 @@ impl PlaylistSearchBrowser {
         (AsyncTask::new_no_op(), None)
     }
     pub fn play_songs(&mut self) -> impl Into<YoutuiEffect<Self>> + use<> {
-        // Consider how resource intensive this is as it runs in the main thread.
         let cur_idx = self.playlist_songs_panel.get_selected_item();
         let song_list = self
             .playlist_songs_panel
@@ -319,10 +317,8 @@ impl PlaylistSearchBrowser {
             Some(AppCallback::AddSongsToPlaylistAndPlay(song_list)),
         )
 
-        // XXX: Do we want to indicate that song has been added to playlist?
     }
     pub fn add_songs_to_playlist(&mut self) -> impl Into<YoutuiEffect<Self>> + use<> {
-        // Consider how resource intensive this is as it runs in the main thread.
         let cur_idx = self.playlist_songs_panel.get_selected_item();
         let song_list = self
             .playlist_songs_panel
@@ -336,7 +332,6 @@ impl PlaylistSearchBrowser {
         )
     }
     pub fn add_song_to_playlist(&mut self) -> impl Into<YoutuiEffect<Self>> + use<> {
-        // Consider how resource intensive this is as it runs in the main thread.
         let cur_idx = self.playlist_songs_panel.get_selected_item();
         if let Some(cur_song) = self.playlist_songs_panel.get_song_from_idx(cur_idx) {
             return (
@@ -373,8 +368,6 @@ impl PlaylistSearchBrowser {
             .into_iter()
             .filter_map(NonPodcastSearchResultPlaylist::new)
             .collect();
-        // XXX: What to do if position in list was greater than new list length?
-        // Handled by this function?
         self.increment_cur_list(0);
     }
     pub fn handle_append_song_list(&mut self, song_list: Vec<PlaylistItem>) {
@@ -384,7 +377,7 @@ impl PlaylistSearchBrowser {
         // If sort commands exist, sort the list.
         // Naive - can result in multiple calls to sort every time songs are appended.
         if let Err(e) = self.playlist_songs_panel.apply_all_sort_commands() {
-            error!("Error <{e}> sorting album songs panel");
+            error!("Error <{e}> sorting playlist songs panel");
         }
         self.playlist_songs_panel.list.state = ListStatus::InProgress;
     }
@@ -441,7 +434,7 @@ impl_youtui_task_handler!(
             error,
             // To avoid needing to clone search query to use in the error message, this
             // error message is minimal.
-            message: "Error recieved getting playlists".to_string(),
+            message: "Error received getting playlists".to_string(),
         },
         NoOpHandler,
         None,

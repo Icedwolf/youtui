@@ -12,7 +12,7 @@ pub fn draw_app_media_controls(w: &YoutuiWindow) -> MediaControlsUpdate<'_> {
             duration = w
                 .playlist
                 .get_song_from_id(*id)
-                .map(|s| s.duration_secs)
+                .map(|s| s.actual_duration.map(|d| d.as_secs() as usize).unwrap_or(s.duration_secs))
                 .unwrap_or(0);
             progress = w.playlist.get_cur_played_dur().unwrap_or_default();
             (progress.as_secs_f64() / duration as f64).clamp(0.0, 1.0)

@@ -289,7 +289,8 @@ impl AdvancedTableView for SongSearchBrowser {
         }
         // Map the column of ArtistAlbums to a column of List and sort
         self.song_list.sort(
-            get_adjusted_list_column(sort_command.column, Self::subcolumns_of_vec()).unwrap(),
+            get_adjusted_list_column(sort_command.column, Self::subcolumns_of_vec())
+                .expect("column was validated against sortable_columns"),
             sort_command.direction,
         );
         // Remove commands that already exist for the same column, as this new command
@@ -348,9 +349,14 @@ impl HasTitle for SongSearchBrowser {
             )
             .into(),
             ListStatus::Loaded => {
-                format!("Songs - {} results", self.song_list.get_list_iter().len()).into()
+                let len = self.song_list.get_list_iter().len();
+                if len == 0 {
+                    "Songs - no songs found".into()
+                } else {
+                    format!("Songs - {len} results").into()
+                }
             }
-            ListStatus::Error => "Songs - Error receieved".into(),
+            ListStatus::Error => "Songs - Error received".into(),
         }
     }
 }
@@ -543,6 +549,7 @@ impl SongSearchBrowser {
         )
     }
     pub fn play_song(&mut self) -> impl Into<YoutuiEffect<Self>> + use<> {
+        // Consider how resource intensive this is as it runs in the main thread.
         let cur_song_idx = self.get_selected_item();
         if let Some(cur_song) = self.get_song_from_idx(cur_song_idx) {
             return (
@@ -555,7 +562,6 @@ impl SongSearchBrowser {
         (AsyncTask::new_no_op(), None)
     }
     pub fn play_songs(&mut self) -> impl Into<YoutuiEffect<Self>> + use<> {
-        // Consider how resource intensive this is as it runs in the main thread.
         let cur_idx = self.get_selected_item();
         let song_list = self
             .get_filtered_list_iter()
@@ -566,9 +572,9 @@ impl SongSearchBrowser {
             AsyncTask::new_no_op(),
             Some(AppCallback::AddSongsToPlaylistAndPlay(song_list)),
         )
+
     }
     pub fn add_songs_to_playlist(&mut self) -> impl Into<YoutuiEffect<Self>> + use<> {
-        // Consider how resource intensive this is as it runs in the main thread.
         let cur_idx = self.get_selected_item();
         let song_list = self
             .get_filtered_list_iter()
@@ -581,6 +587,7 @@ impl SongSearchBrowser {
         )
     }
     pub fn add_song_to_playlist(&mut self) -> impl Into<YoutuiEffect<Self>> + use<> {
+        // Consider how resource intensive this is as it runs in the main thread.
         let cur_idx = self.get_selected_item();
         if let Some(cur_song) = self.get_song_from_idx(cur_idx) {
             return (
@@ -650,7 +657,7 @@ impl_youtui_task_handler!(
             error,
             // To avoid needing to clone search query to use in the error message, this
             // error message is minimal.
-            message: "Error recieved getting songs".to_string(),
+            message: "Error received getting songs".to_string(),
         },
         NoOpHandler,
         None,
