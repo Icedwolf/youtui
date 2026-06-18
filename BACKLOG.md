@@ -75,8 +75,8 @@
 | 1 | `gen_output.rs` + `gen_output/src/main.rs` | **Functional duplicate** — two code generators for test output files; identical logic. | 🔜 |
 | 2 | `ytmapi-rs/src/auth/noauth.rs:27-43` | **Fragile ytcfg parsing.** Uses `.split_once("ytcfg.set({")` — YouTube JS format changes will break silently. | ✅ Fixed |
 | 3 | `ytmapi-rs/src/auth/browser.rs:69-71` | **English-only browser version check.** Localized versions break silently. | 🔜 |
-| 4 | `PanickingReceiverStream` | **Panics on channel close** — `resume_unwind` aborts current task, too harsh for recoverable errors. | 🔜 |
-| 5 | `core.rs:32` + `async_rodio_sink.rs:847` | **`blocking_send_or_error` defined twice** (identical signatures). | 🔜 |
+| 4 | `PanickingReceiverStream` | **Panics on channel close** — `resume_unwind` aborts current task, too harsh for recoverable errors. | ✅ Fixed |
+| 5 | `core.rs:32` + `async_rodio_sink.rs:847` | **`blocking_send_or_error` defined twice** (identical signatures). | ✅ Fixed — removed duplicate, import from core |
 | 6 | `songsearch.rs` / `artistsearch.rs` / `playlistsearch.rs` | **Triplicated song-clone-and-callback pattern.** Previous extraction failed (RPITIT + self in macro). | ⏳ Postponed |
 | 7 | `api.rs:118-161, 75-116` | **Both `resolve_omv_*` functions** share the same HashMap-based pattern. Extract common helper. | 🔜 |
 | 8 | `ytmapi-rs/src/error.rs:38` | **`ErrorKind::Header` has no context string** — impossible to diagnose which header failed. | ✅ Fixed |
@@ -91,7 +91,7 @@
 |---|------|-------|--------|
 | 1 | `server.rs` | **`RwLock<DynamicYtMusic>` write-held across entire HTTP request** — serializes concurrent queries. | 🔜 |
 | 2 | `api.rs:415-427` | **`FuturesOrdered` adds sequential overhead** — audio-playlist pass 2 for album N delays pass 2 for album N+1. | ✅ Fixed — switched to `FuturesUnordered` with index-based reordering |
-| 3 | `api.rs:128-132` | **HashMap rebuilt per album** in cross-ref — build once before loop. | 🔜 |
+| 3 | `api.rs:128-132` | **HashMap rebuilt per album** in cross-ref — build once before loop. | ✅ Fixed — `build_search_map` returns owned `HashMap<String, VideoID>` for `Arc`-sharing across concurrent futures |
 | 4 | `ytmapi-rs/src/auth.rs:30-44` | **`RawResult` holds entire response as `String`** — clones via `from_str`. | 🔜 |
 | 5 | `ytmapi-rs/src/client.rs:47` | **`response.text().await?` collects entire body** — memory-heavy. | 🔜 |
 | 6 | `queue_persistence.rs:88` | **`to_string_pretty` for 20MB autosave** — pretty-printing wastes space. | ⏳ Future |
@@ -176,15 +176,32 @@
 
 **P3.2 — Concurrent album fetching:** Switched `FuturesOrdered` → `FuturesUnordered` with index-based reordering. Album queries now run in parallel; an artist with N albums fetches in ~max(N latency) instead of ~sum(N latency).
 
+**P3.2 follow-up — Audio-playlist fold:** Audio-playlist fetch (pass 2 of Omv→Atv correction) folded into each per-album `FuturesUnordered` future so all N playlist fetches run concurrently instead of sequentially after album fetch.
+
+**P3.3 — Owned HashMap for Arc-sharing:** `build_search_map` returns `HashMap<String, VideoID<'static>>` instead of `HashMap<&str, &SearchResultSong>`. Wrapped in `Arc` and shared across concurrent per-album futures. `resolve_omv_album_songs_with_search` updated accordingly.
+
+**P2.4 — PanickingReceiverStream logs instead of panics:** `resume_unwind` replaced with `tracing::error!` log + `Poll::Ready(None)`. Background task panics no longer crash the consuming task.
+
+**P2.5 — Duplicate `blocking_send_or_error` removed:** Defined in both `core.rs` and `async_rodio_sink.rs` (identical). Removed the `async_rodio_sink.rs` copy, import from `core` instead.
+
+**search_songs parallelized with album ID collection:** Spawned via `tokio::spawn` before collecting album browse IDs, awaited after. Search query runs concurrently with paginated album-list fetches.
+
+**HashSet dedup:** Album ID dedup uses `HashSet::insert` (O(n)) instead of `Vec::contains` (O(n²)).
+
+**try_send for Loading signals:** Both `GetArtistSongsProgressUpdate::Loading` and `GetPlaylistSongsProgressUpdate::Loading` use `tx.try_send` (non-blocking) instead of `send_or_error` (blocking).
+
+**AlbumProgress variant:** New `GetArtistSongsProgressUpdate::AlbumProgress { current, total }` sent incrementally as each album finishes processing. Handled with `debug!` log in the UI layer.
+
 ### Totals
 | Metric | Count |
 |--------|-------|
 | True bugs fixed | 10 |
-| Code quality fixes | 6 |
-| New features | 3 (spinner, help mode expansion, notification config) |
-| Performance improvements | 1 (concurrent album fetch) |
+| Code quality fixes | 8 |
+| New features | 4 (spinner, help mode expansion, notification config, AlbumProgress) |
+| Performance improvements | 5 (concurrent album fetch, audio-playlist fold, owned HashMap, HashSet dedup, parallelized search_songs) |
+| Code quality | 2 (blocking_send_or_error dedup, PanickingReceiverStream) |
 | False positives eliminated | 21 |
-| Pending | 24 items in P1–P4 remain |
+| Pending | 20 items in P1–P4 remain |
 
 **Next highest-impact picks:**
 - P1.4 — `type_name::<A>()` in error messages
