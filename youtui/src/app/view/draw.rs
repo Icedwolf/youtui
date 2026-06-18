@@ -7,8 +7,10 @@ use crate::drawutils::{
     DESELECTED_BORDER_COLOUR, ROW_HIGHLIGHT_COLOUR, SELECTED_BORDER_COLOUR, TABLE_HEADINGS_COLOUR,
     TEXT_COLOUR,
 };
+use crate::drawutils::centered_rect;
 use crate::widgets::{ScrollingList, ScrollingTable, ScrollingTableState};
 use ratatui::Frame;
+use ratatui::layout::Alignment;
 use ratatui::prelude::{Margin, Rect};
 use ratatui::style::Style;
 use ratatui::symbols::{block, line};
@@ -101,10 +103,17 @@ pub fn draw_panel_mut_impl<T>(
     }
 }
 
+const SPINNER_FRAMES: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+
+fn spinner(cur_tick: u64) -> &'static str {
+    SPINNER_FRAMES[(cur_tick as usize) % SPINNER_FRAMES.len()]
+}
+
 pub fn draw_loadable<T, E, W>(
     f: &mut Frame,
     t: &mut T,
     chunk: Rect,
+    cur_tick: u64,
     draw_call: impl for<'a> FnOnce(&'a mut T, &mut Frame, Rect) -> Option<E>,
 ) -> Option<E>
 where
@@ -113,8 +122,10 @@ where
     W: Widget,
 {
     if t.is_loading() {
-        let loading = Paragraph::new("Loading");
-        f.render_widget(loading, chunk);
+        let text = format!("{} Loading...", spinner(cur_tick));
+        let area = centered_rect(3, text.len() as u16 + 4, chunk);
+        let loading = Paragraph::new(text).alignment(Alignment::Center);
+        f.render_widget(loading, area);
         return None;
     };
     draw_call(t, f, chunk)
@@ -353,7 +364,6 @@ fn draw_sort_popup(f: &mut Frame, table: &mut impl AdvancedTableView, chunk: Rec
     // Clone of ListState is cheap
     let mut new_state = table
         .get_sort_state()
-        .clone()
         .with_selected(Some(table.get_sort_popup_cur()));
     let list = List::new(headers)
         .highlight_style(Style::default().bg(ROW_HIGHLIGHT_COLOUR))

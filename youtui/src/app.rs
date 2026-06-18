@@ -3,6 +3,7 @@ use crate::config::ApiKey;
 use crate::core::get_limited_sequential_file;
 use crate::{RuntimeInfo, get_data_dir};
 use anyhow::{Context, Result, bail};
+use queue_persistence::auto_save;
 use async_callback_manager::{AsyncCallbackManager, TaskOutcome};
 use component::actionhandler::YoutuiEffect;
 use crossterm::event::{DisableMouseCapture, EnableMouseCapture};
@@ -20,7 +21,7 @@ use std::io;
 use std::sync::Arc;
 pub use structures::AudioQuality;
 use structures::ListSong;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info, trace, warn};
 use tracing_subscriber::prelude::*;
 use ui::{WindowContext, YoutuiWindow};
 
@@ -128,13 +129,16 @@ impl Youtui {
             });
         let t_server = std::time::Instant::now();
         let server = Arc::new(server::Server::new(api_key, po_token, &config));
-        debug!("startup_timing: Server::new() = {}ms", t_server.elapsed().as_millis());
+        debug!(
+            "startup_timing: Server::new() = {}ms",
+            t_server.elapsed().as_millis()
+        );
         let backend = CrosstermBackend::new(stdout);
         let terminal = Terminal::new(backend)?;
         let (media_controls, media_control_event_stream) = if disable_media_controls {
             (None, None)
         } else {
-            let (media_controls, media_control_event_stream) = MediaController::new().context(
+            let (media_controls, media_control_event_stream) = MediaController::new(config.notifications_enabled).context(
                 "Unable to initialise media controls - is the application already running?",
             )?;
             (Some(media_controls), Some(media_control_event_stream))
@@ -196,9 +200,9 @@ impl Youtui {
             }
         }
         if let Some(media_controls) = &mut self.media_controls {
-            media_controls.update_controls(
-                ui::draw_media_controls::draw_app_media_controls(&self.window_state),
-            )?;
+            media_controls.update_controls(ui::draw_media_controls::draw_app_media_controls(
+                &self.window_state,
+            ))?;
         }
         tokio::select! {
             Some(event) = self.event_handler.next() =>
@@ -216,6 +220,8 @@ impl Youtui {
                     self.render_and_process_events().await?;
                 }
                 AppStatus::Exiting(s) => {
+                    auto_save(&self.window_state.playlist)
+                        .unwrap_or_else(|e| warn!("Failed to auto-save queue on exit: {e}"));
                     destruct_terminal()?;
                     println!("{s}");
                     break;
@@ -255,7 +261,7 @@ impl Youtui {
                 task_id,
                 ..
             } => {
-                info!(
+                trace!(
                     "Received response to {:?}: type_id: {:?}, task_id: {:?}",
                     type_debug, type_id, task_id
                 );
