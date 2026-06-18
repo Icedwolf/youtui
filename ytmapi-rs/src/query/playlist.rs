@@ -74,14 +74,13 @@ impl GetWatchPlaylistQueryID for PlaylistID<'_> {
     }
 }
 
-// Suspect this requires a browseId, not a playlistId - i.e requires VL at the
-// start.
+// The `browse` endpoint requires a `browseId`, not a raw `playlistId` — the
+// `VL` prefix must be prepended. This is handled in `header()` below.
 pub struct GetPlaylistTracksQuery<'a> {
     id: PlaylistID<'a>,
 }
 
-// Suspect this requires a browseId, not a playlistId - i.e requires VL at the
-// start.
+// Same as GetPlaylistTracksQuery — the `browse` endpoint needs `VL` prefix.
 pub struct GetPlaylistDetailsQuery<'a> {
     id: PlaylistID<'a>,
 }
@@ -169,9 +168,17 @@ impl<A: AuthToken> Query<A> for GetPlaylistTracksQuery<'_> {
 }
 impl PostQuery for GetPlaylistTracksQuery<'_> {
     fn header(&self) -> serde_json::Map<String, serde_json::Value> {
-        // TODO: Confirm if processing required to add 'VL' portion of playlistId
+        // The `browse` endpoint requires the `VL` prefix. PlaylistID is designed
+        // to NOT contain VL (ytmapi-rs/src/common.rs:178), but guard against
+        // any caller that already provides it.
+        let raw = self.id.get_raw();
+        let browse_id = if raw.starts_with("VL") {
+            raw.to_string()
+        } else {
+            format!("VL{raw}")
+        };
         let serde_json::Value::Object(map) = json!({
-            "browseId" : self.id.get_raw(),
+            "browseId" : browse_id,
         }) else {
             unreachable!()
         };
@@ -193,9 +200,14 @@ impl<A: AuthToken> Query<A> for GetPlaylistDetailsQuery<'_> {
 }
 impl PostQuery for GetPlaylistDetailsQuery<'_> {
     fn header(&self) -> serde_json::Map<String, serde_json::Value> {
-        // TODO: Confirm if processing required to add 'VL' portion of playlistId
+        let raw = self.id.get_raw();
+        let browse_id = if raw.starts_with("VL") {
+            raw.to_string()
+        } else {
+            format!("VL{raw}")
+        };
         let serde_json::Value::Object(map) = json!({
-            "browseId" : self.id.get_raw(),
+            "browseId" : browse_id,
         }) else {
             unreachable!()
         };
@@ -288,5 +300,55 @@ impl<T: GetWatchPlaylistQueryID> PostQuery for GetWatchPlaylistQuery<T> {
     }
     fn params(&self) -> Vec<(&str, Cow<'_, str>)> {
         vec![]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::query::PostQuery;
+
+    #[test]
+    fn test_playlist_tracks_header_adds_vl() {
+        let raw = PlaylistID::from_raw("OLAK5uy_test");
+        let query = GetPlaylistTracksQuery::new(raw);
+        let header = query.header();
+        assert_eq!(
+            header.get("browseId").and_then(|v| v.as_str()),
+            Some("VLOLAK5uy_test")
+        );
+    }
+
+    #[test]
+    fn test_playlist_tracks_header_no_double_vl() {
+        let raw = PlaylistID::from_raw("VLOLAK5uy_test");
+        let query = GetPlaylistTracksQuery::new(raw);
+        let header = query.header();
+        assert_eq!(
+            header.get("browseId").and_then(|v| v.as_str()),
+            Some("VLOLAK5uy_test")
+        );
+    }
+
+    #[test]
+    fn test_playlist_details_header_adds_vl() {
+        let raw = PlaylistID::from_raw("OLAK5uy_test");
+        let query = GetPlaylistDetailsQuery::new(raw);
+        let header = query.header();
+        assert_eq!(
+            header.get("browseId").and_then(|v| v.as_str()),
+            Some("VLOLAK5uy_test")
+        );
+    }
+
+    #[test]
+    fn test_playlist_details_header_no_double_vl() {
+        let raw = PlaylistID::from_raw("VLOLAK5uy_test");
+        let query = GetPlaylistDetailsQuery::new(raw);
+        let header = query.header();
+        assert_eq!(
+            header.get("browseId").and_then(|v| v.as_str()),
+            Some("VLOLAK5uy_test")
+        );
     }
 }

@@ -44,7 +44,7 @@ pub(crate) fn validate_upload_path(file_path: &Path) -> Result<(tokio::fs::File,
         )));
     }
     let file = std::fs::File::open(file_path)
-        .map(|f| tokio::fs::File::from(f))
+        .map(tokio::fs::File::from)
         .map_err(|e| Error::web(format!("Failed to open file: {e}")))?;
     Ok((file, upload_filesize_bytes))
 }

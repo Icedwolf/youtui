@@ -59,31 +59,31 @@ impl BrowserToken {
     pub async fn from_str(cookie_str: &str, client: &Client) -> Result<Self> {
         let cookies = cookie_str.trim().to_string();
         let user_agent = USER_AGENT;
-        // TODO: Confirm if parsing for expired user agent also relevant here.
         let initial_headers = [
             ("User-Agent", user_agent.into()),
             ("Cookie", cookies.as_str().into()),
         ];
         let response_text = client.get_query(YTM_URL, initial_headers, &()).await?.text;
-        // parse for user agent issues here.
+        // Check for rejected user agent (English message; localized versions fall
+        // through to the "missing INNERTUBE_CLIENT_VERSION" Header error below with
+        // a descriptive message instead of the old opaque "Error parsing header.").
         if response_text.contains("Sorry, YouTube Music is not optimised for your browser. Check for updates or try Google Chrome.") {
             return Err(Error::invalid_user_agent(user_agent));
         };
-        // TODO: Better error.
         let client_version = response_text
             .split_once("INNERTUBE_CLIENT_VERSION\":\"")
-            .ok_or(Error::header())?
+            .ok_or(Error::header("missing INNERTUBE_CLIENT_VERSION in YouTube Music page"))?
             .1
             .split_once('\"')
-            .ok_or(Error::header())?
+            .ok_or(Error::header("malformed INNERTUBE_CLIENT_VERSION value"))?
             .0
             .to_string();
         let sapisid = cookies
             .split_once("SAPISID=")
-            .ok_or(Error::header())?
+            .ok_or(Error::header("cookie string missing SAPISID"))?
             .1
             .split_once(';')
-            .ok_or(Error::header())?
+            .ok_or(Error::header("SAPISID cookie not terminated by ';'"))?
             .0
             .to_string();
         Ok(Self {

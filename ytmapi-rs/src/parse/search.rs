@@ -7,9 +7,10 @@ use crate::common::{
 };
 use crate::continuations::ParseFromContinuable;
 use crate::nav_consts::{
-    BADGE_LABEL, CONTINUATION_PARAMS, LIVE_BADGE_LABEL, MRLIR, MUSIC_CARD_SHELF, MUSIC_SHELF,
-    MUSIC_SHELF_CONTINUATION, NAVIGATION_BROWSE, NAVIGATION_BROWSE_ID, PAGE_TYPE, PLAY_BUTTON,
-    PLAYLIST_ITEM_VIDEO_ID, SECTION_LIST, SUBTITLE, SUBTITLE2, TAB_CONTENT, THUMBNAILS, TITLE_TEXT,
+    BADGE_LABEL, CONTINUATION_PARAMS, MRLIR, MUSIC_CARD_SHELF, MUSIC_SHELF,
+    MUSIC_SHELF_CONTINUATION, NAVIGATION_BROWSE, NAVIGATION_BROWSE_ID, NAVIGATION_VIDEO_TYPE,
+    PAGE_TYPE, PLAY_BUTTON, PLAYLIST_ITEM_VIDEO_ID, SECTION_LIST, SUBTITLE, SUBTITLE2, TAB_CONTENT,
+    THUMBNAILS, TITLE_TEXT,
 };
 use crate::parse::{EpisodeDate, ParsedSongAlbum};
 use crate::query::search::UnfilteredSearchType;
@@ -19,7 +20,7 @@ use crate::query::search::filteredsearch::{
     SongsFilter, VideosFilter,
 };
 use crate::query::*;
-use crate::youtube_enums::{PlaylistEndpointParams, YoutubeMusicPageType};
+use crate::youtube_enums::{PlaylistEndpointParams, YoutubeMusicPageType, YoutubeMusicVideoType};
 use crate::{Error, Result};
 use const_format::concatcp;
 use itertools::Itertools;
@@ -173,7 +174,7 @@ pub struct SearchResultAlbum {
     pub album_type: AlbumType,
     pub thumbnails: Vec<Thumbnail>,
 }
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct SearchResultSong {
     // Potentially can include links to artist and album.
@@ -186,6 +187,35 @@ pub struct SearchResultSong {
     pub explicit: Explicit,
     pub video_id: VideoID<'static>,
     pub thumbnails: Vec<Thumbnail>,
+    music_video_type: Option<YoutubeMusicVideoType>,
+}
+
+impl std::fmt::Debug for SearchResultSong {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut s = f.debug_struct("SearchResultSong");
+        s.field("title", &self.title);
+        s.field("artist", &self.artist);
+        s.field("album", &self.album);
+        s.field("duration", &self.duration);
+        s.field("plays", &self.plays);
+        s.field("explicit", &self.explicit);
+        s.field("video_id", &self.video_id);
+        s.field("thumbnails", &self.thumbnails);
+        s.field("music_video_type", &self.music_video_type);
+        s.finish()
+    }
+}
+
+impl SearchResultSong {
+    /// Returns `true` when the YouTube Music API classifies this item as an
+    /// audio-only track (`Atv`) rather than a music video (`Omv`, `Ugc`, etc.).
+    /// Prefer `Atv` items when multiple results match the same song.
+    pub fn is_audio_track(&self) -> bool {
+        self.music_video_type == Some(YoutubeMusicVideoType::Atv)
+    }
+    pub fn music_video_type(&self) -> Option<&YoutubeMusicVideoType> {
+        self.music_video_type.as_ref()
+    }
 }
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
@@ -624,6 +654,9 @@ fn parse_song_search_result_from_music_shelf_contents(
     };
     let video_id = mrlir.take_value_pointer(PLAYLIST_ITEM_VIDEO_ID)?;
     let thumbnails: Vec<Thumbnail> = mrlir.take_value_pointer(THUMBNAILS)?;
+    let video_type_path = concatcp!(PLAY_BUTTON, "/playNavigationEndpoint", NAVIGATION_VIDEO_TYPE);
+    let music_video_type: Option<YoutubeMusicVideoType> =
+        mrlir.take_value_pointer(video_type_path).ok();
     Ok(SearchResultSong {
         artist,
         thumbnails,
@@ -633,6 +666,7 @@ fn parse_song_search_result_from_music_shelf_contents(
         album,
         video_id,
         duration,
+        music_video_type,
     })
 }
 // TODO: Type safety
@@ -642,22 +676,22 @@ fn parse_video_search_result_from_music_shelf_contents(
 ) -> Result<Option<SearchResultVideo>> {
     let mut mrlir = music_shelf_contents.navigate_pointer("/musicResponsiveListItemRenderer")?;
     // Handle not available case
-    if let Ok("MUSIC_ITEM_RENDERER_DISPLAY_POLICY_GREY_OUT") = mrlir
-        .take_value_pointer::<String>(DISPLAY_POLICY)
-        .as_deref()
-    {
-        return Ok(None);
-    };
+        if let Ok("MUSIC_ITEM_RENDERER_DISPLAY_POLICY_GREY_OUT") = mrlir
+            .take_value_pointer::<String>(DISPLAY_POLICY)
+            .as_deref()
+        {
+            return Ok(None);
+        };
     let title = parse_flex_column_item(&mut mrlir, 0, 0)?;
     let first_field: String = parse_flex_column_item(&mut mrlir, 1, 0)?;
-    // Handle video podcasts - seems to be 2 different ways to display these.
+    let thumbnails: Vec<Thumbnail> = mrlir.take_value_pointer(THUMBNAILS)?;
     match first_field.as_str() {
+        // Old API format: flex column run 0 contains "Video" or "Episode" label
         "Video" => {
             let channel_name = parse_flex_column_item(&mut mrlir, 1, 2)?;
             let views = parse_flex_column_item(&mut mrlir, 1, 4)?;
             let length = parse_flex_column_item(&mut mrlir, 1, 6)?;
             let video_id = mrlir.take_value_pointer(PLAYLIST_ITEM_VIDEO_ID)?;
-            let thumbnails: Vec<Thumbnail> = mrlir.take_value_pointer(THUMBNAILS)?;
             Ok(Some(SearchResultVideo::Video {
                 title,
                 channel_name,
@@ -668,49 +702,44 @@ fn parse_video_search_result_from_music_shelf_contents(
             }))
         }
         "Episode" => {
-            //TODO: Handle live episode
             let date = EpisodeDate::Recorded {
                 date: parse_flex_column_item(&mut mrlir, 1, 2)?,
             };
             let channel_name = parse_flex_column_item(&mut mrlir, 1, 4)?;
-            let video_id = mrlir.take_value_pointer(PLAYLIST_ITEM_VIDEO_ID)?;
-            let thumbnails: Vec<Thumbnail> = mrlir.take_value_pointer(THUMBNAILS)?;
+            let episode_id = mrlir.take_value_pointer(PLAYLIST_ITEM_VIDEO_ID)?;
             Ok(Some(SearchResultVideo::VideoEpisode {
                 title,
                 channel_name,
                 date,
                 thumbnails,
-                episode_id: video_id,
+                episode_id,
             }))
         }
+        // New API format: YT Music removed type labels.
+        // Detect video via watchEndpoint on the title run.
         _ => {
-            // Assume that if a watch endpoint exists, it's a video.
             if mrlir.path_exists("/flexColumns/0/musicResponsiveListItemFlexColumnRenderer/text/runs/0/navigationEndpoint/watchEndpoint") {
-
-            let views = parse_flex_column_item(&mut mrlir, 1, 2)?;
-            let length = parse_flex_column_item(&mut mrlir, 1, 4)?;
-            let video_id = mrlir.take_value_pointer(PLAYLIST_ITEM_VIDEO_ID)?;
-            let thumbnails: Vec<Thumbnail> = mrlir.take_value_pointer(THUMBNAILS)?;
-            Ok(Some(SearchResultVideo::Video {
-                            title,
-                            channel_name: first_field,
-                            views,
-                            length,
-                            thumbnails,
-                            video_id,
-                        }))
+                let views = parse_flex_column_item(&mut mrlir, 1, 2).unwrap_or_default();
+                let length = parse_flex_column_item(&mut mrlir, 1, 4).unwrap_or_default();
+                let video_id = mrlir.take_value_pointer(PLAYLIST_ITEM_VIDEO_ID)?;
+                Ok(Some(SearchResultVideo::Video {
+                    title,
+                    channel_name: first_field,
+                    views,
+                    length,
+                    thumbnails,
+                    video_id,
+                }))
             } else {
-            let channel_name = parse_flex_column_item(&mut mrlir, 1, 2)?;
-            let video_id = mrlir.take_value_pointer(PLAYLIST_ITEM_VIDEO_ID)?;
-            let thumbnails: Vec<Thumbnail> = mrlir.take_value_pointer(THUMBNAILS)?;
-            Ok(Some(SearchResultVideo::VideoEpisode {
-                            title,
-                            channel_name,
-                        //TODO: Handle live episode
-                            date: EpisodeDate::Recorded { date: first_field },
-                            thumbnails,
-                            episode_id: video_id,
-                        }))
+                let channel_name = parse_flex_column_item(&mut mrlir, 1, 2).unwrap_or_default();
+                let episode_id = mrlir.take_value_pointer(PLAYLIST_ITEM_VIDEO_ID)?;
+                Ok(Some(SearchResultVideo::VideoEpisode {
+                    title,
+                    channel_name,
+                    date: EpisodeDate::Recorded { date: first_field },
+                    thumbnails,
+                    episode_id,
+                }))
             }
         }
     }
@@ -739,16 +768,16 @@ fn parse_episode_search_result_from_music_shelf_contents(
 ) -> Result<SearchResultEpisode> {
     let mut mrlir = music_shelf_contents.navigate_pointer("/musicResponsiveListItemRenderer")?;
     let title = parse_flex_column_item(&mut mrlir, 0, 0)?;
-    let date = if mrlir.path_exists(LIVE_BADGE_LABEL) {
-        EpisodeDate::Live
+    let first_run: String = parse_flex_column_item(&mut mrlir, 1, 0).unwrap_or_default();
+    let second_run: Option<String> = parse_flex_column_item(&mut mrlir, 1, 2).ok();
+    // Continuation items may have variable flex column layouts.
+    // Check if a separator run exists at index 1 to detect 3-run layout.
+    let (date, channel_name) = if mrlir.path_exists("/flexColumns/1/musicResponsiveListItemFlexColumnRenderer/text/runs/1/text") {
+        // 3+ runs: date, separator, channel
+        (EpisodeDate::Recorded { date: first_run }, second_run.unwrap_or_default())
     } else {
-        EpisodeDate::Recorded {
-            date: parse_flex_column_item(&mut mrlir, 1, 0)?,
-        }
-    };
-    let channel_name = match date {
-        EpisodeDate::Live => parse_flex_column_item(&mut mrlir, 1, 0)?,
-        EpisodeDate::Recorded { .. } => parse_flex_column_item(&mut mrlir, 1, 2)?,
+        // 1-2 runs: date at run 0 (or could be channel name directly)
+        (EpisodeDate::Recorded { date: first_run.clone() }, first_run)
     };
     let video_id = mrlir.take_value_pointer(PLAYLIST_ITEM_VIDEO_ID)?;
     let thumbnails: Vec<Thumbnail> = mrlir.take_value_pointer(THUMBNAILS)?;

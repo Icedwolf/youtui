@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use crate::auth::BrowserToken;
 use crate::parse::SearchResults;
 use crate::process_json;
@@ -70,7 +71,7 @@ async fn test_search_artists_empty() {
         .await
         .expect("Expect file read to pass during tests");
     // Blank query has no bearing on function
-    let query = SearchQuery::new("").with_filter(ArtistsFilter);
+    let query = SearchQuery::new_filtered("", ArtistsFilter);
     let output = process_json::<_, BrowserToken>(source, query).unwrap();
     assert_eq!(output, Vec::new());
 }
@@ -170,7 +171,7 @@ async fn test_search_artists() {
         "./test_json/search_artists_20231226.json",
         "./test_json/search_artists_continuation_20231226.json",
         "./test_json/search_artists_20231226_output.txt",
-        SearchQuery::new("").with_filter(ArtistsFilter),
+        SearchQuery::new_filtered("", ArtistsFilter),
         BrowserToken
     );
 }
@@ -179,7 +180,7 @@ async fn test_search_artists_with_about_message() {
     parse_test!(
         "./test_json/search_artists_with_about_message_20240824.json",
         "./test_json/search_artists_with_about_message_20240824_output.txt",
-        SearchQuery::new("").with_filter(ArtistsFilter),
+        SearchQuery::new_filtered("", ArtistsFilter),
         BrowserToken
     );
 }
@@ -189,7 +190,7 @@ async fn test_search_albums() {
         "./test_json/search_albums_20231226.json",
         "./test_json/search_albums_continuation_20231226.json",
         "./test_json/search_albums_20231226_output.txt",
-        SearchQuery::new("").with_filter(AlbumsFilter),
+        SearchQuery::new_filtered("", AlbumsFilter),
         BrowserToken
     );
 }
@@ -199,7 +200,7 @@ async fn test_search_songs() {
         "./test_json/search_songs_20231226.json",
         "./test_json/search_songs_continuation_20231226.json",
         "./test_json/search_songs_20231226_output.txt",
-        SearchQuery::new("").with_filter(SongsFilter),
+        SearchQuery::new_filtered("", SongsFilter),
         BrowserToken
     );
 }
@@ -208,7 +209,7 @@ async fn test_search_videos() {
     parse_test!(
         "./test_json/search_videos_20231226.json",
         "./test_json/search_videos_20231226_output.txt",
-        SearchQuery::new("").with_filter(VideosFilter),
+        SearchQuery::new_filtered("", VideosFilter),
         BrowserToken
     );
 }
@@ -219,7 +220,7 @@ async fn test_search_videos_2024() {
         "./test_json/search_videos_20240612.json",
         "./test_json/search_videos_continuation_20240612.json",
         "./test_json/search_videos_20240612_output.txt",
-        SearchQuery::new("").with_filter(VideosFilter),
+        SearchQuery::new_filtered("", VideosFilter),
         BrowserToken
     );
 }
@@ -229,7 +230,7 @@ async fn test_search_playlists() {
         "./test_json/search_playlists_20231228.json",
         "./test_json/search_playlists_continuation_20231228.json",
         "./test_json/search_playlists_20231228_output.txt",
-        SearchQuery::new("").with_filter(PlaylistsFilter),
+        SearchQuery::new_filtered("", PlaylistsFilter),
         BrowserToken
     );
 }
@@ -239,7 +240,7 @@ async fn test_search_featured_playlists() {
         "./test_json/search_featured_playlists_20231226.json",
         "./test_json/search_featured_playlists_continuation_20231226.json",
         "./test_json/search_featured_playlists_20231226_output.txt",
-        SearchQuery::new("").with_filter(FeaturedPlaylistsFilter),
+        SearchQuery::new_filtered("", FeaturedPlaylistsFilter),
         BrowserToken
     );
 }
@@ -249,7 +250,7 @@ async fn test_search_community_playlists() {
         "./test_json/search_community_playlists_20231226.json",
         "./test_json/search_community_playlists_continuation_20231226.json",
         "./test_json/search_community_playlists_20231226_output.txt",
-        SearchQuery::new("").with_filter(CommunityPlaylistsFilter),
+        SearchQuery::new_filtered("", CommunityPlaylistsFilter),
         BrowserToken
     );
 }
@@ -259,7 +260,7 @@ async fn test_search_episodes() {
         "./test_json/search_episodes_20231226.json",
         "./test_json/search_episodes_continuation_20231226.json",
         "./test_json/search_episodes_20231226_output.txt",
-        SearchQuery::new("").with_filter(EpisodesFilter),
+        SearchQuery::new_filtered("", EpisodesFilter),
         BrowserToken
     );
 }
@@ -269,7 +270,7 @@ async fn test_search_podcasts() {
         "./test_json/search_podcasts_20231226.json",
         "./test_json/search_podcasts_continuation_20231226.json",
         "./test_json/search_podcasts_20231226_output.txt",
-        SearchQuery::new("").with_filter(PodcastsFilter),
+        SearchQuery::new_filtered("", PodcastsFilter),
         BrowserToken
     );
 }
@@ -279,7 +280,7 @@ async fn test_search_profiles() {
         "./test_json/search_profiles_20231226.json",
         "./test_json/search_profiles_continuation_20231226.json",
         "./test_json/search_profiles_20231226_output.txt",
-        SearchQuery::new("").with_filter(ProfilesFilter),
+        SearchQuery::new_filtered("", ProfilesFilter),
         BrowserToken
     );
 }

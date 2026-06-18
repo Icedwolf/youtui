@@ -8,6 +8,7 @@ use crate::common::{
 };
 use crate::nav_consts::*;
 use crate::query::*;
+use crate::youtube_enums::YoutubeMusicVideoType;
 use const_format::concatcp;
 use json_crawler::{
     CrawlerResult, JsonCrawler, JsonCrawlerBorrowed, JsonCrawlerIterator, JsonCrawlerOwned,
@@ -35,6 +36,16 @@ pub struct AlbumSong {
     pub title: String,
     pub like_status: LikeStatus,
     pub explicit: Explicit,
+    pub music_video_type: Option<YoutubeMusicVideoType>,
+}
+
+impl AlbumSong {
+    pub fn is_audio_track(&self) -> bool {
+        self.music_video_type == Some(YoutubeMusicVideoType::Atv)
+    }
+    pub fn music_video_type(&self) -> Option<&YoutubeMusicVideoType> {
+        self.music_video_type.as_ref()
+    }
 }
 
 // Is this similar to another struct?
@@ -81,6 +92,8 @@ fn parse_album_track(json: &mut JsonCrawlerBorrowed) -> Result<Option<AlbumSong>
         "/playNavigationEndpoint",
         WATCH_VIDEO_ID
     ))?;
+    let video_type_path = concatcp!(PLAY_BUTTON, "/playNavigationEndpoint", NAVIGATION_VIDEO_TYPE);
+    let music_video_type: Option<YoutubeMusicVideoType> = data.take_value_pointer(video_type_path).ok();
     let like_status = data.take_value_pointer(MENU_LIKE_STATUS)?;
     let duration = data
         .borrow_pointer(fixed_column_item_pointer(0))
@@ -106,6 +119,7 @@ fn parse_album_track(json: &mut JsonCrawlerBorrowed) -> Result<Option<AlbumSong>
         title,
         like_status,
         explicit,
+        music_video_type,
     }))
 }
 

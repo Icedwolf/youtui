@@ -23,7 +23,7 @@ pub(crate) enum YoutubeMusicPageType {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub(crate) enum YoutubeMusicVideoType {
+pub enum YoutubeMusicVideoType {
     // I believe OMV is 'Official Music Video' and UGC is 'User Generated Content'
     #[serde(rename = "MUSIC_VIDEO_TYPE_UGC")]
     Ugc,
