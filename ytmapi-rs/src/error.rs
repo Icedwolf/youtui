@@ -35,7 +35,9 @@ pub enum ErrorKind {
         response: String,
     },
     /// InnerTube credential header not in expected format.
-    Header,
+    Header {
+        message: String,
+    },
     UnableToSerializeGoogleOAuthToken {
         response: String,
         err: serde_json::Error,
@@ -97,9 +99,11 @@ impl Error {
             inner: Box::new(ErrorKind::OAuthTokenExpired { token_hash }),
         }
     }
-    pub(crate) fn header() -> Self {
+    pub(crate) fn header(message: impl Into<String>) -> Self {
         Self {
-            inner: Box::new(ErrorKind::Header),
+            inner: Box::new(ErrorKind::Header {
+                message: message.into(),
+            }),
         }
     }
     pub(crate) fn ytcfg(ytcfg: impl Into<String>) -> Self {
@@ -163,8 +167,10 @@ impl Display for ErrorKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ErrorKind::Web { message } => write!(f, "Web error <{message}> received."),
-            ErrorKind::Io(e) => write!(f, "IO error {e} recieved."),
-            ErrorKind::Header => write!(f, "Error parsing header."),
+            ErrorKind::Io(e) => write!(f, "IO error {e} received."),
+            ErrorKind::Header { message } => {
+                write!(f, "Error parsing header: {message}")
+            }
             ErrorKind::InvalidResponse { response } => {
                 write!(
                     f,
@@ -174,7 +180,7 @@ impl Display for ErrorKind {
             ErrorKind::OtherErrorCodeInResponse { code, message } => {
                 write!(
                     f,
-                    "Http error code {code} recieved in response. Message: <{message}>."
+                    "Http error code {code} received in response. Message: <{message}>."
                 )
             }
             ErrorKind::ApiStatusFailed => write!(f, "Api returned STATUS_FAILED for the query"),

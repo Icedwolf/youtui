@@ -229,8 +229,7 @@ impl<A: AuthToken> YtMusic<A> {
     ///
     /// # async {
     /// let yt = ytmapi_rs::YtMusic::from_cookie("FAKE COOKIE").await?;
-    /// let query = ytmapi_rs::query::SearchQuery::new("Beatles")
-    ///     .with_filter(ytmapi_rs::query::search::ArtistsFilter);
+    /// let query = ytmapi_rs::query::SearchQuery::new_filtered("Beatles", ytmapi_rs::query::search::ArtistsFilter);
     /// let result = yt.raw_json_query(query).await?;
     /// assert!(result.len() != 0);
     /// # Ok::<(), ytmapi_rs::Error>(())
@@ -251,8 +250,7 @@ impl<A: AuthToken> YtMusic<A> {
     ///
     /// # async {
     /// let yt = ytmapi_rs::YtMusic::from_cookie("FAKE COOKIE").await?;
-    /// let query = ytmapi_rs::query::SearchQuery::new("Beatles")
-    ///     .with_filter(ytmapi_rs::query::search::ArtistsFilter);
+    /// let query = ytmapi_rs::query::SearchQuery::new_filtered("Beatles", ytmapi_rs::query::search::ArtistsFilter);
     /// let result = yt.json_query(query).await?;
     /// println!("{:?}", result);
     /// # Ok::<(), ytmapi_rs::Error>(())
@@ -269,8 +267,7 @@ impl<A: AuthToken> YtMusic<A> {
     /// ```no_run
     /// # async {
     /// let yt = ytmapi_rs::YtMusic::from_cookie("").await?;
-    /// let query = ytmapi_rs::query::SearchQuery::new("Beatles")
-    ///     .with_filter(ytmapi_rs::query::search::ArtistsFilter);
+    /// let query = ytmapi_rs::query::SearchQuery::new_filtered("Beatles", ytmapi_rs::query::search::ArtistsFilter);
     /// let result = yt.query(query).await?;
     /// assert_eq!(result[0].artist, "The Beatles");
     /// # Ok::<(), ytmapi_rs::Error>(())
@@ -417,8 +414,7 @@ pub async fn generate_browser_token<S: AsRef<str>>(
 /// # Usage
 /// ```
 /// let json = r#"{ "test" : true }"#.to_string();
-/// let query = ytmapi_rs::query::SearchQuery::new("Beatles")
-///     .with_filter(ytmapi_rs::query::search::ArtistsFilter);
+/// let query = ytmapi_rs::query::SearchQuery::new_filtered("Beatles", ytmapi_rs::query::search::ArtistsFilter);
 /// let result = ytmapi_rs::process_json::<_, ytmapi_rs::auth::BrowserToken>(json, query);
 /// assert!(result.is_err());
 /// ```
