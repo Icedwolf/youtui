@@ -63,6 +63,9 @@ GetAlbum {
             title: "Cielito lindo",
             like_status: Indifferent,
             explicit: NotExplicit,
+            music_video_type: Some(
+                Atv,
+            ),
         },
         AlbumSong {
             video_id: VideoID(
@@ -85,6 +88,9 @@ GetAlbum {
             title: "Around The World",
             like_status: Indifferent,
             explicit: NotExplicit,
+            music_video_type: Some(
+                Atv,
+            ),
         },
         AlbumSong {
             video_id: VideoID(
@@ -107,6 +113,9 @@ GetAlbum {
             title: "There Must Be An Angel Playing With My Heart",
             like_status: Indifferent,
             explicit: NotExplicit,
+            music_video_type: Some(
+                Atv,
+            ),
         },
         AlbumSong {
             video_id: VideoID(
@@ -129,6 +138,9 @@ GetAlbum {
             title: "I knew I loved you",
             like_status: Indifferent,
             explicit: NotExplicit,
+            music_video_type: Some(
+                Atv,
+            ),
         },
         AlbumSong {
             video_id: VideoID(
@@ -151,6 +163,9 @@ GetAlbum {
             title: "Guarda che luna - In cerca di te",
             like_status: Indifferent,
             explicit: NotExplicit,
+            music_video_type: Some(
+                Atv,
+            ),
         },
         AlbumSong {
             video_id: VideoID(
@@ -173,6 +188,9 @@ GetAlbum {
             title: "Brother, can you spare a dime [Americana]",
             like_status: Indifferent,
             explicit: NotExplicit,
+            music_video_type: Some(
+                Atv,
+            ),
         },
         AlbumSong {
             video_id: VideoID(
@@ -195,6 +213,9 @@ GetAlbum {
             title: "Ace: Tracy's Flaw",
             like_status: Indifferent,
             explicit: NotExplicit,
+            music_video_type: Some(
+                Atv,
+            ),
         },
         AlbumSong {
             video_id: VideoID(
@@ -217,6 +238,9 @@ GetAlbum {
             title: "Baby Can I Hold You",
             like_status: Indifferent,
             explicit: NotExplicit,
+            music_video_type: Some(
+                Atv,
+            ),
         },
         AlbumSong {
             video_id: VideoID(
@@ -239,6 +263,9 @@ GetAlbum {
             title: "'O sole mio",
             like_status: Indifferent,
             explicit: NotExplicit,
+            music_video_type: Some(
+                Atv,
+            ),
         },
         AlbumSong {
             video_id: VideoID(
@@ -261,6 +288,9 @@ GetAlbum {
             title: "You'll follow me down",
             like_status: Indifferent,
             explicit: NotExplicit,
+            music_video_type: Some(
+                Atv,
+            ),
         },
         AlbumSong {
             video_id: VideoID(
@@ -283,6 +313,9 @@ GetAlbum {
             title: "A Wonderful World",
             like_status: Indifferent,
             explicit: NotExplicit,
+            music_video_type: Some(
+                Atv,
+            ),
         },
         AlbumSong {
             video_id: VideoID(
@@ -305,6 +338,9 @@ GetAlbum {
             title: "Agnus Dei",
             like_status: Indifferent,
             explicit: NotExplicit,
+            music_video_type: Some(
+                Atv,
+            ),
         },
         AlbumSong {
             video_id: VideoID(
@@ -327,6 +363,9 @@ GetAlbum {
             title: "Desde que o samba e samba",
             like_status: Indifferent,
             explicit: NotExplicit,
+            music_video_type: Some(
+                Atv,
+            ),
         },
         AlbumSong {
             video_id: VideoID(
@@ -349,6 +388,9 @@ GetAlbum {
             title: "Funiculì, funiculà",
             like_status: Indifferent,
             explicit: NotExplicit,
+            music_video_type: Some(
+                Atv,
+            ),
         },
         AlbumSong {
             video_id: VideoID(
@@ -371,6 +413,9 @@ GetAlbum {
             title: "Telling Stories",
             like_status: Indifferent,
             explicit: NotExplicit,
+            music_video_type: Some(
+                Atv,
+            ),
         },
         AlbumSong {
             video_id: VideoID(
@@ -393,6 +438,9 @@ GetAlbum {
             title: "Se è vero che ci sei",
             like_status: Indifferent,
             explicit: NotExplicit,
+            music_video_type: Some(
+                Atv,
+            ),
         },
         AlbumSong {
             video_id: VideoID(
@@ -415,6 +463,9 @@ GetAlbum {
             title: "I saved the World today",
             like_status: Indifferent,
             explicit: NotExplicit,
+            music_video_type: Some(
+                Atv,
+            ),
         },
         AlbumSong {
             video_id: VideoID(
@@ -437,6 +488,9 @@ GetAlbum {
             title: "Manha do Carnaval [Black Orpheus]",
             like_status: Indifferent,
             explicit: NotExplicit,
+            music_video_type: Some(
+                Atv,
+            ),
         },
         AlbumSong {
             video_id: VideoID(
@@ -459,6 +513,9 @@ GetAlbum {
             title: "Taylor: Be with You",
             like_status: Indifferent,
             explicit: NotExplicit,
+            music_video_type: Some(
+                Atv,
+            ),
         },
         AlbumSong {
             video_id: VideoID(
@@ -481,6 +538,9 @@ GetAlbum {
             title: "Lennon, McCartney: All You Need Is Love",
             like_status: Indifferent,
             explicit: NotExplicit,
+            music_video_type: Some(
+                Atv,
+            ),
         },
     ],
     library_status: NotInLibrary,

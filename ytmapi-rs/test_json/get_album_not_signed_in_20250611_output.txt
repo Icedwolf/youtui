@@ -78,6 +78,9 @@ GetAlbum {
             title: "She Loves You (2023 Mix)",
             like_status: Indifferent,
             explicit: NotExplicit,
+            music_video_type: Some(
+                Atv,
+            ),
         },
         AlbumSong {
             video_id: VideoID(
@@ -90,6 +93,9 @@ GetAlbum {
             title: "Please Please Me (2023 Mix)",
             like_status: Indifferent,
             explicit: NotExplicit,
+            music_video_type: Some(
+                Atv,
+            ),
         },
         AlbumSong {
             video_id: VideoID(
@@ -102,6 +108,9 @@ GetAlbum {
             title: "I Want To Hold Your Hand (2023 Mix)",
             like_status: Indifferent,
             explicit: NotExplicit,
+            music_video_type: Some(
+                Atv,
+            ),
         },
         AlbumSong {
             video_id: VideoID(
@@ -114,6 +123,9 @@ GetAlbum {
             title: "I've Been Good To You (Alternate Album Version)",
             like_status: Indifferent,
             explicit: NotExplicit,
+            music_video_type: Some(
+                Atv,
+            ),
         },
         AlbumSong {
             video_id: VideoID(
@@ -126,6 +138,9 @@ GetAlbum {
             title: "You've Really Got A Hold On Me",
             like_status: Indifferent,
             explicit: NotExplicit,
+            music_video_type: Some(
+                Atv,
+            ),
         },
         AlbumSong {
             video_id: VideoID(
@@ -138,6 +153,9 @@ GetAlbum {
             title: "You Really Got A Hold On Me (2023 Mix)",
             like_status: Indifferent,
             explicit: NotExplicit,
+            music_video_type: Some(
+                Atv,
+            ),
         },
         AlbumSong {
             video_id: VideoID(
@@ -150,6 +168,9 @@ GetAlbum {
             title: "Yesterday (Live On The Ed Sullivan Show, March 31, 1968)",
             like_status: Indifferent,
             explicit: NotExplicit,
+            music_video_type: Some(
+                Atv,
+            ),
         },
         AlbumSong {
             video_id: VideoID(
@@ -162,6 +183,9 @@ GetAlbum {
             title: "Till There Was You (Remastered 2009)",
             like_status: Indifferent,
             explicit: NotExplicit,
+            music_video_type: Some(
+                Atv,
+            ),
         },
         AlbumSong {
             video_id: VideoID(
@@ -174,6 +198,9 @@ GetAlbum {
             title: "I Saw Her Standing There (2023 Mix)",
             like_status: Indifferent,
             explicit: NotExplicit,
+            music_video_type: Some(
+                Atv,
+            ),
         },
         AlbumSong {
             video_id: VideoID(
@@ -186,6 +213,9 @@ GetAlbum {
             title: "Money (That's What I Want) (Single Version / Mono)",
             like_status: Indifferent,
             explicit: NotExplicit,
+            music_video_type: Some(
+                Omv,
+            ),
         },
         AlbumSong {
             video_id: VideoID(
@@ -198,6 +228,9 @@ GetAlbum {
             title: "Money (That's What I Want) (Remastered 2009)",
             like_status: Indifferent,
             explicit: NotExplicit,
+            music_video_type: Some(
+                Atv,
+            ),
         },
         AlbumSong {
             video_id: VideoID(
@@ -210,6 +243,9 @@ GetAlbum {
             title: "From Me To You (2023 Mix)",
             like_status: Indifferent,
             explicit: NotExplicit,
+            music_video_type: Some(
+                Atv,
+            ),
         },
         AlbumSong {
             video_id: VideoID(
@@ -222,6 +258,9 @@ GetAlbum {
             title: "Long Tall Sally (The Thing)",
             like_status: Indifferent,
             explicit: NotExplicit,
+            music_video_type: Some(
+                Omv,
+            ),
         },
         AlbumSong {
             video_id: VideoID(
@@ -234,6 +273,9 @@ GetAlbum {
             title: "Long Tall Sally (Remastered 2009)",
             like_status: Indifferent,
             explicit: NotExplicit,
+            music_video_type: Some(
+                Atv,
+            ),
         },
         AlbumSong {
             video_id: VideoID(
@@ -246,6 +288,9 @@ GetAlbum {
             title: "Baby It's You (Remastered 2009)",
             like_status: Indifferent,
             explicit: NotExplicit,
+            music_video_type: Some(
+                Atv,
+            ),
         },
         AlbumSong {
             video_id: VideoID(
@@ -258,6 +303,9 @@ GetAlbum {
             title: "Twist And Shout (2023 Mix)",
             like_status: Indifferent,
             explicit: NotExplicit,
+            music_video_type: Some(
+                Atv,
+            ),
         },
         AlbumSong {
             video_id: VideoID(
@@ -270,6 +318,9 @@ GetAlbum {
             title: "It Won't Be Long (Remastered 2009)",
             like_status: Indifferent,
             explicit: NotExplicit,
+            music_video_type: Some(
+                Atv,
+            ),
         },
         AlbumSong {
             video_id: VideoID(
@@ -282,6 +333,9 @@ GetAlbum {
             title: "This Boy (2023 Mix)",
             like_status: Indifferent,
             explicit: NotExplicit,
+            music_video_type: Some(
+                Atv,
+            ),
         },
         AlbumSong {
             video_id: VideoID(
@@ -294,6 +348,9 @@ GetAlbum {
             title: "Roll Over Beethoven",
             like_status: Indifferent,
             explicit: NotExplicit,
+            music_video_type: Some(
+                Atv,
+            ),
         },
         AlbumSong {
             video_id: VideoID(
@@ -306,6 +363,9 @@ GetAlbum {
             title: "Roll Over Beethoven (2023 Mix)",
             like_status: Indifferent,
             explicit: NotExplicit,
+            music_video_type: Some(
+                Atv,
+            ),
         },
     ],
     library_status: NotInLibrary,

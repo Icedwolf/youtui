@@ -80,6 +80,9 @@ GetAlbum {
             title: "STARS",
             like_status: Indifferent,
             explicit: IsExplicit,
+            music_video_type: Some(
+                Atv,
+            ),
         },
         AlbumSong {
             video_id: VideoID(
@@ -102,6 +105,9 @@ GetAlbum {
             title: "KEYS TO MY LIFE",
             like_status: Indifferent,
             explicit: IsExplicit,
+            music_video_type: Some(
+                Atv,
+            ),
         },
         AlbumSong {
             video_id: VideoID(
@@ -124,6 +130,9 @@ GetAlbum {
             title: "PAID",
             like_status: Indifferent,
             explicit: IsExplicit,
+            music_video_type: Some(
+                Atv,
+            ),
         },
         AlbumSong {
             video_id: VideoID(
@@ -146,6 +155,9 @@ GetAlbum {
             title: "TALKING",
             like_status: Indifferent,
             explicit: IsExplicit,
+            music_video_type: Some(
+                Atv,
+            ),
         },
         AlbumSong {
             video_id: VideoID(
@@ -168,6 +180,9 @@ GetAlbum {
             title: "BACK TO ME",
             like_status: Indifferent,
             explicit: IsExplicit,
+            music_video_type: Some(
+                Atv,
+            ),
         },
         AlbumSong {
             video_id: VideoID(
@@ -190,6 +205,9 @@ GetAlbum {
             title: "HOODRAT",
             like_status: Indifferent,
             explicit: IsExplicit,
+            music_video_type: Some(
+                Atv,
+            ),
         },
         AlbumSong {
             video_id: VideoID(
@@ -212,6 +230,9 @@ GetAlbum {
             title: "DO IT",
             like_status: Indifferent,
             explicit: IsExplicit,
+            music_video_type: Some(
+                Atv,
+            ),
         },
         AlbumSong {
             video_id: VideoID(
@@ -234,6 +255,9 @@ GetAlbum {
             title: "PAPERWORK",
             like_status: Indifferent,
             explicit: IsExplicit,
+            music_video_type: Some(
+                Atv,
+            ),
         },
         AlbumSong {
             video_id: VideoID(
@@ -256,6 +280,9 @@ GetAlbum {
             title: "BURN",
             like_status: Indifferent,
             explicit: IsExplicit,
+            music_video_type: Some(
+                Atv,
+            ),
         },
         AlbumSong {
             video_id: VideoID(
@@ -278,6 +305,9 @@ GetAlbum {
             title: "VULTURES",
             like_status: Indifferent,
             explicit: IsExplicit,
+            music_video_type: Some(
+                Atv,
+            ),
         },
         AlbumSong {
             video_id: VideoID(
@@ -300,6 +330,9 @@ GetAlbum {
             title: "CARNIVAL",
             like_status: Indifferent,
             explicit: IsExplicit,
+            music_video_type: Some(
+                Atv,
+            ),
         },
         AlbumSong {
             video_id: VideoID(
@@ -322,6 +355,9 @@ GetAlbum {
             title: "BEG FORGIVENESS",
             like_status: Indifferent,
             explicit: IsExplicit,
+            music_video_type: Some(
+                Atv,
+            ),
         },
         AlbumSong {
             video_id: VideoID(
@@ -344,6 +380,9 @@ GetAlbum {
             title: "PROBLEMATIC",
             like_status: Indifferent,
             explicit: IsExplicit,
+            music_video_type: Some(
+                Atv,
+            ),
         },
         AlbumSong {
             video_id: VideoID(
@@ -366,6 +405,9 @@ GetAlbum {
             title: "KING",
             like_status: Indifferent,
             explicit: IsExplicit,
+            music_video_type: Some(
+                Atv,
+            ),
         },
     ],
     library_status: NotInLibrary,
