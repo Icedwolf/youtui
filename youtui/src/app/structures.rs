@@ -7,7 +7,7 @@ use std::ops::Deref;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
-use tracing::warn;
+use tracing::{debug, warn};
 use ytmapi_rs::common::{
     AlbumID, ArtistChannelID, Explicit, UploadAlbumID, UploadArtistID, VideoID, YoutubeID,
 };
@@ -403,16 +403,36 @@ impl BrowserSongsList {
         artists: Vec<ParsedSongArtist>,
         thumbnails: Vec<Thumbnail>,
     ) {
-        // The album data is shared by all the songs.
-        // So no need to clone/allocate for eache one.
-        // Instead we'll share ownership via Rc.
+        use std::collections::hash_map::Entry;
+        for song in &raw_list {
+            debug!(
+                "album_song: title={:?} video_id={:?} duration={:?} mvt={:?}",
+                song.title,
+                song.video_id.get_raw(),
+                song.duration,
+                song.music_video_type()
+            );
+        }
+        let mut best: std::collections::HashMap<&str, &AlbumSong> = std::collections::HashMap::new();
+        for song in &raw_list {
+            match best.entry(song.title.as_str()) {
+                Entry::Occupied(mut e) => {
+                    if song.is_audio_track() && !e.get().is_audio_track() {
+                        e.insert(song);
+                    }
+                }
+                Entry::Vacant(e) => {
+                    e.insert(song);
+                }
+            }
+        }
         let year = Rc::new(year);
         let album = Rc::new(ListSongAlbum::from(album));
         let artists = Rc::new(artists.into_iter().map(Into::into).collect::<Vec<_>>());
         let thumbnails = Rc::new(thumbnails);
-        for song in raw_list {
+        for song in best.into_values() {
             self.add_raw_album_song(
-                song,
+                song.clone(),
                 album.clone(),
                 year.clone(),
                 artists.clone(),
@@ -428,8 +448,34 @@ impl BrowserSongsList {
         }
     }
     pub fn append_raw_search_result_songs(&mut self, raw_list: Vec<SearchResultSong>) {
-        for song in raw_list {
-            self.add_raw_search_result_song(song);
+        for song in &raw_list {
+            debug!(
+                "search_song: title={:?} artist={:?} video_id={:?} duration={:?} mvt={:?}",
+                song.title,
+                song.artist,
+                song.video_id.get_raw(),
+                song.duration,
+                song.music_video_type()
+            );
+        }
+        use std::collections::hash_map::Entry;
+        let mut best: std::collections::HashMap<(&str, &str), &SearchResultSong> =
+            std::collections::HashMap::new();
+        for song in &raw_list {
+            let key = (song.title.as_str(), song.artist.as_str());
+            match best.entry(key) {
+                Entry::Occupied(mut e) => {
+                    if song.is_audio_track() && !e.get().is_audio_track() {
+                        e.insert(song);
+                    }
+                }
+                Entry::Vacant(e) => {
+                    e.insert(song);
+                }
+            }
+        }
+        for song in best.into_values() {
+            self.add_raw_search_result_song(song.clone());
         }
     }
     pub fn add_raw_album_song(

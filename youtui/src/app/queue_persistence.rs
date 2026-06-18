@@ -171,7 +171,7 @@ fn load_compact_queue(playlist: &mut Playlist, saved: CompactSavedQueue) -> Resu
 
 fn normalize_and_load(playlist: &mut Playlist, saved: LegacySong, name: &str) -> Result<ComponentEffect<Playlist>, Box<dyn std::error::Error>> {
     debug!("Normalizing queue file to compact format");
-    let songs: Vec<CompactSongRef> = saved.songs.iter().map(|s| CompactSongRef::from(s)).collect();
+    let songs: Vec<CompactSongRef> = saved.songs.iter().map(CompactSongRef::from).collect();
     let current_idx = saved.current_index;
     let compact = CompactSavedQueue {
         songs,
@@ -216,6 +216,7 @@ pub fn auto_load(playlist: &mut Playlist) -> Result<ComponentEffect<Playlist>, B
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::app::structures::{AudioQuality, Percentage};
     use ytmapi_rs::common::YoutubeID;
 
     #[test]
@@ -329,7 +330,7 @@ mod tests {
                 },
             ],
         };
-        let (mut playlist, _effect) = Playlist::new();
+        let (mut playlist, _effect) = Playlist::new(Percentage(50), AudioQuality::Low);
         let effect = load_compact_queue(&mut playlist, saved).unwrap();
 
         let songs: Vec<_> = playlist.list.get_list_iter().collect();
@@ -355,7 +356,7 @@ mod tests {
             shuffle_seed: 0,
             songs: vec![],
         };
-        let (mut playlist, _effect) = Playlist::new();
+        let (mut playlist, _effect) = Playlist::new(Percentage(50), AudioQuality::Low);
         let effect = load_compact_queue(&mut playlist, saved).unwrap();
         assert_eq!(playlist.list.get_list_iter().count(), 0);
         assert!(playlist.get_cur_playing_index().is_none());
@@ -379,12 +380,12 @@ mod tests {
                 None, "3:15".to_string(), Some("https://ex.co/t.jpg".to_string()),
             ),
         ];
-        let (mut playlist, _effect) = Playlist::new();
+        let (mut playlist, _effect) = Playlist::new(Percentage(50), AudioQuality::Low);
         let (_first_id, _) = playlist.push_song_list(songs);
         save_queue(&playlist, "fs_test").unwrap();
         assert!(tmp.path().join("queues/fs_test.json").exists());
 
-        let (mut loaded, _effect) = Playlist::new();
+        let (mut loaded, _effect) = Playlist::new(Percentage(50), AudioQuality::Low);
         let _ = load_queue(&mut loaded, "fs_test").unwrap();
         let loaded_songs: Vec<_> = loaded.list.get_list_iter().collect();
         assert_eq!(loaded_songs.len(), 2);
@@ -394,7 +395,7 @@ mod tests {
         assert_eq!(loaded_songs[1].title, "Beta");
 
         // autosave + autoload
-        let (mut p2, _) = Playlist::new();
+        let (mut p2, _) = Playlist::new(Percentage(50), AudioQuality::Low);
         let xsongs = vec![ListSong::create_with_metadata(
             VideoID::from_raw("x"), "X".to_string(), vec!["Y".to_string()],
             None, "1:00".to_string(), None,
@@ -403,13 +404,13 @@ mod tests {
         auto_save(&p2).unwrap();
         assert!(tmp.path().join("queues/__autosave.json").exists());
 
-        let (mut loaded2, _) = Playlist::new();
+        let (mut loaded2, _) = Playlist::new(Percentage(50), AudioQuality::Low);
         let _ = auto_load(&mut loaded2).unwrap();
         assert_eq!(loaded2.list.get_list_iter().count(), 1);
         assert_eq!(loaded2.list.get_list_iter().next().unwrap().video_id.get_raw(), "x");
 
         // load nonexistent file errors
-        let (mut p3, _) = Playlist::new();
+        let (mut p3, _) = Playlist::new(Percentage(50), AudioQuality::Low);
         let result = load_queue(&mut p3, "no_such_queue");
         assert!(result.is_err(), "loading nonexistent queue should error");
     }

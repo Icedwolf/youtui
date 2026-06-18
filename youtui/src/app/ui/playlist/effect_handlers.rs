@@ -152,7 +152,7 @@ impl FrontendEffect<Playlist, ArcServer, TaskMetadata> for PlaylistEffect {
             PlaylistEffect::HandleAutoplayUpdate(msg) => {
                 return target.handle_autoplay_update(msg);
             }
-            PlaylistEffect::HandleSetToError(msg) => target.handle_set_to_error(msg),
+            PlaylistEffect::HandleSetToError(msg) => return target.handle_set_to_error(msg),
             PlaylistEffect::HandleSongDownloadProgressUpdate { kind, id } => {
                 return target.handle_song_download_progress_update(kind, id);
             }

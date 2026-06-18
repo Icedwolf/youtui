@@ -2,7 +2,8 @@ use crate::app::queue_persistence::{CompactSongRef, CompactSavedQueue};
 use crate::app::server::song_downloader::InMemSong;
 use crate::app::server::{DecodeSong, PlayDecodedSong, TaskMetadata};
 use crate::app::structures::{
-    DownloadStatus, ListSong, ListSongDisplayableField, ListSongID, ListStatus, PlayState,
+    AudioQuality, DownloadStatus, ListSong, ListSongDisplayableField, ListSongID, ListStatus,
+    Percentage, PlayState,
 };
 use crate::app::ui::playlist::{
     DownloadTask, HandlePlayUpdateError, HandlePlayUpdateOk, Playlist, QueueState,
@@ -31,7 +32,7 @@ fn get_dummy_album() -> GetAlbum {
 }
 
 fn get_dummy_playlist() -> Playlist {
-    let (mut playlist, _effect) = Playlist::new();
+    let (mut playlist, _effect) = Playlist::new(Percentage(50), AudioQuality::Low);
     playlist.list.state = ListStatus::Loaded;
     let GetAlbum {
         title,
@@ -234,7 +235,7 @@ mod render_tests {
     }
 
     fn render_playlist(songs: Vec<ListSong>) -> String {
-        let (mut playlist, _) = Playlist::new();
+        let (mut playlist, _) = Playlist::new(Percentage(50), AudioQuality::Low);
         playlist.list.state = ListStatus::Loaded;
         playlist.list.push_song_list(songs);
         let backend = TestBackend::new(120, 20);
@@ -357,14 +358,14 @@ fn download_scope_max_4_songs() {
 #[cfg(test)]
 mod state_transitions {
 	use crate::app::server::song_downloader::InMemSong;
-	use crate::app::structures::{DownloadStatus, ListSong, ListSongID, ListStatus, PlayState};
+	use crate::app::structures::{AudioQuality, DownloadStatus, ListSong, ListSongID, ListStatus, Percentage, PlayState};
 	use crate::app::ui::playlist::Playlist;
 	use pretty_assertions::assert_eq;
 	use std::sync::Arc;
 	use ytmapi_rs::common::{VideoID, YoutubeID};
 
 	fn undownloaded_songs(n: usize) -> Playlist {
-		let (mut p, _) = Playlist::new();
+		let (mut p, _) = Playlist::new(Percentage(50), AudioQuality::Low);
 		p.list.state = ListStatus::Loaded;
 		let songs: Vec<ListSong> = (0..n)
 			.map(|i| {
@@ -385,7 +386,7 @@ mod state_transitions {
 	}
 
 	fn downloaded_songs(n: usize) -> Playlist {
-		let (mut p, _) = Playlist::new();
+		let (mut p, _) = Playlist::new(Percentage(50), AudioQuality::Low);
 		p.list.state = ListStatus::Loaded;
 		let songs: Vec<ListSong> = (0..n)
 			.map(|i| {
