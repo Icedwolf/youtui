@@ -100,10 +100,9 @@ impl AlbumSongsPanel {
             if !self.get_sortable_columns().contains(&c.column) {
                 bail!(format!("Unable to sort column {}", c.column,));
             }
-            self.list.sort(
-                get_adjusted_list_column(c.column, Self::subcolumns_of_vec()).unwrap(),
-                c.direction,
-            );
+            let col = get_adjusted_list_column(c.column, Self::subcolumns_of_vec())
+                .ok_or_else(|| anyhow::anyhow!("Unable to sort column {}, doesn't match underlying list", c.column))?;
+            self.list.sort(col, c.direction);
         }
         Ok(())
     }
@@ -210,14 +209,6 @@ impl AlbumSongsPanel {
         };
         self.close_sort();
     }
-    pub fn handle_songs_found(&mut self) {
-        self.list.clear();
-        // XXX: Consider clearing sort params here, so that we don't need to sort all
-        // the incoming songs. Performance seems OK for now. XXX: Consider also
-        // clearing filter params here.
-        self.cur_selected = 0;
-        self.list.state = ListStatus::InProgress;
-    }
     pub fn get_song_from_idx(&self, idx: usize) -> Option<&ListSong> {
         self.list.get_song_from_idx(idx)
     }
@@ -301,7 +292,6 @@ impl KeyRouter<AppAction> for AlbumSongsPanel {
     }
 }
 
-// Is this still relevant?
 impl Loadable for AlbumSongsPanel {
     fn is_loading(&self) -> bool {
         matches!(self.list.state, crate::app::structures::ListStatus::Loading)
@@ -374,7 +364,8 @@ impl AdvancedTableView for AlbumSongsPanel {
         }
         // Map the column of ArtistAlbums to a column of List and sort
         self.list.sort(
-            get_adjusted_list_column(sort_command.column, Self::subcolumns_of_vec()).unwrap(),
+            get_adjusted_list_column(sort_command.column, Self::subcolumns_of_vec())
+                .expect("column was validated against sortable_columns"),
             sort_command.direction,
         );
         // Remove commands that already exist for the same column, as this new command
@@ -436,9 +427,14 @@ impl HasTitle for AlbumSongsPanel {
             )
             .into(),
             ListStatus::Loaded => {
-                format!("Songs - {} results", self.list.get_list_iter().len()).into()
+                let len = self.list.get_list_iter().len();
+                if len == 0 {
+                    "Songs - no songs found".into()
+                } else {
+                    format!("Songs - {len} results").into()
+                }
             }
-            ListStatus::Error => "Songs - Error receieved".into(),
+            ListStatus::Error => "Songs - Error received".into(),
         }
     }
 }

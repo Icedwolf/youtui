@@ -3,7 +3,7 @@ use crate::app::AppCallback;
 use crate::app::component::actionhandler::{
     ActionHandler, ComponentEffect, KeyRouter, Scrollable, TextHandler, YoutuiEffect,
 };
-use crate::app::server::api::GetArtistSongsProgressUpdate;
+use crate::app::server::api::{AlbumSongsData, GetArtistSongsProgressUpdate};
 use crate::app::server::{GetArtistSongs, HandleApiError, SearchArtists};
 use crate::app::structures::ListStatus;
 use crate::app::ui::action::{AppAction, TextEntryAction};
@@ -15,9 +15,9 @@ use itertools::Either;
 use search_panel::{ArtistSearchPanel, BrowserArtistsAction};
 use songs_panel::{AlbumSongsPanel, BrowserArtistSongsAction};
 use std::mem;
-use tracing::{error, warn};
-use ytmapi_rs::common::{AlbumID, ArtistChannelID, Thumbnail};
-use ytmapi_rs::parse::{AlbumSong, ParsedSongAlbum, ParsedSongArtist, SearchResultArtist};
+use tracing::{debug, error, warn};
+use ytmapi_rs::common::{AlbumID, ArtistChannelID};
+use ytmapi_rs::parse::SearchResultArtist;
 
 pub mod search_panel;
 pub mod songs_panel;
@@ -278,7 +278,6 @@ impl ArtistSearchBrowser {
         )
     }
     pub fn play_song(&mut self) -> impl Into<YoutuiEffect<Self>> + use<> {
-        // Consider how resource intensive this is as it runs in the main thread.
         let cur_song_idx = self.album_songs_panel.get_selected_item();
         if let Some(cur_song) = self.album_songs_panel.get_song_from_idx(cur_song_idx) {
             return (
@@ -291,7 +290,6 @@ impl ArtistSearchBrowser {
         (AsyncTask::new_no_op(), None)
     }
     pub fn play_songs(&mut self) -> impl Into<YoutuiEffect<Self>> + use<> {
-        // Consider how resource intensive this is as it runs in the main thread.
         let cur_idx = self.album_songs_panel.get_selected_item();
         let song_list = self
             .album_songs_panel
@@ -304,10 +302,8 @@ impl ArtistSearchBrowser {
             Some(AppCallback::AddSongsToPlaylistAndPlay(song_list)),
         )
 
-        // XXX: Do we want to indicate that song has been added to playlist?
     }
     pub fn add_songs_to_playlist(&mut self) -> impl Into<YoutuiEffect<Self>> + use<> {
-        // Consider how resource intensive this is as it runs in the main thread.
         let cur_idx = self.album_songs_panel.get_selected_item();
         let song_list = self
             .album_songs_panel
@@ -321,7 +317,6 @@ impl ArtistSearchBrowser {
         )
     }
     pub fn add_song_to_playlist(&mut self) -> impl Into<YoutuiEffect<Self>> + use<> {
-        // Consider how resource intensive this is as it runs in the main thread.
         let cur_idx = self.album_songs_panel.get_selected_item();
         if let Some(cur_song) = self.album_songs_panel.get_song_from_idx(cur_idx) {
             return (
@@ -389,7 +384,6 @@ impl ArtistSearchBrowser {
             AsyncTask::new_no_op(),
             Some(AppCallback::AddSongsToPlaylistAndPlay(song_list)),
         )
-        // XXX: Do we want to indicate that song has been added to playlist?
     }
     pub fn handle_search_artist_error(
         &mut self,
@@ -435,33 +429,24 @@ impl ArtistSearchBrowser {
     }
     pub fn replace_artist_list(&mut self, artist_list: Vec<SearchResultArtist>) {
         self.artist_search_panel.list = artist_list;
-        // XXX: What to do if position in list was greater than new list length?
-        // Handled by this function?
         self.increment_cur_list(0);
     }
     pub fn handle_no_songs_found(&mut self) {
         self.album_songs_panel.list.state = ListStatus::Loaded;
     }
-    pub fn handle_append_song_list(
-        &mut self,
-        song_list: Vec<AlbumSong>,
-        album: ParsedSongAlbum,
-        year: String,
-        artists: Vec<ParsedSongArtist>,
-        thumbnails: Vec<Thumbnail>,
-    ) {
-        self.album_songs_panel
-            .list
-            .append_raw_album_songs(song_list, album, year, artists, thumbnails);
-        // If sort commands exist, sort the list.
-        // Naive - can result in multiple calls to sort every time songs are appended.
+    pub fn handle_all_albums_songs(&mut self, albums: Vec<AlbumSongsData>) {
+        self.album_songs_panel.list.clear();
+        self.album_songs_panel.go_to_first();
+        for data in albums {
+            self.album_songs_panel
+                .list
+                .append_raw_album_songs(data.song_list, data.album, data.year, data.artists, data.thumbnails);
+        }
+        // Sort once after all albums are appended (avoids O(N × n log n) re-sorts).
         if let Err(e) = self.album_songs_panel.apply_all_sort_commands() {
             error!("Error <{e}> sorting album songs panel");
         }
         self.album_songs_panel.list.state = ListStatus::InProgress;
-    }
-    pub fn handle_songs_found(&mut self) {
-        self.album_songs_panel.handle_songs_found()
     }
     fn increment_cur_list(&mut self, increment: isize) {
         match self.input_routing {
@@ -519,7 +504,7 @@ impl_youtui_task_handler!(
                     error,
                     // To avoid needing to clone search query to use in the error message, this
                     // error message is minimal.
-                    message: "Error recieved getting artists".to_string(),
+                    message: "Error received getting artists".to_string(),
                 },
                 NoOpHandler,
                 None,
@@ -542,14 +527,12 @@ impl_youtui_task_handler!(
                 GetArtistSongsProgressUpdate::GetAlbumsSongsError { album_id, error } => {
                     return this.handle_get_album_songs_error(cur_artist_id, album_id, error);
                 }
-                GetArtistSongsProgressUpdate::SongsFound => this.handle_songs_found(),
-                GetArtistSongsProgressUpdate::Songs {
-                    song_list,
-                    album,
-                    year,
-                    artists,
-                    thumbnails,
-                } => this.handle_append_song_list(song_list, album, year, artists, thumbnails),
+                GetArtistSongsProgressUpdate::AlbumProgress { current, total } => {
+                    debug!("artist_songs: album progress {current}/{total}");
+                }
+                GetArtistSongsProgressUpdate::AllAlbumsSongs(albums) => {
+                    this.handle_all_albums_songs(albums);
+                }
                 GetArtistSongsProgressUpdate::AllSongsSent => this.handle_song_list_loaded(),
             }
             AsyncTask::new_no_op()
