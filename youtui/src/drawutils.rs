@@ -395,73 +395,65 @@ mod tests {
         assert!(b.height <= max.height);
     }
     #[test]
-    fn bounds_check_below_left_rect() {
-        // TODO: Add more / generalized test cases.
-        // TODO: Check hasn't exceeded max_bounds.
-        // TODO: Check has appeared where we want it to.
-        below_left_rect(
-            u16::MAX,
-            u16::MAX,
-            Rect {
-                x: 0,
-                y: 0,
-                height: 50,
-                width: 50,
-            },
-            Rect {
-                x: 100,
-                y: 100,
-                height: 1050,
-                width: 1050,
-            },
-        );
-        below_left_rect(
-            u16::MAX,
-            u16::MAX,
-            Rect {
-                x: 0,
-                y: 50,
-                height: 50,
-                width: 50,
-            },
-            Rect {
-                x: 100,
-                y: 1050,
-                height: 1050,
-                width: 1050,
-            },
-        );
-        below_left_rect(
-            u16::MAX,
-            u16::MAX,
-            Rect {
-                x: 50,
-                y: 0,
-                height: 50,
-                width: 50,
-            },
-            Rect {
-                x: 1050,
-                y: 100,
-                height: 1050,
-                width: 1050,
-            },
-        );
-        below_left_rect(
-            u16::MAX,
-            u16::MAX,
-            Rect {
-                x: 50,
-                y: 50,
-                height: 50,
-                width: 50,
-            },
-            Rect {
-                x: 1050,
-                y: 1050,
-                height: 1050,
-                width: 1050,
-            },
-        );
+    fn test_below_left_rect_normal() {
+        // below_left_rect adds 1 to height internally
+        let chunk = Rect { x: 5, y: 10, width: 20, height: 5 };
+        let max = Rect { x: 0, y: 0, width: 100, height: 100 };
+        let r = below_left_rect(10, 15, chunk, max);
+        assert_eq!(r.x, 5);
+        assert_eq!(r.y, 14);
+        assert_eq!(r.width, 15);
+        assert_eq!(r.height, 11);
+        bounds_check_rect(r, max);
+    }
+
+    #[test]
+    fn test_below_left_rect_clamped_to_max() {
+        let chunk = Rect { x: 50, y: 90, width: 20, height: 5 };
+        let max = Rect { x: 0, y: 0, width: 100, height: 100 };
+        let r = below_left_rect(20, 30, chunk, max);
+        assert_eq!(r.x, 50);
+        assert_eq!(r.y, 94);
+        assert_eq!(r.width, 30);
+        assert_eq!(r.height, 6);
+        bounds_check_rect(r, max);
+    }
+
+    #[test]
+    fn test_below_left_rect_width_clamped_right() {
+        let chunk = Rect { x: 85, y: 10, width: 20, height: 5 };
+        let max = Rect { x: 0, y: 0, width: 100, height: 100 };
+        let r = below_left_rect(10, 30, chunk, max);
+        assert_eq!(r.x, 85);
+        assert_eq!(r.y, 14);
+        assert_eq!(r.width, 15);
+        assert_eq!(r.height, 11);
+        bounds_check_rect(r, max);
+    }
+
+    #[test]
+    fn test_below_left_rect_zero_height_chunk() {
+        let chunk = Rect { x: 0, y: 0, width: 10, height: 0 };
+        let max = Rect { x: 0, y: 0, width: 100, height: 100 };
+        let r = below_left_rect(5, 10, chunk, max);
+        assert_eq!(r.y, 0);
+        assert_eq!(r.height, 6);
+        bounds_check_rect(r, max);
+    }
+
+    #[test]
+    fn bounds_check_below_left_rect_no_panic() {
+        // Verify no panics with extreme values
+        let cases = [
+            (u16::MAX, u16::MAX, Rect { x: 0, y: 0, height: 50, width: 50 }, Rect { x: 100, y: 100, height: 1050, width: 1050 }),
+            (u16::MAX, u16::MAX, Rect { x: 0, y: 50, height: 50, width: 50 }, Rect { x: 100, y: 1050, height: 1050, width: 1050 }),
+            (u16::MAX, u16::MAX, Rect { x: 50, y: 0, height: 50, width: 50 }, Rect { x: 1050, y: 100, height: 1050, width: 1050 }),
+            (u16::MAX, u16::MAX, Rect { x: 50, y: 50, height: 50, width: 50 }, Rect { x: 1050, y: 1050, height: 1050, width: 1050 }),
+        ];
+        for (h, w, chunk, max) in &cases {
+            let r = below_left_rect(*h, *w, *chunk, *max);
+            assert_eq!(r.x, chunk.x, "below_left_rect x must match chunk x");
+            assert!(r.y >= chunk.y + chunk.height.saturating_sub(1));
+        }
     }
 }

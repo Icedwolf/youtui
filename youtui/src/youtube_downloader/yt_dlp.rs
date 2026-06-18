@@ -8,14 +8,17 @@ use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio::process::Child;
+use tokio::time::timeout;
 use tracing::{debug, error, info, warn};
 
 const ESTIMATED_AUDIO_SIZE_BYTES: usize = 4 * 1024 * 1024; // 4MB estimate
 
 /// Lazy cache for browser source detection — evaluated at most once, never at startup.
+/// This caches the browser profile path (e.g. "firefox:/path/to/profile"), not the cookies
+/// themselves. yt-dlp reads fresh cookies from the cached profile at runtime on each invocation.
+/// Mid-session profile switching is unlikely, so a OnceLock is sufficient for the app's lifetime.
 static BROWSER_SOURCE_CACHE: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
 
 /// Convert a raw YouTube cookie string (Cookie: header format) to a
@@ -139,13 +142,12 @@ fn detect_browser_source() -> Option<String> {
     };
 
     for root in &candidates {
-        if root.is_dir() {
-            if let Some(profile) = find_default_profile(root) {
+        if root.is_dir()
+            && let Some(profile) = find_default_profile(root) {
                 let source = format!("firefox:{}", profile.display());
                 debug!(%source, "Detected browser profile for cookie extraction");
                 return Some(source);
             }
-        }
     }
 
     debug!("No Firefox-compatible browser profile found for cookie extraction");
@@ -161,14 +163,13 @@ fn find_default_profile(profiles_dir: &Path) -> Option<PathBuf> {
         let (mut path, mut is_default) = (None::<String>, false);
         for line in content.lines() {
             if line.starts_with('[') {
-                if is_default {
-                    if let Some(ref p) = path {
+                if is_default
+                    && let Some(ref p) = path {
                         let full = profiles_dir.join(p);
                         if full.is_dir() {
                             return Some(full);
                         }
                     }
-                }
                 is_default = line.starts_with("[Profile");
                 if !is_default { path = None; }
             } else if is_default {
@@ -271,9 +272,14 @@ impl YtDlpDownloader {
     /// Extracted for testability — any new flag or format change must be
     /// validated in tests before deploying.
     fn build_stream_args(&self, video_id: &str, audio_quality: &AudioQuality) -> Vec<String> {
+        // NOTE: Keep fallsbacks scoped to formats symphonia supports.
+        // symphonia 0.5.x lacks Opus support, so exclude webm/opus fallbacks.
+        // If the track has no compatible format, yt-dlp errors out cleanly
+        // rather than delivering undecodable data that would cause a misleading
+        // "format not recognized" error in the decoder.
         let format_string = match audio_quality {
-            AudioQuality::Low => "bestaudio[ext=m4a]/bestaudio".to_string(),
-            _ => "bestaudio[ext=m4a]/bestaudio/best".to_string(),
+            AudioQuality::Low => "bestaudio[ext=m4a]".to_string(),
+            _ => "bestaudio[ext=m4a]".to_string(),
         };
         let mut args: Vec<String> = vec![
             "--ignore-config".into(),
@@ -348,27 +354,39 @@ impl YoutubeMusicDownloader for YtDlpDownloader {
             
             debug!(%video_id, ?stream_args, "yt-dlp stream args");
             
-            let proc = tokio::process::Command::new(command.deref())
-                .args(stream_args)
-                .stderr(Stdio::piped())
-                .stdout(Stdio::piped())
-                .spawn()
-                .map_err(|e| {
-                    error!(%video_id, error = %e, "Failed to spawn yt-dlp stream process");
-                    YtDlpDownloaderError::IoError {
-                        message: format!("{e}"),
-                    }
-                })?;
+            let mut proc = timeout(Duration::from_secs(30), async {
+                tokio::process::Command::new(command.deref())
+                    .args(stream_args)
+                    .stderr(Stdio::piped())
+                    .stdout(Stdio::piped())
+                    .spawn()
+            })
+            .await
+            .map_err(|_| {
+                error!(%video_id, "yt-dlp spawn timed out after 30s");
+                YtDlpDownloaderError::IoError {
+                    message: format!("yt-dlp spawn timed out after 30s"),
+                }
+            })?
+            .map_err(|e| {
+                error!(%video_id, error = %e, "Failed to spawn yt-dlp stream process");
+                YtDlpDownloaderError::IoError {
+                    message: format!("{e}"),
+                }
+            })?;
             
-            let Child {
-                stderr: Some(stderr),
-                stdout: Some(stdout),
-                ..
-            } = proc
-            else {
-                error!(%video_id, "yt-dlp stream process missing stdout or stderr");
-                return Err(YtDlpDownloaderError::NoOutput);
-            };
+            // Take ownership of stdout/stderr without consuming the Child handle
+            // (we need Child to check the exit code after the process finishes).
+            let stderr = proc.stderr.take()
+                .ok_or_else(|| {
+                    error!(%video_id, "yt-dlp stream process missing stderr");
+                    YtDlpDownloaderError::NoOutput
+                })?;
+            let stdout = proc.stdout.take()
+                .ok_or_else(|| {
+                    error!(%video_id, "yt-dlp stream process missing stdout");
+                    YtDlpDownloaderError::NoOutput
+                })?;
             
             // Read stderr in background for error reporting
             let video_id_clone = video_id.clone();
@@ -378,6 +396,30 @@ impl YoutubeMusicDownloader for YtDlpDownloader {
                 while let Ok(Some(line)) = lines.next_line().await {
                     if line.contains("ERROR") || line.contains("WARNING") {
                         warn!(video_id = %video_id_clone, %line, "yt-dlp stderr");
+                    }
+                }
+            });
+            
+            // Wait for the child process to exit and log the exit code.
+            // This prevents zombie processes and surfaces non-zero exits.
+            let video_id_clone2 = video_id.clone();
+            tokio::spawn(async move {
+                match proc.wait().await {
+                    Ok(status) => {
+                        if !status.success() {
+                            warn!(
+                                video_id = %video_id_clone2,
+                                exit_code = %status.code().map_or("unknown".into(), |c| c.to_string()),
+                                "yt-dlp process exited with non-zero status"
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        error!(
+                            video_id = %video_id_clone2,
+                            error = %e,
+                            "Failed to wait for yt-dlp process"
+                        );
                     }
                 }
             });
@@ -675,7 +717,7 @@ mod tests {
         let d = YtDlpDownloader::new("yt-dlp".to_string(), None, None, AudioQuality::default(), None, None);
         let args = d.build_stream_args("TEST_ID", &AudioQuality::Low);
         let f_idx = args.iter().position(|a| a == "-f").unwrap();
-        assert_eq!(args[f_idx + 1], "bestaudio[ext=m4a]/bestaudio",
+        assert_eq!(args[f_idx + 1], "bestaudio[ext=m4a]",
             "Low quality should use restricted format: {args:?}");
     }
 
@@ -684,8 +726,8 @@ mod tests {
         let d = YtDlpDownloader::new("yt-dlp".to_string(), None, None, AudioQuality::default(), None, None);
         let args = d.build_stream_args("TEST_ID", &AudioQuality::High);
         let f_idx = args.iter().position(|a| a == "-f").unwrap();
-        assert_eq!(args[f_idx + 1], "bestaudio[ext=m4a]/bestaudio/best",
-            "High quality should use fallback chain: {args:?}");
+        assert_eq!(args[f_idx + 1], "bestaudio[ext=m4a]",
+            "High quality should use restricted format: {args:?}");
     }
 
     #[test]

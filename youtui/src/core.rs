@@ -163,7 +163,7 @@ pub async fn touch_file_with_timestamp(
         Ok::<_, std::io::Error>(())
     })
     .await
-    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))??;
+    .map_err(std::io::Error::other)??;
     Ok(())
 }
 

@@ -29,7 +29,7 @@ pub fn wrong_auth_token_error_message<Q>(
 impl std::error::Error for DynamicApiError {}
 impl std::fmt::Display for DynamicApiError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Error recieved when creating API: <{}>", self.0)
+        write!(f, "Error received when creating API: <{}>", self.0)
     }
 }
 impl From<ytmapi_rs::Error> for DynamicApiError {

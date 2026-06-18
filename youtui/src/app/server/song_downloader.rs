@@ -224,7 +224,7 @@ where
         
         let song_download = || {
             let _tx = tx.clone();
-        let audio_quality = audio_quality;
+            let _ = audio_quality;
             // No progress callback - icons handle the status entirely
             download_song_with_progress_update_callback(
                 &downloader,

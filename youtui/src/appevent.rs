@@ -60,7 +60,7 @@ impl EventSpawner<MediaControlsWatcher> {
                     .send(AppEvent::MediaControls(event))
                     .await
                     .unwrap_or_else(|e| {
-                        warn!("Error {:?} receieved when sending media controls event", e)
+                        warn!("Error {:?} received when sending media controls event", e)
                     });
             }
         });
@@ -84,7 +84,7 @@ impl EventSpawner<Ticker> {
                 handler_tx
                     .send(AppEvent::Tick)
                     .await
-                    .unwrap_or_else(|e| warn!("Error {:?} receieved when sending tick event", e));
+                    .unwrap_or_else(|e| warn!("Error {:?} received when sending tick event", e));
             }
         });
         Self {
@@ -116,7 +116,7 @@ impl EventSpawner<SignalWatcher> {
                 handler_tx
                     .send(AppEvent::QuitSignal)
                     .await
-                    .unwrap_or_else(|e| warn!("Error {:?} receieved when sending signal event", e));
+                    .unwrap_or_else(|e| warn!("Error {:?} received when sending signal event", e));
             }
         });
         Ok(Self {
@@ -150,7 +150,7 @@ impl EventSpawner<SignalWatcher> {
                 handler_tx
                     .send(AppEvent::QuitSignal)
                     .await
-                    .unwrap_or_else(|e| warn!("Error {:?} receieved when sending signal event", e));
+                    .unwrap_or_else(|e| warn!("Error {:?} received when sending signal event", e));
             }
         });
         Ok(Self {
@@ -187,7 +187,7 @@ impl EventSpawner<CrosstermWatcher> {
                         .send(AppEvent::Crossterm(event))
                         .await
                         .unwrap_or_else(|e| {
-                            warn!("Error {:?} receieved when sending Crossterm event", e)
+                            warn!("Error {:?} received when sending Crossterm event", e)
                         }),
                 }
             }
