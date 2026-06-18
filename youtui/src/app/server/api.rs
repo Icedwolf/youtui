@@ -348,6 +348,12 @@ fn get_artist_songs(
         let artist_name = artist.name.clone();
         let mut browse_id_list: Vec<AlbumID<'static>> = Vec::new();
         let mut seen_ids: HashSet<AlbumID<'static>> = HashSet::new();
+        // Spawn search_songs early — it only needs artist_name and can run
+        // concurrently with the paginated album ID collection below.
+        let search_fut = {
+            let api = api.clone();
+            tokio::spawn(async move { search_songs(api, artist_name).await })
+        };
 
         for albums in artist
             .top_releases
@@ -403,11 +409,10 @@ fn get_artist_songs(
             send_or_error(&tx, GetArtistSongsProgressUpdate::NoSongsFound).await;
             return;
         }
-        // YTM's album endpoint returns Omv (music video) entries for many tracks,
-        // but the song search endpoint returns Atv (audio-only) entries with
-        // different (correct) video_ids. We prefer the Atv video_id.
-        let search_results = match search_songs(api.clone(), artist_name).await {
-            Ok(results) => {
+        // Await the search results that have been running concurrently with
+        // the album ID collection above.
+        let search_results = match search_fut.await {
+            Ok(Ok(results)) => {
                 debug!(
                     "artist_songs: search_songs returned {} results ({} Atv)",
                     results.len(),
@@ -415,8 +420,12 @@ fn get_artist_songs(
                 );
                 Some(results)
             }
-            Err(e) => {
+            Ok(Err(e)) => {
                 warn!("artist_songs: search_songs failed: {e}");
+                None
+            }
+            Err(join_err) => {
+                warn!("artist_songs: search_songs task panicked: {join_err}");
                 None
             }
         };
