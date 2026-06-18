@@ -72,7 +72,7 @@ features = ["live"]
 version = "0.22.2"
 # version = "0.19.0-youtui-vendored.1"
 # package = "youtui-vendored-rodio"
-features = ["symphonia-all"]
+features = ["symphonia-all", "tracing"]
 
 [dev-dependencies]
 pretty_assertions = "1.4.1"

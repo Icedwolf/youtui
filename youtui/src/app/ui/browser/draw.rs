@@ -122,7 +122,7 @@ pub fn draw_artist_search_browser(
         songs_chunk,
         albumsongsselected,
         |t, f, chunk| {
-            draw_loadable(f, t, chunk, |t, f, chunk| {
+            draw_loadable(f, t, chunk, cur_tick, |t, f, chunk| {
                 Some(draw_advanced_table(f, t, chunk, cur_tick))
             })
         },
@@ -198,7 +198,7 @@ pub fn draw_playlist_search_browser(
         songs_chunk,
         songs_selected,
         |t, f, chunk| {
-            draw_loadable(f, t, chunk, |t, f, chunk| {
+            draw_loadable(f, t, chunk, cur_tick, |t, f, chunk| {
                 Some(draw_advanced_table(f, t, chunk, cur_tick))
             })
         },
@@ -213,7 +213,7 @@ pub fn draw_song_search_browser(
 ) {
     if !browser.search_popped {
         draw_panel_mut(f, browser, chunk, selected, |t, f, chunk| {
-            draw_loadable(f, t, chunk, |t, f, chunk| {
+            draw_loadable(f, t, chunk, cur_tick, |t, f, chunk| {
                 Some(draw_advanced_table(f, t, chunk, cur_tick))
             })
         });
@@ -224,7 +224,7 @@ pub fn draw_song_search_browser(
             .constraints([Constraint::Length(3), Constraint::Min(0)])
             .areas(chunk);
         draw_panel_mut(f, browser, new_chunk, false, |t, f, chunk| {
-            draw_loadable(f, t, chunk, |t, f, chunk| {
+            draw_loadable(f, t, chunk, cur_tick, |t, f, chunk| {
                 Some(draw_advanced_table(f, t, chunk, cur_tick))
             })
         });
