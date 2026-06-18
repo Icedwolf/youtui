@@ -1,6 +1,7 @@
 //! Provides an asynchronous handle to a rodio sink, specifically designed to
 //! handle gapless playback.
 //! This module has been designed to be implemented as a library in future.
+use crate::core::blocking_send_or_error;
 use crate::app::structures::Percentage;
 use async_callback_manager::PanickingReceiverStream;
 use futures::Stream;
@@ -842,13 +843,6 @@ pub async fn std_send_or_error<T, S: Borrow<std::sync::mpsc::Sender<T>>>(tx: S, 
         .send(msg)
         .unwrap_or_else(|e| error!("Error {e} received when sending message"));
 }
-/// Send a message to the specified Tokio mpsc::Sender, and if sending fails,
-/// log an error with Tracing.
-pub fn blocking_send_or_error<T, S: Borrow<mpsc::Sender<T>>>(tx: S, msg: T) {
-    tx.borrow()
-        .blocking_send(msg)
-        .unwrap_or_else(|e| error!("Error {e} received when sending message"));
-}
 /// Send a message to the specified Tokio oneshot::Sender, and if sending fails,
 /// log an error with Tracing.
 pub fn oneshot_send_or_error<T: Debug, S: Into<oneshot::Sender<T>>>(tx: S, msg: T) {
@@ -856,7 +850,6 @@ pub fn oneshot_send_or_error<T: Debug, S: Into<oneshot::Sender<T>>>(tx: S, msg: 
         .send(msg)
         .unwrap_or_else(|e| error!("Error received when sending message {:?}", e));
 }
-/* #### ABOVE CODE COPIED FROM youtui::core #### */
 
 #[allow(dead_code)]
 pub(crate) fn map_to_play_update<I: Debug + PartialEq + Copy>(msg: AsyncRodioResponse, id: I) -> PlayUpdate<I> {
