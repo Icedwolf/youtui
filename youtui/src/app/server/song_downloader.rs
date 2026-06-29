@@ -26,8 +26,8 @@ static CACHE_ORDER: LazyLock<Mutex<VecDeque<String>>> =
     LazyLock::new(|| Mutex::new(VecDeque::new()));
 
 fn cache_put(key: String, data: Vec<u8>) {
-    let mut cache = BYTE_CACHE.lock().unwrap();
-    let mut order = CACHE_ORDER.lock().unwrap();
+    let mut cache = BYTE_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+    let mut order = CACHE_ORDER.lock().unwrap_or_else(|e| e.into_inner());
     if cache.len() >= CACHE_MAX_ENTRIES {
         if let Some(old) = order.pop_front() {
             cache.remove(&old);
@@ -38,7 +38,7 @@ fn cache_put(key: String, data: Vec<u8>) {
 }
 
 fn cache_get(key: &str) -> Option<Vec<u8>> {
-    BYTE_CACHE.lock().unwrap().get(key).cloned()
+    BYTE_CACHE.lock().unwrap_or_else(|e| e.into_inner()).get(key).cloned()
 }
 
 /// Cache of pre-resolved stream URLs (video_id → googlevideo URL).
@@ -54,7 +54,7 @@ static URL_CACHE: LazyLock<Mutex<HashMap<String, String>>> =
 pub async fn resolve_url(video_id: &str, yt_dlp_cmd: &str) -> Option<String> {
     // Check cache first.
     {
-        let cache = URL_CACHE.lock().unwrap();
+        let cache = URL_CACHE.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(url) = cache.get(video_id) {
             return Some(url.clone());
         }
@@ -64,7 +64,7 @@ pub async fn resolve_url(video_id: &str, yt_dlp_cmd: &str) -> Option<String> {
     let url = format!("https://music.youtube.com/watch?v={video_id}");
 
     let output = tokio::process::Command::new(cmd)
-        .args(["--print", "url", "-f", "bestaudio[ext=webm]/bestaudio[ext=m4a]/bestaudio",
+        .args(["--print", "url", "-f", "bestaudio[ext=webm]/bestaudio[ext=m4a]/bestaudio/bestaudio*",
             "--no-warnings", "--no-playlist",
             "--extractor-args", "youtube:skip=dash,hls,translated_subs",
             &url])
@@ -113,7 +113,7 @@ pub async fn download_and_decode(
     // If the stream URL was pre-resolved (background resolve_url), feed
     // it directly to ffmpeg — skips yt-dlp entirely, saving ~2.4s.
     let ffmpeg_avail = check_ffmpeg();
-    let cached_url = ffmpeg_avail.then(|| URL_CACHE.lock().unwrap().get(video_id).cloned()).flatten();
+    let cached_url = ffmpeg_avail.then(|| URL_CACHE.lock().unwrap_or_else(|e| e.into_inner()).get(video_id).cloned()).flatten();
     if let Some(stream_url) = cached_url {
         let buffer = SharedBuffer::new();
         let mut writer = buffer.writer();
@@ -232,9 +232,9 @@ pub async fn download_and_decode(
     let is_relay = ffmpeg_avail;
 
     let quality = if is_relay {
-        "bestaudio[ext=webm]/bestaudio[ext=m4a]/bestaudio"
+        "bestaudio[ext=webm]/bestaudio[ext=m4a]/bestaudio/bestaudio*"
     } else {
-        "bestaudio[ext=m4a]/bestaudio"
+        "bestaudio[ext=m4a]/bestaudio/bestaudio*"
     };
 
     let yt_dlp_cmd = if yt_dlp_command.is_empty() {
@@ -269,11 +269,10 @@ pub async fn download_and_decode(
     yt_cmd.arg(format!("https://music.youtube.com/watch?v={video_id}"));
     yt_cmd.stdout(std::process::Stdio::piped());
     yt_cmd.stderr(std::process::Stdio::piped());
-    // Do NOT set kill_on_drop on yt-dlp: the relay task requires yt-dlp
-    // to live until the full download completes.  yt-dlp will exit
-    // naturally when done, at which point the relay task reads EOF on
-    // its stdout and shuts down ffmpeg's stdin.
 
+    // kill_on_drop is paired with capturing yt_dlp_child in a spawned
+    // task below, so it stays alive as long as the relay pipeline.
+    yt_cmd.kill_on_drop(true);
     let mut yt_dlp_child = yt_cmd.spawn().map_err(|e| format!("spawn yt-dlp: {e}"))?;
     let yt_stdout = yt_dlp_child.stdout.take().ok_or("no stdout from yt-dlp")?;
     let yt_stderr = yt_dlp_child.stderr.take().ok_or("no stderr from yt-dlp")?;
@@ -282,8 +281,12 @@ pub async fn download_and_decode(
     // ── Build relay pipeline or read directly ─────────────────────────
     let (_stderr_handle, stdout_handle, mut child, _relay_handle) = if is_relay {
         // Read yt-dlp stderr for total_len + error logging.
+        // Also captures yt_dlp_child to keep it alive — dropped when
+        // stderr pipe closes (yt-dlp has exited), kill_on_drop(true)
+        // ensures the process is killed if orphaned during shutdown.
         let buf_for_stderr = buffer.clone();
         let stderr_handle = tokio::spawn(async move {
+            let _yt_guard = yt_dlp_child;
             use tokio::io::AsyncBufReadExt;
             let reader = tokio::io::BufReader::new(yt_stderr);
             let mut lines = reader.lines();

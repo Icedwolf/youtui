@@ -176,11 +176,23 @@ impl ActionHandler<PlaylistAction> for Playlist {
                 if self.resolving_audio {
                     return (AsyncTask::new_no_op(), None);
                 }
-                let songs: Vec<_> = self.list.get_list_iter().cloned().collect();
-                self.resolve_remaining = songs.len();
+                let unchecked: Vec<ListSong> = self.list.get_list_iter_mut()
+                    .filter_map(|s| {
+                        if s.resolution_checked {
+                            None
+                        } else {
+                            s.resolution_checked = true;
+                            Some(s.clone())
+                        }
+                    })
+                    .collect();
+                if unchecked.is_empty() {
+                    return (AsyncTask::new_no_op(), None);
+                }
+                self.resolve_remaining = unchecked.len();
                 self.resolving_audio = true;
                 let mut effect = AsyncTask::new_no_op();
-                for song in &songs {
+                for song in &unchecked {
                     let artist = song.artists.first()
                         .map(|a| a.name.clone())
                         .unwrap_or_default();
@@ -1554,7 +1566,7 @@ impl Playlist {
                 }
                 self.active_downloads
                     .lock()
-                    .expect("lock poisoned")
+                    .unwrap_or_else(|e| e.into_inner())
                     .retain(|(song_id, _)| *song_id != id);
 
                 let mut effect = self.handle_song_downloaded(id);
@@ -1599,7 +1611,7 @@ impl Playlist {
                     }
                 self.active_downloads
                     .lock()
-                    .expect("lock poisoned")
+                    .unwrap_or_else(|e| e.into_inner())
                     .retain(|(song_id, _)| *song_id != id);
 
                 let mut effect = AsyncTask::new_no_op();

@@ -31,10 +31,19 @@ fn is_codec_null(track: &Track) -> bool {
     track.codec_params.codec == CODEC_TYPE_NULL
 }
 
+// `dyn Decoder` and `dyn FormatReader` from symphonia are not `Send`
+// but their concrete implementations are safe to move between threads
+// (no thread-local state).  Newtype wrappers localize the unsafe so
+// that adding a non-Send field to SymphoniaDecoder fails to compile.
+struct SendDecoder(Box<dyn Decoder>);
+unsafe impl Send for SendDecoder {}
+struct SendFormatReader(Box<dyn FormatReader>);
+unsafe impl Send for SendFormatReader {}
+
 pub struct SymphoniaDecoder {
-    decoder: Box<dyn Decoder>,
+    decoder: SendDecoder,
     track_id: u32,
-    probed: Box<dyn FormatReader>,
+    probed: SendFormatReader,
     buffer: SampleBuffer<f32>,
     spec: SignalSpec,
     current_frame_offset: usize,
@@ -51,22 +60,22 @@ impl SymphoniaDecoder {
             &FormatOptions::default(),
             &MetadataOptions::default(),
         ).map_err(SymphoniaError::from)?;
-        let probed = probe_result.format;
+        let probed = SendFormatReader(probe_result.format);
 
-        let track = probed
+        let track = probed.0
             .default_track()
             .and_then(|v| if is_codec_null(v) { None } else { Some(v) })
-            .or_else(|| probed.tracks().iter().find(|v| !is_codec_null(v)))
+            .or_else(|| probed.0.tracks().iter().find(|v| !is_codec_null(v)))
             .ok_or(SymphoniaError::NoStreams)?;
 
         let codec_params = &track.codec_params;
 
-        let decoder = CODEC_REGISTRY.make(
+        let decoder = SendDecoder(CODEC_REGISTRY.make(
             codec_params,
             &DecoderOptions::default(),
-        )?;
+        )?);
 
-        let cp_dec = decoder.codec_params();
+        let cp_dec = decoder.0.codec_params();
 
         let duration = codec_params.n_frames.and_then(|n_frames| {
             codec_params.time_base.map(|tb: symphonia::core::units::TimeBase| {
@@ -88,7 +97,7 @@ impl SymphoniaDecoder {
             codec_sample_rate = codec_params.sample_rate,
             decoder_sample_rate = spec.rate,
             decoder_channels = spec.channels.count(),
-            duration_s = duration.map(|d| d.as_secs_f64()),
+            duration_s = duration.map(|d: std::time::Duration| d.as_secs_f64()),
             "SymphoniaDecoder created"
         );
         // Log detailed codec tracking info for isomp4 debugging
@@ -125,7 +134,7 @@ impl SymphoniaDecoder {
             pos.as_secs(),
             pos.subsec_nanos() as f64 / 1_000_000_000.0,
         );
-        match self.probed.seek(SeekMode::Coarse, SeekTo::Time {
+        match self.probed.0.seek(SeekMode::Coarse, SeekTo::Time {
             time,
             track_id: Some(self.track_id),
         }) {
@@ -150,7 +159,7 @@ impl Iterator for SymphoniaDecoder {
 
         if self.current_frame_offset >= self.buffer.len() {
             loop {
-                let packet = match self.probed.next_packet() {
+                let packet = match self.probed.0.next_packet() {
                     Ok(packet) => packet,
                     Err(err) => {
                         tracing::debug!("Error reading packet: {err:?}");
@@ -163,7 +172,7 @@ impl Iterator for SymphoniaDecoder {
                     continue;
                 }
 
-                match self.decoder.decode(&packet) {
+                match self.decoder.0.decode(&packet) {
                     Ok(audio_buf) => {
                             if audio_buf.frames() == 0 {
                                 continue;
@@ -193,8 +202,6 @@ impl Iterator for SymphoniaDecoder {
         Some(sample)
     }
 }
-
-unsafe impl Send for SymphoniaDecoder {}
 
 impl Source for SymphoniaDecoder {
     fn current_span_len(&self) -> Option<usize> {

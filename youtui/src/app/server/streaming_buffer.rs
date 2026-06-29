@@ -27,7 +27,7 @@ impl SharedBuffer {
     }
 
     pub fn len(&self) -> usize {
-        self.inner.lock().unwrap().data.len()
+        self.inner.lock().unwrap_or_else(|e| e.into_inner()).data.len()
     }
 
     pub fn writer(self: &Arc<Self>) -> SharedBufferWriter {
@@ -38,13 +38,13 @@ impl SharedBuffer {
     }
 
     pub fn set_total_len(&self, len: u64) {
-        let mut inner = self.inner.lock().unwrap();
+        let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         inner.total_len = Some(len);
         self.cvar.notify_all();
     }
 
     pub fn total_len(&self) -> Option<u64> {
-        self.inner.lock().unwrap().total_len
+        self.inner.lock().unwrap_or_else(|e| e.into_inner()).total_len
     }
 
     /// Block until `total_len` is set or `timeout` elapses.
@@ -56,7 +56,7 @@ impl SharedBuffer {
     #[allow(dead_code)]
     pub fn wait_for_total_len(&self, timeout: std::time::Duration) -> Option<u64> {
         let start = std::time::Instant::now();
-        let mut inner = self.inner.lock().unwrap();
+        let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         while inner.total_len.is_none() && !inner.finished && !inner.failed {
             let elapsed = start.elapsed();
             if elapsed >= timeout {
@@ -72,7 +72,7 @@ impl SharedBuffer {
     }
 
     pub fn data(&self) -> Vec<u8> {
-        self.inner.lock().unwrap().data.clone()
+        self.inner.lock().unwrap_or_else(|e| e.into_inner()).data.clone()
     }
 
     pub fn reader(self: &Arc<Self>) -> SharedBufferReader {
@@ -90,13 +90,13 @@ pub struct SharedBufferWriter {
 
 impl SharedBufferWriter {
     pub fn write(&mut self, data: &[u8]) {
-        let mut inner = self.buffer.inner.lock().unwrap();
+        let mut inner = self.buffer.inner.lock().unwrap_or_else(|e| e.into_inner());
         inner.data.extend_from_slice(data);
         self.buffer.cvar.notify_all();
     }
 
     pub fn finish(&mut self) {
-        let mut inner = self.buffer.inner.lock().unwrap();
+        let mut inner = self.buffer.inner.lock().unwrap_or_else(|e| e.into_inner());
         inner.finished = true;
         if inner.total_len.is_none() {
             inner.total_len = Some(inner.data.len() as u64);
@@ -106,7 +106,7 @@ impl SharedBufferWriter {
     }
 
     pub fn fail(&mut self) {
-        let mut inner = self.buffer.inner.lock().unwrap();
+        let mut inner = self.buffer.inner.lock().unwrap_or_else(|e| e.into_inner());
         inner.failed = true;
         inner.finished = true;
         if inner.total_len.is_none() {
@@ -133,7 +133,7 @@ pub struct SharedBufferReader {
 
 impl Read for SharedBufferReader {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        let mut inner = self.buffer.inner.lock().unwrap();
+        let mut inner = self.buffer.inner.lock().unwrap_or_else(|e| e.into_inner());
         // If buffer is finished, clamp position to the actual data length
         // to handle SeekFrom::End positions computed from an overestimated
         // total_len (yt-dlp progress line may slightly overestimate).
@@ -141,7 +141,7 @@ impl Read for SharedBufferReader {
             self.pos = inner.data.len();
         }
         while self.pos >= inner.data.len() && !inner.finished && !inner.failed {
-            inner = self.buffer.cvar.wait(inner).unwrap();
+            inner = self.buffer.cvar.wait(inner).unwrap_or_else(|e| e.into_inner());
         }
         if self.pos >= inner.data.len() || inner.failed {
             return Ok(0);
@@ -156,7 +156,7 @@ impl Read for SharedBufferReader {
 
 impl Seek for SharedBufferReader {
     fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
-        let mut inner = self.buffer.inner.lock().unwrap();
+        let mut inner = self.buffer.inner.lock().unwrap_or_else(|e| e.into_inner());
         let new_pos = match pos {
             SeekFrom::Start(offset) => offset as i64,
             SeekFrom::Current(delta) => self.pos as i64 + delta,
@@ -174,7 +174,7 @@ impl Seek for SharedBufferReader {
                     inner.total_len.unwrap() as i64 + offset
                 } else {
                     while !inner.finished && !inner.failed {
-                        inner = self.buffer.cvar.wait(inner).unwrap();
+                        inner = self.buffer.cvar.wait(inner).unwrap_or_else(|e| e.into_inner());
                     }
                     inner.data.len() as i64 + offset
                 }
@@ -260,7 +260,7 @@ mod tests {
             // Extend the buffer — just write padding to reach the needed size
             // then write the target bytes.
             {
-                let inner = w.buffer.inner.lock().unwrap();
+                let inner = w.buffer.inner.lock().unwrap_or_else(|e| e.into_inner());
                 let current = inner.data.len();
                 drop(inner);
                 let pad = vec![0u8; needed - current];
