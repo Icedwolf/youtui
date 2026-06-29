@@ -44,13 +44,6 @@ pub enum AuthType {
     Unauthenticated,
 }
 
-#[derive(ValueEnum, Copy, PartialEq, Clone, Default, Debug, Serialize, Deserialize)]
-pub enum DownloaderType {
-    #[default]
-    Native,
-    YtDlp,
-}
-
 fn default_volume() -> u8 {
     50
 }
@@ -63,10 +56,9 @@ fn default_notifications_enabled() -> bool {
     true
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Config {
     pub auth_type: AuthType,
-    pub downloader_type: DownloaderType,
     pub yt_dlp_command: String,
     pub keybinds: YoutuiKeymap,
     pub volume: u8,
@@ -78,7 +70,6 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             auth_type: Default::default(),
-            downloader_type: Default::default(),
             yt_dlp_command: default_yt_dlp_command(),
             keybinds: Default::default(),
             volume: default_volume(),
@@ -93,7 +84,6 @@ impl Default for Config {
 /// Intermediate representation of Config for serde.
 pub struct ConfigIR {
     pub auth_type: AuthType,
-    pub downloader_type: DownloaderType,
     #[serde(default = "default_yt_dlp_command")]
     pub yt_dlp_command: String,
     pub keybinds: YoutuiKeymapIR,
@@ -110,7 +100,6 @@ impl TryFrom<ConfigIR> for Config {
     fn try_from(value: ConfigIR) -> std::result::Result<Self, Self::Error> {
         let ConfigIR {
             auth_type,
-            downloader_type,
             keybinds,
             mode_names,
             yt_dlp_command,
@@ -120,7 +109,6 @@ impl TryFrom<ConfigIR> for Config {
         } = value;
         Ok(Config {
             auth_type,
-            downloader_type,
             keybinds: YoutuiKeymap::try_from_stringy(keybinds, mode_names)?,
             yt_dlp_command,
             volume,
@@ -211,7 +199,6 @@ raisevolume = {action = "vol_up", visiblity = "hidden"}"#;
             auth_type,
             keybinds,
             mode_names,
-            downloader_type,
             yt_dlp_command,
             volume: _,
             audio_quality: _,
@@ -221,7 +208,6 @@ raisevolume = {action = "vol_up", visiblity = "hidden"}"#;
         let config = Config {
             auth_type,
             keybinds,
-            downloader_type,
             yt_dlp_command,
             volume: super::default_volume(),
             audio_quality: super::AudioQuality::default(),

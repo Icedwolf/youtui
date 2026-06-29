@@ -44,7 +44,17 @@ pub fn draw_footer(
             duration = w
                 .playlist
                 .get_song_from_id(*id)
-                .map(|s| s.actual_duration.map(|d| d.as_secs() as usize).unwrap_or(s.duration_secs))
+                .map(|s| {
+                    s.actual_duration
+                        .map(|d| d.as_secs() as usize)
+                        .filter(|&secs| {
+                            // Streaming WAV decoder may report bogus duration
+                            // (sentinel from unknown chunk size). Fall back to
+                            // API metadata if decoder report is unreasonable.
+                            secs < 7200 || secs <= s.duration_secs * 2
+                        })
+                        .unwrap_or(s.duration_secs)
+                })
                 .unwrap_or(0);
             progress = w.playlist.get_cur_played_dur().unwrap_or_default();
             (progress.as_secs_f64() / duration as f64).clamp(0.0, 1.0)

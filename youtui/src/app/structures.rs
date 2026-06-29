@@ -1,11 +1,9 @@
 use serde::{Serialize, Deserialize};
-use super::server::song_downloader::InMemSong;
 use super::view::SortDirection;
 use itertools::Itertools;
 use std::borrow::Cow;
 use std::ops::Deref;
 use std::rc::Rc;
-use std::sync::Arc;
 use std::time::Duration;
 use tracing::{debug, warn};
 use ytmapi_rs::common::{
@@ -205,8 +203,7 @@ pub enum DownloadStatus {
     None,
     Queued,
     Downloading(Percentage),
-    #[serde(skip)]
-    Downloaded(Arc<InMemSong>),
+    Downloaded,
     Failed,
     Retrying { times_retried: usize },
 }
@@ -251,7 +248,7 @@ impl DownloadStatus {
             Self::Queued => "↓",
             Self::None => " ",
             Self::Downloading(_) => "↓",
-            Self::Downloaded(_) => "✓",
+            Self::Downloaded => "✓",
             Self::Retrying { .. } => "↻",
         }
     }

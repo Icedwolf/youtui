@@ -8,7 +8,7 @@ use async_callback_manager::PanickingReceiverStream;
 use async_cell::sync::AsyncCell;
 use futures::stream::FuturesUnordered;
 use futures::{Stream, StreamExt};
-use rusty_ytdl::reqwest;
+use reqwest;
 use std::borrow::Borrow;
 use std::collections::hash_map;
 use std::collections::HashMap;
@@ -22,6 +22,7 @@ use ytmapi_rs::common::{AlbumID, ArtistChannelID, PlaylistID, SearchSuggestion, 
 use ytmapi_rs::parse::{
     AlbumSong, GetAlbum, GetArtistAlbums, GetArtistAlbumsAlbum, ParsedSongAlbum,
     ParsedSongArtist, PlaylistItem, SearchResultArtist, SearchResultPlaylist, SearchResultSong,
+    SearchResults,
 };
 use ytmapi_rs::query::{GetAlbumQuery, GetArtistAlbumsQuery};
 
@@ -66,6 +67,9 @@ impl Api {
     }
     pub async fn search_songs(&self, text: String) -> Result<Vec<SearchResultSong>> {
         search_songs(self.get_api().await?, text).await
+    }
+    pub async fn search_broad(&self, text: String) -> Result<SearchResults> {
+        search_broad(self.get_api().await?, text).await
     }
     pub fn get_playlist_songs(
         &self,
@@ -269,6 +273,16 @@ async fn search_songs(api: ConcurrentApi, text: String) -> Result<Vec<SearchResu
     query_api_with_retry(&api, query).await
 }
 
+/// Unfiltered search that returns all result types (songs, videos, albums, etc.).
+/// May include multiple entries for the same (title, artist) pair that the
+/// SongsFilter deduplicates away.
+async fn search_broad(api: ConcurrentApi, text: String) -> Result<SearchResults> {
+    tracing::info!("Broad search for {text}");
+    let query = ytmapi_rs::query::SearchQuery::<ytmapi_rs::query::search::BasicSearch>::from(text.as_str())
+        .with_spelling_mode(ytmapi_rs::query::search::SpellingMode::ExactMatch);
+    query_api_with_retry(&api, query).await
+}
+
 pub async fn get_search_suggestions(
     api: ConcurrentApi,
     text: String,
@@ -386,13 +400,13 @@ fn get_artist_songs(
                     match album_pages_result {
                         Ok(r) => r.into_iter().flatten().map(|a| a.browse_id).collect(),
                         Err(e) => {
-                            error!("Received error on get_artist_albums query \"{}\"", e);
+                            warn!("get_artist_albums continuation failed (\"{}\"), falling back to first page only", e);
                             send_or_error(
-                                tx,
+                                &tx,
                                 GetArtistSongsProgressUpdate::GetArtistAlbumsError(e),
                             )
                             .await;
-                            return;
+                            results.into_iter().map(|r| r.album_id).collect()
                         }
                     }
                 }
@@ -618,6 +632,59 @@ fn get_playlist_songs(
     });
     PanickingReceiverStream::new(rx, handle)
 }
+
+/// Given a search result song that is NOT an audio track (Omv/Ugc/etc.),
+/// try to find its audio-only (Atv) version by doing a targeted search
+/// for the song's title + artist.  Returns the Atv `video_id` if found,
+/// otherwise returns the original `video_id`.
+///
+/// This mirrors the album OMV resolution logic but operates on individual
+/// songs from search results rather than album tracks.
+pub async fn resolve_to_audio_track(
+    api: &ConcurrentApi,
+    song: &SearchResultSong,
+) -> VideoID<'static> {
+    let search_query = format!("{} {}", song.title, song.artist);
+    // First try the filtered songs search.
+    if let Ok(results) = search_songs(api.clone(), search_query.clone()).await {
+        for result in &results {
+            if result.is_audio_track()
+                && result.title == song.title
+                && result.artist == song.artist
+            {
+                info!(
+                    original = song.video_id.get_raw(),
+                    resolved = result.video_id.get_raw(),
+                    title = song.title.as_str(),
+                    artist = song.artist.as_str(),
+                    "Resolved Omv search result to Atv track"
+                );
+                return result.video_id.clone();
+            }
+        }
+    }
+    // Fallback: broad search (may return multiple results per title+artist).
+    if let Ok(results) = search_broad(api.clone(), search_query).await {
+        for result in &results.songs {
+            if result.is_audio_track()
+                && result.title == song.title
+                && result.artist == song.artist
+            {
+                info!(
+                    original = song.video_id.get_raw(),
+                    resolved = result.video_id.get_raw(),
+                    title = song.title.as_str(),
+                    artist = song.artist.as_str(),
+                    "Resolved Omv search result to Atv track (broad search)"
+                );
+                return result.video_id.clone();
+            }
+        }
+    }
+    song.video_id.clone()
+}
+
+
 
 /// Build a title → video_id map from audio-only search results.
 /// Used to cross-reference Omv album tracks with their Atv equivalents.

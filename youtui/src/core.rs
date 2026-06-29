@@ -20,6 +20,7 @@ use tracing::error;
 
 /// Send a message to the specified Tokio mpsc::Sender, and if sending fails,
 /// log an error with Tracing.
+#[allow(dead_code)]
 pub async fn send_or_error<T, S: Borrow<mpsc::Sender<T>>>(tx: S, msg: T) {
     tx.borrow()
         .send(msg)

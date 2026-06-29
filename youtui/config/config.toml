@@ -1,6 +1,6 @@
 # Example config.toml file for youtui containing the application defaults.
 auth_type = "Browser"
-downloader_type = "Native"
+# downloader_type removed — streaming-only via yt-dlp
 yt_dlp_command = "yt-dlp"
 notifications_enabled = true
 
@@ -25,6 +25,7 @@ C-c = "quit"
 F5 = {action = "playlist.view_browser", visibility = "global"}
 s = {action = "playlist.toggle_shuffle", visibility = "global"}
 A = {action = "playlist.cycle_audio_quality", visibility = "global"}
+r = {action = "playlist.resolve_audio_tracks", visibility = "global"}
 "/" = {action = "playlist.toggle_search", visibility = "global"}
 enter.enter = "playlist.play_selected"
 enter.d = "playlist.delete_selected"

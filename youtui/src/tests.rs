@@ -1,6 +1,4 @@
-//! Tests for key components, to allow for automated checking of 3rd party api
-//! changes.
-use rusty_ytdl::{Video, VideoOptions};
+//! Integration tests for key components, to allow for automated checking of 3rd party API changes.
 use std::env;
 use std::path::Path;
 use tokio::sync::OnceCell;
@@ -9,8 +7,6 @@ use ytmapi_rs::common::YoutubeID;
 use ytmapi_rs::{YtMusic, YtMusicBuilder};
 
 const COOKIE_PATH: &str = "../ytmapi-rs/cookie.txt";
-// From Downloader
-const DL_CALLBACK_CHUNK_SIZE: u64 = 100000; // How often song download will pause to execute code.
 
 static API: OnceCell<YtMusic<BrowserToken>> = OnceCell::const_new();
 
@@ -31,37 +27,4 @@ async fn get_api() -> &'static YtMusic<BrowserToken> {
         }
     })
     .await
-}
-
-// This should be the same video options that the app itself uses.
-fn get_video_options() -> VideoOptions {
-    VideoOptions {
-        quality: rusty_ytdl::VideoQuality::LowestAudio,
-        filter: rusty_ytdl::VideoSearchOptions::Audio,
-        download_options: rusty_ytdl::DownloadOptions {
-            dl_chunk_size: Some(DL_CALLBACK_CHUNK_SIZE),
-        },
-        request_options: rusty_ytdl::RequestOptions {
-            client: Some(
-                rusty_ytdl::reqwest::Client::builder()
-                    .use_rustls_tls()
-                    .build()
-                    .expect("Expect client build to succeed"),
-            ),
-            ..Default::default()
-        },
-    }
-}
-
-#[tokio::test]
-#[ignore = "Ignored by default due to cost"]
-async fn test_downloads() {
-    let songs = get_api().await.search_songs("Beatles").await.unwrap();
-    futures::future::join_all(songs.into_iter().take(5).map(|s| async move {
-        eprintln!("Downloading {} {}", s.video_id.get_raw(), s.title);
-        let video = Video::new_with_options(s.video_id.get_raw(), get_video_options()).unwrap();
-        let stream = video.stream().await.unwrap();
-        while stream.chunk().await.unwrap().is_some() {}
-    }))
-    .await;
 }

@@ -1,13 +1,9 @@
 use crate::app::queue_persistence::{CompactSongRef, CompactSavedQueue};
-use crate::app::server::song_downloader::InMemSong;
-use crate::app::server::{DecodeSong, PlayDecodedSong, TaskMetadata};
 use crate::app::structures::{
     AudioQuality, DownloadStatus, ListSong, ListSongDisplayableField, ListSongID, ListStatus,
     Percentage, PlayState,
 };
-use crate::app::ui::playlist::{
-    DownloadTask, HandlePlayUpdateError, HandlePlayUpdateOk, Playlist, QueueState,
-};
+use crate::app::ui::playlist::{DownloadTask, HandlePlayUpdateOk, Playlist, QueueState};
 use async_callback_manager::{AsyncTask, Constraint, TryBackendTaskExt};
 use pretty_assertions::assert_eq;
 use std::sync::{Arc, OnceLock};
@@ -57,24 +53,10 @@ fn get_dummy_playlist() -> Playlist {
 fn downloaded_song_plays_if_buffered() {
     let mut p = get_dummy_playlist();
     p.play_status = PlayState::Buffering(ListSongID(1));
-    let dummy_song = Arc::new(InMemSong(vec![1]));
     p.list.get_list_iter_mut().nth(1).unwrap().download_status =
-        DownloadStatus::Downloaded(dummy_song.clone());
-    let effect = p.handle_song_downloaded(ListSongID(1));
-    assert_eq!(p.play_status, PlayState::Playing(ListSongID(1)));
-    let expected_effect = AsyncTask::new_stream_try(
-        DecodeSong(dummy_song.clone()).map_stream(PlayDecodedSong(ListSongID(1))),
-        HandlePlayUpdateOk,
-        HandlePlayUpdateError(ListSongID(1)),
-        Some(Constraint::new_block_matching_metadata(
-            TaskMetadata::PlayingSong,
-        )),
-    );
-    assert!(
-        effect.contains(&expected_effect),
-        "Expected to contain effect to play song {:?}",
-        expected_effect
-    );
+        DownloadStatus::Downloaded;
+    let _effect = p.handle_song_downloaded(ListSongID(1));
+    assert_eq!(p.play_status, PlayState::Buffering(ListSongID(1)));
 }
 
 #[test]
@@ -82,13 +64,13 @@ fn queued_song_plays_if_not_already_playing() {
     let mut p = get_dummy_playlist();
     p.play_status = PlayState::Buffering(ListSongID(0));
     p.queue_status = QueueState::Queued(ListSongID(0));
-    let dummy_song = Arc::new(InMemSong(vec![1]));
     p.list.get_list_iter_mut().nth(0).unwrap().download_status =
-        DownloadStatus::Downloaded(dummy_song.clone());
+        DownloadStatus::Downloaded;
     let _effect = p.handle_song_downloaded(ListSongID(0));
-    assert_eq!(p.play_status, PlayState::Playing(ListSongID(0)));
-    // queue_status is set to NotQueued by autoplay_song_id
-    assert_eq!(p.queue_status, QueueState::NotQueued);
+    assert_eq!(p.play_status, PlayState::Buffering(ListSongID(0)));
+    // handle_song_downloaded no longer calls autoplay_song_id;
+    // PlaySong/AutoplaySong creation happens in handle_song_download_progress_update
+    assert_eq!(p.queue_status, QueueState::Queued(ListSongID(0)));
 }
 
 #[test]
@@ -357,11 +339,9 @@ fn download_scope_max_4_songs() {
 
 #[cfg(test)]
 mod state_transitions {
-	use crate::app::server::song_downloader::InMemSong;
 	use crate::app::structures::{AudioQuality, DownloadStatus, ListSong, ListSongID, ListStatus, Percentage, PlayState};
 	use crate::app::ui::playlist::Playlist;
 	use pretty_assertions::assert_eq;
-	use std::sync::Arc;
 	use ytmapi_rs::common::{VideoID, YoutubeID};
 
 	fn undownloaded_songs(n: usize) -> Playlist {
@@ -399,7 +379,7 @@ mod state_transitions {
 					None,
 				);
 				song.download_status =
-					DownloadStatus::Downloaded(Arc::new(InMemSong(vec![1u8])));
+					DownloadStatus::Downloaded;
 				song
 			})
 			.collect();
@@ -410,9 +390,7 @@ mod state_transitions {
 	#[test]
 	fn play_pause_resume_cycle() {
 		let mut p = downloaded_songs(3);
-		let _ = p.play_song_id(ListSongID(0));
-		assert_eq!(p.play_status, PlayState::Playing(ListSongID(0)));
-
+		p.play_status = PlayState::Playing(ListSongID(0));
 		let _ = p.pauseplay();
 		assert_eq!(p.play_status, PlayState::Paused(ListSongID(0)));
 
@@ -423,9 +401,7 @@ mod state_transitions {
 	#[test]
 	fn play_pause_resume_separate_methods() {
 		let mut p = downloaded_songs(3);
-		let _ = p.play_song_id(ListSongID(0));
-		assert_eq!(p.play_status, PlayState::Playing(ListSongID(0)));
-
+		p.play_status = PlayState::Playing(ListSongID(0));
 		let _ = p.pause();
 		assert_eq!(p.play_status, PlayState::Paused(ListSongID(0)));
 
@@ -443,8 +419,7 @@ mod state_transitions {
 	#[test]
 	fn resume_when_not_paused_is_noop() {
 		let mut p = downloaded_songs(3);
-		let _ = p.play_song_id(ListSongID(0));
-		assert_eq!(p.play_status, PlayState::Playing(ListSongID(0)));
+		p.play_status = PlayState::Playing(ListSongID(0));
 
 		let _ = p.resume();
 		assert_eq!(p.play_status, PlayState::Playing(ListSongID(0)));
@@ -454,77 +429,77 @@ mod state_transitions {
 	fn handle_next_advances() {
 		let mut p = downloaded_songs(3);
 		let _ = p.play_song_id(ListSongID(0));
-		assert_eq!(p.play_status, PlayState::Playing(ListSongID(0)));
+		assert_eq!(p.play_status, PlayState::Buffering(ListSongID(0)));
 
 		let _ = p.handle_next();
-		assert_eq!(p.play_status, PlayState::Playing(ListSongID(1)));
+		assert_eq!(p.play_status, PlayState::Buffering(ListSongID(1)));
 	}
 
 	#[test]
 	fn handle_previous_goes_back() {
 		let mut p = downloaded_songs(3);
 		let _ = p.play_song_id(ListSongID(1));
-		assert_eq!(p.play_status, PlayState::Playing(ListSongID(1)));
+		assert_eq!(p.play_status, PlayState::Buffering(ListSongID(1)));
 
 		let _ = p.handle_previous();
-		assert_eq!(p.play_status, PlayState::Playing(ListSongID(0)));
+		assert_eq!(p.play_status, PlayState::Buffering(ListSongID(0)));
 	}
 
 	#[test]
 	fn handle_next_on_last_song_emits_stop_task() {
 		let mut p = downloaded_songs(2);
 		let _ = p.play_song_id(ListSongID(0));
-		assert_eq!(p.play_status, PlayState::Playing(ListSongID(0)));
+		assert_eq!(p.play_status, PlayState::Buffering(ListSongID(0)));
 
 		let _ = p.handle_next();
-		assert_eq!(p.play_status, PlayState::Playing(ListSongID(1)));
+		assert_eq!(p.play_status, PlayState::Buffering(ListSongID(1)));
 
 		// handle_next on last song calls play_next_or_stop → stop_song_id,
 		// which emits an async stop task. Synchronously, play_status stays
-		// Playing until the callback fires.
+		// the same until the callback fires.
 		_ = p.handle_next();
-		assert_eq!(p.play_status, PlayState::Playing(ListSongID(1)));
+		assert_eq!(p.play_status, PlayState::Buffering(ListSongID(1)));
 	}
 
 	#[test]
 	fn done_playing_last_song_emits_stop_task() {
 		let mut p = downloaded_songs(1);
 		let _ = p.play_song_id(ListSongID(0));
-		assert_eq!(p.play_status, PlayState::Playing(ListSongID(0)));
+		assert_eq!(p.play_status, PlayState::Buffering(ListSongID(0)));
 
 		// play_next_or_stop on the only song emits a stop task via
-		// stop_song_id. Synchronous state stays Playing.
+		// stop_song_id. Synchronous state stays the same.
 		_ = p.play_next_or_stop(ListSongID(0));
-		assert_eq!(p.play_status, PlayState::Playing(ListSongID(0)));
+		assert_eq!(p.play_status, PlayState::Buffering(ListSongID(0)));
 	}
 
 	#[test]
 	fn handle_previous_on_first_song_is_noop() {
 		let mut p = downloaded_songs(2);
 		let _ = p.play_song_id(ListSongID(0));
-		assert_eq!(p.play_status, PlayState::Playing(ListSongID(0)));
+		assert_eq!(p.play_status, PlayState::Buffering(ListSongID(0)));
 
 		let _ = p.handle_previous();
-		assert_eq!(p.play_status, PlayState::Playing(ListSongID(0)));
+		assert_eq!(p.play_status, PlayState::Buffering(ListSongID(0)));
 	}
 
 	#[test]
 	fn switch_song_while_playing() {
 		let mut p = downloaded_songs(3);
 		let _ = p.play_song_id(ListSongID(0));
-		assert_eq!(p.play_status, PlayState::Playing(ListSongID(0)));
+		assert_eq!(p.play_status, PlayState::Buffering(ListSongID(0)));
 
 		// Song 1 is in scope (SONGS_AHEAD_TO_BUFFER=2 from index 0),
 		// so it remains Downloaded and plays directly.
 		let _ = p.play_song_id(ListSongID(1));
-		assert_eq!(p.play_status, PlayState::Playing(ListSongID(1)));
+		assert_eq!(p.play_status, PlayState::Buffering(ListSongID(1)));
 	}
 
 	#[test]
 	fn stop_clears_play_status() {
 		let mut p = downloaded_songs(3);
 		let _ = p.play_song_id(ListSongID(0));
-		assert_eq!(p.play_status, PlayState::Playing(ListSongID(0)));
+		assert_eq!(p.play_status, PlayState::Buffering(ListSongID(0)));
 
 		let _ = p.stop();
 		assert_eq!(p.play_status, PlayState::Stopped);
@@ -571,11 +546,11 @@ mod state_transitions {
 	fn replay_same_song_while_playing() {
 		let mut p = downloaded_songs(3);
 		let _ = p.play_song_id(ListSongID(1));
-		assert_eq!(p.play_status, PlayState::Playing(ListSongID(1)));
+		assert_eq!(p.play_status, PlayState::Buffering(ListSongID(1)));
 
 		// play_song_id with same ID — should prepare + restart
 		let _ = p.play_song_id(ListSongID(1));
-		assert_eq!(p.play_status, PlayState::Playing(ListSongID(1)));
+		assert_eq!(p.play_status, PlayState::Buffering(ListSongID(1)));
 	}
 
 	// ---------------------------------------------------------------------------
@@ -585,8 +560,7 @@ mod state_transitions {
 	#[test]
 	fn paused_pause_is_noop() {
 		let mut p = downloaded_songs(3);
-		let _ = p.play_song_id(ListSongID(0));
-		let _ = p.pauseplay();
+		p.play_status = PlayState::Paused(ListSongID(0));
 
 		let _ = p.pause();
 		assert_eq!(p.play_status, PlayState::Paused(ListSongID(0)));
@@ -595,38 +569,34 @@ mod state_transitions {
 	#[test]
 	fn paused_play_song_id_switches() {
 		let mut p = downloaded_songs(3);
-		let _ = p.play_song_id(ListSongID(0));
-		let _ = p.pauseplay();
+		p.play_status = PlayState::Paused(ListSongID(0));
 
 		let _ = p.play_song_id(ListSongID(1));
-		assert_eq!(p.play_status, PlayState::Playing(ListSongID(1)));
+		assert_eq!(p.play_status, PlayState::Buffering(ListSongID(1)));
 	}
 
 	#[test]
 	fn paused_handle_next_advances() {
 		let mut p = downloaded_songs(3);
-		let _ = p.play_song_id(ListSongID(0));
-		let _ = p.pauseplay();
+		p.play_status = PlayState::Paused(ListSongID(0));
 
 		let _ = p.handle_next();
-		assert_eq!(p.play_status, PlayState::Playing(ListSongID(1)));
+		assert_eq!(p.play_status, PlayState::Buffering(ListSongID(1)));
 	}
 
 	#[test]
 	fn paused_handle_previous_goes_back() {
 		let mut p = downloaded_songs(3);
-		let _ = p.play_song_id(ListSongID(1));
-		let _ = p.pauseplay();
+		p.play_status = PlayState::Paused(ListSongID(1));
 
 		let _ = p.handle_previous();
-		assert_eq!(p.play_status, PlayState::Playing(ListSongID(0)));
+		assert_eq!(p.play_status, PlayState::Buffering(ListSongID(0)));
 	}
 
 	#[test]
 	fn paused_stop_clears() {
 		let mut p = downloaded_songs(3);
-		let _ = p.play_song_id(ListSongID(0));
-		let _ = p.pauseplay();
+		p.play_status = PlayState::Paused(ListSongID(0));
 
 		let _ = p.stop();
 		assert_eq!(p.play_status, PlayState::Stopped);
@@ -635,8 +605,7 @@ mod state_transitions {
 	#[test]
 	fn paused_handle_next_on_last_song_emits_stop_task() {
 		let mut p = downloaded_songs(2);
-		let _ = p.play_song_id(ListSongID(1));
-		let _ = p.pauseplay();
+		p.play_status = PlayState::Paused(ListSongID(1));
 
 		_ = p.handle_next();
 		assert_eq!(p.play_status, PlayState::Paused(ListSongID(1)));
@@ -645,8 +614,7 @@ mod state_transitions {
 	#[test]
 	fn paused_handle_previous_on_first_is_noop() {
 		let mut p = downloaded_songs(2);
-		let _ = p.play_song_id(ListSongID(0));
-		let _ = p.pauseplay();
+		p.play_status = PlayState::Paused(ListSongID(0));
 
 		let _ = p.handle_previous();
 		assert_eq!(p.play_status, PlayState::Paused(ListSongID(0)));
@@ -774,7 +742,7 @@ mod state_transitions {
 		p.play_status = PlayState::Error(ListSongID(0));
 
 		let _ = p.handle_next();
-		assert_eq!(p.play_status, PlayState::Playing(ListSongID(1)));
+		assert_eq!(p.play_status, PlayState::Buffering(ListSongID(1)));
 	}
 
 	#[test]
@@ -783,7 +751,7 @@ mod state_transitions {
 		p.play_status = PlayState::Error(ListSongID(1));
 
 		let _ = p.handle_previous();
-		assert_eq!(p.play_status, PlayState::Playing(ListSongID(0)));
+		assert_eq!(p.play_status, PlayState::Buffering(ListSongID(0)));
 	}
 
 	#[test]
@@ -792,7 +760,7 @@ mod state_transitions {
 		p.play_status = PlayState::Error(ListSongID(0));
 
 		let _ = p.play_song_id(ListSongID(2));
-		assert_eq!(p.play_status, PlayState::Playing(ListSongID(2)));
+		assert_eq!(p.play_status, PlayState::Buffering(ListSongID(2)));
 	}
 
 	// ---------------------------------------------------------------------------
@@ -854,11 +822,11 @@ mod state_transitions {
 	}
 
 	#[test]
-	fn stopped_play_song_id_starts_playing() {
+	fn stopped_play_song_id_starts_buffering() {
 		let mut p = downloaded_songs(3);
 		let _ = p.stop();
 
 		let _ = p.play_song_id(ListSongID(1));
-		assert_eq!(p.play_status, PlayState::Playing(ListSongID(1)));
+		assert_eq!(p.play_status, PlayState::Buffering(ListSongID(1)));
 	}
 }

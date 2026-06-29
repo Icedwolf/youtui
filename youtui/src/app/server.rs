@@ -1,9 +1,8 @@
-use crate::config::{ApiKey, Config};
+use crate::config::Config;
 pub use messages::*;
-use rusty_ytdl::reqwest;
+use reqwest;
 use std::sync::Arc;
-use std::time::Duration;
-use tracing::{debug, warn};
+use tracing::warn;
 
 mod messages;
 
@@ -11,41 +10,72 @@ pub mod api;
 pub mod api_error_handler;
 pub mod player;
 pub mod song_downloader;
-
-const DL_CALLBACK_CHUNK_SIZE: u64 = 100000; // How often song download will pause to execute code.
-const MAX_RETRIES: usize = 5;
-const AUDIO_QUALITY: rusty_ytdl::VideoQuality = rusty_ytdl::VideoQuality::HighestAudio;
+pub mod streaming_buffer;
 
 pub type ArcServer = Arc<Server>;
 
-/// Application backend that is capable of spawning concurrent tasks in response
-/// to requests. Tasks each receive a handle to respond back to the caller.
 pub struct Server {
     pub api: api::Api,
     pub player: player::Player,
-    pub song_downloader: song_downloader::SongDownloader,
     pub api_error_handler: api_error_handler::ApiErrorHandler,
+    pub config: Config,
+    pub po_token: Option<String>,
+}
+
+impl Server {
+    pub fn new(api_key: crate::config::ApiKey, po_token: Option<String>, config: &Config) -> Server {
+        let downloader_client = {
+            use reqwest::header::{HeaderValue, HeaderMap, COOKIE};
+            if let Some(cookie) = extract_cookie_header(&api_key) {
+                match HeaderValue::from_str(&cookie) {
+                    Ok(cookie_val) => {
+                        let mut headers = HeaderMap::new();
+                        headers.insert(COOKIE, cookie_val);
+                        new_reqwest_client_builder()
+                            .default_headers(headers)
+                            .build()
+                            .expect("Expected reqwest client build to succeed")
+                    }
+                    Err(e) => {
+                        warn!("Invalid cookie header, falling back to unauthenticated client: {e}");
+                        new_reqwest_client_builder()
+                            .build()
+                            .expect("Expected reqwest client build to succeed")
+                    }
+                }
+            } else {
+                new_reqwest_client_builder()
+                    .build()
+                    .expect("Expected reqwest client build to succeed")
+            }
+        };
+        let api_client = downloader_client.clone();
+        let api = api::Api::new(api_key, api_client);
+        let player = player::Player::new();
+        let api_error_handler = api_error_handler::ApiErrorHandler::new();
+        Server {
+            api,
+            player,
+            api_error_handler,
+            config: config.clone(),
+            po_token,
+        }
+    }
 }
 
 fn new_reqwest_client_builder() -> reqwest::ClientBuilder {
     reqwest::Client::builder()
         .use_rustls_tls()
         .pool_max_idle_per_host(8)
-        .pool_idle_timeout(Duration::from_secs(90))
-        .tcp_keepalive(Duration::from_secs(60))
-        .connect_timeout(Duration::from_secs(15))
-        .timeout(Duration::from_secs(30))
+        .pool_idle_timeout(std::time::Duration::from_secs(90))
+        .tcp_keepalive(std::time::Duration::from_secs(60))
+        .connect_timeout(std::time::Duration::from_secs(15))
+        .timeout(std::time::Duration::from_secs(30))
 }
 
-/// Extract YouTube cookies from a BrowserToken cookie file and build a Cookie
-/// header value for use with the streaming downloader.
-///
-/// Handles two formats:
-/// - Netscape cookie file (tab-separated, 7+ fields per line)
-/// - Raw Cookie header (`Cookie: name=value; name2=value2` or `name=value; ...`)
-fn extract_cookie_header(api_key: &ApiKey) -> Option<String> {
+fn extract_cookie_header(api_key: &crate::config::ApiKey) -> Option<String> {
     match api_key {
-        ApiKey::BrowserToken(cookie_str) => {
+        crate::config::ApiKey::BrowserToken(cookie_str) => {
             let mut cookies: Vec<String> = Vec::new();
             for line in cookie_str.lines() {
                 let line = line.trim();
@@ -54,11 +84,8 @@ fn extract_cookie_header(api_key: &ApiKey) -> Option<String> {
                 }
                 let fields: Vec<&str> = line.split('\t').collect();
                 if fields.len() >= 7 {
-                    // Netscape format: domain flag path secure expiry name value
                     cookies.push(format!("{}={}", fields[5], fields[6]));
                 } else {
-                    // Raw Cookie header: "Cookie: name=value; name2=value2"
-                    // or just "name=value; name2=value2"
                     let header = line.strip_prefix("Cookie:").unwrap_or(line).trim();
                     for kv in header.split(';') {
                         let kv = kv.trim();
@@ -75,55 +102,6 @@ fn extract_cookie_header(api_key: &ApiKey) -> Option<String> {
             if cookies.is_empty() { None } else { Some(cookies.join("; ")) }
         }
         _ => None,
-    }
-}
-
-impl Server {
-    pub fn new(api_key: ApiKey, po_token: Option<String>, config: &Config) -> Server {
-        let cookie_str = match &api_key {
-            ApiKey::BrowserToken(s) => Some(s.clone()),
-            _ => None,
-        };
-        // Build a single reqwest Client — with cookie headers when BrowserToken
-        // is used, otherwise plain. Clone for API vs downloader (Arc-cheap).
-        let downloader_client = if let Some(cookie) = extract_cookie_header(&api_key) {
-            match reqwest::header::HeaderValue::from_str(&cookie) {
-                Ok(cookie_val) => {
-                    let mut headers = reqwest::header::HeaderMap::new();
-                    headers.insert(reqwest::header::COOKIE, cookie_val);
-                    debug!(
-                        "Built reqwest client with cookie headers ({} cookies extracted)",
-                        cookie.matches('=').count()
-                    );
-                    new_reqwest_client_builder()
-                        .default_headers(headers)
-                        .build()
-                        .expect("Expected reqwest client build to succeed")
-                }
-                Err(e) => {
-                    warn!("Invalid cookie header, falling back to unauthenticated client: {e}");
-                    new_reqwest_client_builder()
-                        .build()
-                        .expect("Expected reqwest client build to succeed")
-                }
-            }
-        } else {
-            new_reqwest_client_builder()
-                .build()
-                .expect("Expected reqwest client build to succeed")
-        };
-        let api_client = downloader_client.clone();
-        let api = api::Api::new(api_key, api_client);
-        let player = player::Player::new();
-        let song_downloader =
-            song_downloader::SongDownloader::new(po_token, cookie_str, downloader_client, config);
-        let api_error_handler = api_error_handler::ApiErrorHandler::new();
-        Server {
-            api,
-            player,
-            song_downloader,
-            api_error_handler,
-        }
     }
 }
 
@@ -167,15 +145,12 @@ music.youtube.com\tTRUE\t/\tTRUE\t1735689600\tVISITOR_INFO1_LIVE\txyz789\n";
 
     #[test]
     fn test_extract_cookie_header_skips_malformed_lines() {
-        // Lines with fewer than 7 tab-separated fields should be skipped,
-        // unless they match the Cookie: header format
         let cookie_file = "\
 .youtube.com\tTRUE\t/\tTRUE\tSAPISID\tabc123\n\
 .youtube.com\tTRUE\t/\tTRUE\t1735689600\tSAPISID\tvalid_value\n";
         let api_key = ApiKey::BrowserToken(cookie_file.into());
         let result = extract_cookie_header(&api_key);
         assert!(result.is_some());
-        // Only the valid line should be included
         assert_eq!(result.unwrap(), "SAPISID=valid_value");
     }
 
@@ -189,7 +164,6 @@ music.youtube.com\tTRUE\t/\tTRUE\t1735689600\tVISITOR_INFO1_LIVE\txyz789\n";
         assert!(header.contains("SAPISID=abc123"));
         assert!(header.contains("__Secure-3PSAPISID=def456"));
         assert!(header.contains("VISITOR_INFO1_LIVE=xyz789"));
-        // Should have exactly 3 cookies
         assert_eq!(header.matches("; ").count(), 2);
     }
 
@@ -222,8 +196,6 @@ music.youtube.com\tTRUE\t/\tTRUE\t1735689600\tVISITOR_INFO1_LIVE\txyz789\n";
 
     #[test]
     fn test_extract_cookie_header_netscape_preferred_over_cookie() {
-        // Even if a line looks vaguely like a Cookie header,
-        // Netscape-format lines take priority via the tab-delim check.
         let cookie_file = "\
 .youtube.com\tTRUE\t/\tTRUE\t1735689600\tSAPISID\tfrom_netscape\n\
 Cookie: SAPISID=from_header";

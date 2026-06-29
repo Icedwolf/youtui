@@ -69,7 +69,7 @@ pub enum KeyActionTree<A> {
     },
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct YoutuiKeymap {
     pub global: BTreeMap<Keybind, KeyActionTree<AppAction>>,
     pub playlist: BTreeMap<Keybind, KeyActionTree<AppAction>>,
@@ -500,6 +500,13 @@ fn default_playlist_keybinds() -> BTreeMap<Keybind, KeyActionTree<AppAction>> {
             Keybind::new_unmodified(crossterm::event::KeyCode::Char('A')),
             KeyActionTree::new_key_with_visibility(
                 AppAction::Playlist(PlaylistAction::CycleAudioQuality),
+                KeyActionVisibility::Global,
+            ),
+        ),
+        (
+            Keybind::new_unmodified(crossterm::event::KeyCode::Char('r')),
+            KeyActionTree::new_key_with_visibility(
+                AppAction::Playlist(PlaylistAction::ResolveAudioTracks),
                 KeyActionVisibility::Global,
             ),
         ),

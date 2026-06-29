@@ -1,4 +1,3 @@
-use crate::config::DownloaderType;
 use anyhow::{Context, bail};
 use clap::{Args, CommandFactory, Parser, Subcommand};
 use clap_complete::{Shell, generate};
@@ -16,12 +15,14 @@ mod async_rodio_sink;
 mod cli;
 mod config;
 mod core;
+mod decoder;
 mod drawutils;
 mod keyaction;
 mod keybind;
 mod widgets;
-mod youtube_downloader;
 
+#[cfg(test)]
+mod decoder_integration_test;
 #[cfg(test)]
 mod tests;
 
@@ -58,9 +59,6 @@ struct Arguments {
     /// Force the use of an auth type.
     #[arg(value_enum, short, long)]
     auth_type: Option<AuthType>,
-    /// Force the use of a downloader type.
-    #[arg(value_enum, short = 'D', long)]
-    downloader_type: Option<DownloaderType>,
 }
 
 #[derive(Args, Debug, Clone)]
@@ -385,7 +383,6 @@ async fn try_main() -> anyhow::Result<()> {
         auth_cmd,
         auth_type,
         generate_completions,
-        downloader_type,
         disable_media_controls,
     } = args;
     // We don't need configuration to setup oauth token or generate completions.
@@ -419,11 +416,6 @@ async fn try_main() -> anyhow::Result<()> {
     // Command line flag for auth_type should override config for auth_type.
     if let Some(auth_type) = auth_type {
         config.auth_type = auth_type
-    }
-    // Command line flag for downloader_type should override config for
-    // downloader_type.
-    if let Some(downloader_type) = downloader_type {
-        config.downloader_type = downloader_type
     }
     // Once config has loaded, load API key to memory
     // (Which key to load depends on configuration)

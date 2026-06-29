@@ -1,34 +1,13 @@
-use super::song_downloader::InMemSong;
 use crate::app::structures::ListSongID;
-use crate::async_rodio_sink::rodio::Decoder;
-use crate::async_rodio_sink::rodio::decoder::DecoderError;
 use crate::async_rodio_sink::{self, AsyncRodio};
 use futures::Stream;
-use std::io::Cursor;
-use std::sync::Arc;
+use rodio::Source;
 use std::time::Duration;
 
-pub struct DecodedInMemSong(Decoder<Cursor<ArcInMemSong>>);
-struct ArcInMemSong(Arc<InMemSong>);
-
-// Derive to assist with debub printing tasks
-impl std::fmt::Debug for DecodedInMemSong {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_tuple("DecodedInMemSong").field(&"..").finish()
-    }
-}
-
-impl AsRef<[u8]> for ArcInMemSong {
-    fn as_ref(&self) -> &[u8] {
-        self.0.as_ref().0.as_ref()
-    }
-}
-
 pub struct Player {
-    rodio_handle: AsyncRodio<Decoder<Cursor<ArcInMemSong>>, ListSongID>,
+    rodio_handle: AsyncRodio<ListSongID>,
 }
 
-// Consider if this can be managed by Server.
 impl Player {
     pub fn new() -> Self {
         let rodio_handle = AsyncRodio::new();
@@ -36,24 +15,25 @@ impl Player {
     }
     pub fn autoplay_song(
         &self,
-        song: DecodedInMemSong,
+        song: Box<dyn Source<Item = f32> + Send + 'static>,
         song_id: ListSongID,
-    ) -> impl Stream<Item = async_rodio_sink::AutoplayUpdate<ListSongID>> + use<> {
-        self.rodio_handle.autoplay_song(song.0, song_id)
+    ) -> impl Stream<Item = async_rodio_sink::AutoplayUpdate<ListSongID>> + 'static {
+        self.rodio_handle.autoplay_song(song, song_id)
     }
     pub fn play_song(
         &self,
-        song: DecodedInMemSong,
+        song: Box<dyn Source<Item = f32> + Send + 'static>,
         song_id: ListSongID,
-    ) -> impl Stream<Item = async_rodio_sink::PlayUpdate<ListSongID>> + use<> {
-        self.rodio_handle.play_song(song.0, song_id)
+    ) -> impl Stream<Item = async_rodio_sink::PlayUpdate<ListSongID>> + 'static {
+        self.rodio_handle.play_song(song, song_id)
     }
+    #[allow(dead_code)]
     pub fn queue_song(
         &self,
-        song: DecodedInMemSong,
+        song: Box<dyn Source<Item = f32> + Send + 'static>,
         song_id: ListSongID,
-    ) -> impl Stream<Item = async_rodio_sink::QueueUpdate<ListSongID>> + use<> {
-        self.rodio_handle.queue_song(song.0, song_id)
+    ) -> impl Stream<Item = async_rodio_sink::QueueUpdate<ListSongID>> + 'static {
+        self.rodio_handle.queue_song(song, song_id)
     }
     pub async fn seek(
         &self,
@@ -96,32 +76,4 @@ impl Player {
     pub async fn set_volume(&self, new_vol: u8) -> Option<async_rodio_sink::VolumeUpdate> {
         self.rodio_handle.set_volume(new_vol).await
     }
-    pub async fn try_decode(
-        song: Arc<InMemSong>,
-    ) -> std::result::Result<DecodedInMemSong, DecoderError> {
-        tokio::task::spawn_blocking(move || try_decode(song))
-            .await
-            .map_err(|e| {
-                tracing::error!("spawn_blocking for decode failed: {e}");
-                DecoderError::UnrecognizedFormat
-            })?
-    }
-}
-
-/// Try to decode bytes into Source.
-fn try_decode(song: Arc<InMemSong>) -> std::result::Result<DecodedInMemSong, DecoderError> {
-    let len = song.as_ref().0.len();
-    let song = ArcInMemSong(song);
-    let cur = std::io::Cursor::new(song);
-    Ok(DecodedInMemSong(
-        async_rodio_sink::rodio::Decoder::builder()
-            .with_data(cur)
-            .with_gapless(true)
-            .with_byte_len(
-                len.try_into()
-                    .expect("Expected usize to be smaller than or equal to u64"),
-            )
-            .with_seekable(true)
-            .build()?,
-    ))
 }

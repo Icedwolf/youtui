@@ -190,6 +190,7 @@ pub trait DominantKeyRouter<A: Action + 'static> {
 
 /// Get the list of all keybinds that the KeyHandler and any child items can
 /// contain, regardless of context.
+#[allow(dead_code)]
 pub fn get_visible_keybinds_as_readable_iter<'a, A: Action + 'static>(
     keybinds: impl Iterator<Item = &'a Keymap<A>> + 'a,
 ) -> impl Iterator<Item = DisplayableKeyAction<'a>> + 'a {

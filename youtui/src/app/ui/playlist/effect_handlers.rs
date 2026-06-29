@@ -1,6 +1,5 @@
 use crate::app::component::actionhandler::ComponentEffect;
-use crate::app::server::song_downloader::{DownloadProgressUpdate, DownloadProgressUpdateType};
-use crate::app::server::{ArcServer, TaskMetadata};
+use crate::app::server::{ArcServer, DownloadProgressUpdate, TaskMetadata};
 use crate::app::structures::ListSongID;
 use crate::app::ui::playlist::Playlist;
 use crate::async_rodio_sink::{
@@ -10,7 +9,8 @@ use crate::async_rodio_sink::{
 use async_callback_manager::{AsyncTask, FrontendEffect};
 use rodio::decoder::DecoderError;
 use std::fmt::Debug;
-use tracing::error;
+use tracing::{error, info};
+use ytmapi_rs::common::{VideoID, YoutubeID};
 
 #[derive(Debug, PartialEq)]
 pub struct HandleAllStopped;
@@ -30,12 +30,16 @@ pub struct HandlePausedResponse;
 pub struct HandlePlayUpdateOk;
 #[derive(Debug, PartialEq, Clone)]
 pub struct HandleAutoplayUpdateOk;
+#[allow(dead_code)]
 #[derive(Debug, PartialEq, Clone)]
 pub struct HandleQueueUpdateOk;
+#[allow(dead_code)]
 #[derive(Debug, PartialEq, Clone)]
 pub struct HandlePlayUpdateError(pub ListSongID);
 #[derive(Debug, PartialEq, Clone)]
-pub struct HandleSongDownloadProgressUpdate;
+pub struct HandleSongDownloadProgressUpdate(pub ListSongID);
+#[derive(Debug, PartialEq)]
+pub struct HandleResolveAudioResult(pub ListSongID);
 
 #[derive(Debug, PartialEq)]
 enum PlaylistEffect {
@@ -47,13 +51,13 @@ enum PlaylistEffect {
     HandleResumed(ListSongID),
     HandlePaused(ListSongID),
     HandlePlayUpdate(PlayUpdate<ListSongID>),
+    #[allow(dead_code)]
     HandleQueueUpdate(QueueUpdate<ListSongID>),
     HandleAutoplayUpdate(AutoplayUpdate<ListSongID>),
+    #[allow(dead_code)]
     HandleSetToError(ListSongID),
-    HandleSongDownloadProgressUpdate {
-        kind: DownloadProgressUpdateType,
-        id: ListSongID,
-    },
+    HandleSongDownloadProgressUpdate(DownloadProgressUpdate, ListSongID),
+    HandleResolveAudioResult(Option<VideoID<'static>>, ListSongID),
 }
 impl_youtui_task_handler!(HandleStopped, Stopped<ListSongID>, Playlist, |_, input| {
     PlaylistEffect::StopSongID(input)
@@ -101,9 +105,8 @@ impl_youtui_task_handler!(
     HandleSongDownloadProgressUpdate,
     DownloadProgressUpdate,
     Playlist,
-    |_, input| {
-        let DownloadProgressUpdate { kind, id } = input;
-        PlaylistEffect::HandleSongDownloadProgressUpdate { kind, id }
+    |this: HandleSongDownloadProgressUpdate, input| {
+        PlaylistEffect::HandleSongDownloadProgressUpdate(input, this.0)
     }
 );
 impl_youtui_task_handler!(
@@ -123,6 +126,14 @@ impl_youtui_task_handler!(
     Paused<ListSongID>,
     Playlist,
     |_, input: Paused<_>| PlaylistEffect::HandlePaused(input.0)
+);
+impl_youtui_task_handler!(
+    HandleResolveAudioResult,
+    Option<VideoID<'static>>,
+    Playlist,
+    |this: HandleResolveAudioResult, input| {
+        PlaylistEffect::HandleResolveAudioResult(input, this.0)
+    }
 );
 
 impl FrontendEffect<Playlist, ArcServer, TaskMetadata> for PlaylistEffect {
@@ -153,8 +164,27 @@ impl FrontendEffect<Playlist, ArcServer, TaskMetadata> for PlaylistEffect {
                 return target.handle_autoplay_update(msg);
             }
             PlaylistEffect::HandleSetToError(msg) => return target.handle_set_to_error(msg),
-            PlaylistEffect::HandleSongDownloadProgressUpdate { kind, id } => {
-                return target.handle_song_download_progress_update(kind, id);
+            PlaylistEffect::HandleSongDownloadProgressUpdate(update, id) => {
+                return target.handle_song_download_progress_update(update, id);
+            }
+            PlaylistEffect::HandleResolveAudioResult(resolved, id) => {
+                if let Some(new_video_id) = resolved {
+                    if let Some(idx) = target.get_index_from_id(id) {
+                        if let Some(song) = target.list.get_list_iter_mut().nth(idx) {
+                            info!(
+                                old = song.video_id.get_raw(),
+                                new = new_video_id.get_raw(),
+                                "Resolved queue song to Atv version"
+                            );
+                            song.video_id = new_video_id;
+                        }
+                    }
+                }
+                target.resolve_remaining = target.resolve_remaining.saturating_sub(1);
+                if target.resolve_remaining == 0 {
+                    target.resolving_audio = false;
+                }
+                return AsyncTask::new_no_op();
             }
         }
         AsyncTask::new_no_op()

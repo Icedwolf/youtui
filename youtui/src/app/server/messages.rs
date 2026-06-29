@@ -1,22 +1,21 @@
+use super::api::{GetArtistSongsProgressUpdate, GetPlaylistSongsProgressUpdate, resolve_to_audio_track};
 use super::ArcServer;
-use super::api::GetArtistSongsProgressUpdate;
-use super::player::{DecodedInMemSong, Player};
-use super::song_downloader::{DownloadProgressUpdate, InMemSong};
-use crate::app::server::api::GetPlaylistSongsProgressUpdate;
+use super::song_downloader;
+use tracing::info;
 use crate::app::AudioQuality;
 use crate::app::structures::ListSongID;
-use crate::async_rodio_sink::rodio::decoder::DecoderError;
 use crate::async_rodio_sink::{
     AllStopped, AutoplayUpdate, PausePlayResponse, Paused, PlayUpdate, ProgressUpdate, QueueUpdate,
     Resumed, SeekDirection, Stopped, VolumeUpdate,
 };
 use anyhow::{Error, Result};
-use async_callback_manager::{BackendStreamingTask, BackendTask, MapFn};
+use async_callback_manager::{BackendStreamingTask, BackendTask};
 use futures::{Future, Stream};
-use std::sync::Arc;
+use rodio::Source;
 use std::time::Duration;
-use tokio_util::sync::CancellationToken;
-use ytmapi_rs::common::{ArtistChannelID, PlaylistID, SearchSuggestion, VideoID};
+use tokio_stream::wrappers::ReceiverStream;
+
+use ytmapi_rs::common::{ArtistChannelID, PlaylistID, SearchSuggestion, VideoID, YoutubeID};
 use ytmapi_rs::parse::{SearchResultArtist, SearchResultPlaylist, SearchResultSong};
 
 #[derive(PartialEq, Debug)]
@@ -74,49 +73,57 @@ pub struct GetPlaylistSongs {
 }
 
 #[derive(Debug)]
-pub struct DownloadSong(pub VideoID<'static>, pub ListSongID, pub Arc<CancellationToken>, pub AudioQuality);
+pub struct DownloadSong(pub VideoID<'static>, pub ListSongID, pub AudioQuality);
 
 impl PartialEq for DownloadSong {
     fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0 && self.1 == other.1 && self.3 == other.3
+        self.0 == other.0 && self.1 == other.1 && self.2 == other.2
     }
 }
 
-// Player Requests documentation:
-// NOTE: I considered giving player more control of the playback than playlist,
-// and increasing message size. However this seems to be more combinatorially
-// difficult without a well defined data structure.
+pub enum DownloadProgressUpdate {
+    Downloading,
+    Completed(Box<dyn Source<Item = f32> + Send + 'static>),
+    Error(String),
+}
 
-// XXX: This should be programmed to be unkillable.
-// Case:
-// Cur volume: 5
-// Send IncreaseVolume(5)
-// Send IncreaseVolume(5), killing previous task
-// Volume will now be 10 - should be 15, should not allow caller to cause this.
-// New note - 2025:
-// SetVolume should be able to kill IncreaseVolume however...
+impl std::fmt::Debug for DownloadProgressUpdate {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Downloading => write!(f, "Downloading"),
+            Self::Completed(_) => write!(f, "Completed(<source>)"),
+            Self::Error(e) => write!(f, "Error({e})"),
+        }
+    }
+}
+
+impl PartialEq for DownloadProgressUpdate {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Downloading, Self::Downloading) => true,
+            (Self::Completed(_), Self::Completed(_)) => true,
+            (Self::Error(a), Self::Error(b)) => a == b,
+            _ => false,
+        }
+    }
+}
+
 #[derive(PartialEq, Debug)]
 pub struct IncreaseVolume(pub i8);
 #[derive(Debug, PartialEq)]
 pub struct SetVolume(pub u8);
-/// Seek forwards or backwards a duration in a song.
 #[derive(Debug, PartialEq)]
 pub struct Seek {
     pub duration: Duration,
     pub direction: SeekDirection,
 }
-/// Seek to a target position in a song.
 #[derive(Debug, PartialEq)]
 pub struct SeekTo {
     pub position: Duration,
-    // Unlike seeking forward or back, it would be odd if user was expecting to seek to pos x in
-    // song a but due to a race condition seek applied to song b.
     pub id: ListSongID,
 }
-/// Stop a song if it is still currently playing.
 #[derive(Debug, PartialEq)]
 pub struct Stop(pub ListSongID);
-/// Stop the player, regardless of what song is playing.
 #[derive(Debug, PartialEq)]
 pub struct StopAll;
 #[derive(Debug, PartialEq)]
@@ -125,27 +132,35 @@ pub struct PausePlay(pub ListSongID);
 pub struct Resume(pub ListSongID);
 #[derive(Debug, PartialEq)]
 pub struct Pause(pub ListSongID);
-/// Decode a song into a format that can be played.
-#[derive(PartialEq, Debug)]
-pub struct DecodeSong(pub Arc<InMemSong>);
-/// Play a song, starting from the start, regardless what's queued.
-#[derive(Debug)]
 pub struct PlaySong {
-    pub song: DecodedInMemSong,
+    pub song: Box<dyn Source<Item = f32> + Send + 'static>,
     pub id: ListSongID,
 }
-/// Play a song, unless it's already queued.
-#[derive(Debug)]
+impl std::fmt::Debug for PlaySong {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PlaySong").field("id", &self.id).finish()
+    }
+}
 pub struct AutoplaySong {
-    pub song: DecodedInMemSong,
+    pub song: Box<dyn Source<Item = f32> + Send + 'static>,
     pub id: ListSongID,
 }
-/// Queue a song to play next.
-#[derive(Debug)]
+impl std::fmt::Debug for AutoplaySong {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AutoplaySong").field("id", &self.id).finish()
+    }
+}
+#[allow(dead_code)]
 pub struct QueueSong {
-    pub song: DecodedInMemSong,
+    pub song: Box<dyn Source<Item = f32> + Send + 'static>,
     pub id: ListSongID,
 }
+impl std::fmt::Debug for QueueSong {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("QueueSong").field("id", &self.id).finish()
+    }
+}
+
 impl BackendTask<ArcServer> for SearchArtists {
     type Output = Result<Vec<SearchResultArtist>>;
     type MetadataType = TaskMetadata;
@@ -165,9 +180,103 @@ impl BackendTask<ArcServer> for SearchSongs {
         backend: &ArcServer,
     ) -> impl Future<Output = Self::Output> + Send + 'static {
         let backend = backend.clone();
-        async move { backend.api.search_songs(self.0).await }
+        async move {
+            let mut results = backend.api.search_songs(self.0).await?;
+
+            // Pre-resolve stream URLs + resolve non-Atv to Atv for top 5.
+            let yt_dlp = backend.config.yt_dlp_command.clone();
+            let top_count = results.len().min(5);
+            let mut atv_replaced: Vec<(usize, VideoID<'static>)> = Vec::new();
+            for idx in 0..top_count {
+                let song = &results[idx];
+                // Start URL pre-resolution in background.
+                let vid = song.video_id.get_raw().to_string();
+                let yt = yt_dlp.clone();
+                tokio::spawn(async move {
+                    song_downloader::resolve_url(&vid, &yt).await;
+                });
+                // Resolve non-Atv to Atv.
+                if !song.is_audio_track() {
+                    if let Ok(concurrent_api) = backend.api.get_api().await {
+                        let resolved = resolve_to_audio_track(&concurrent_api, song).await;
+                        if resolved.get_raw() != song.video_id.get_raw() {
+                            atv_replaced.push((idx, resolved));
+                        }
+                    }
+                }
+            }
+            for (idx, new_id) in atv_replaced {
+                results[idx].video_id = new_id;
+            }
+
+            Ok(results)
+        }
     }
 }
+
+/// Resolve a queue song (by title + artist + original video_id) to its
+/// audio (Atv) version via the YTM API.  Returns `Some(resolved_video_id)`
+/// if a different (Atv) track was found, or `None` if already Atv / no match.
+#[derive(Debug, PartialEq)]
+pub struct ResolveSongToAudio {
+    pub video_id: VideoID<'static>,
+    pub id: ListSongID,
+    pub title: String,
+    pub artist: String,
+}
+impl BackendTask<ArcServer> for ResolveSongToAudio {
+    type Output = Option<VideoID<'static>>;
+    type MetadataType = TaskMetadata;
+    fn into_future(
+        self,
+        backend: &ArcServer,
+    ) -> impl Future<Output = Self::Output> + Send + 'static {
+        let backend = backend.clone();
+        async move {
+            let search_query = format!("{} {}", self.title, self.artist);
+            // First try the filtered songs search (deduplicates by title+artist).
+            if let Ok(results) = backend.api.search_songs(search_query.clone()).await {
+                for result in &results {
+                    if result.is_audio_track()
+                        && result.title == self.title
+                        && result.artist == self.artist
+                        && result.video_id.get_raw() != self.video_id.get_raw()
+                    {
+                        info!(
+                            original = self.video_id.get_raw(),
+                            resolved = result.video_id.get_raw(),
+                            title = self.title.as_str(),
+                            artist = self.artist.as_str(),
+                            "Resolved queue song to Atv track"
+                        );
+                        return Some(result.video_id.clone());
+                    }
+                }
+            }
+            // Fallback: broad search (may return multiple results per title+artist).
+            if let Ok(results) = backend.api.search_broad(search_query).await {
+                for result in &results.songs {
+                    if result.is_audio_track()
+                        && result.title == self.title
+                        && result.artist == self.artist
+                        && result.video_id.get_raw() != self.video_id.get_raw()
+                    {
+                        info!(
+                            original = self.video_id.get_raw(),
+                            resolved = result.video_id.get_raw(),
+                            title = self.title.as_str(),
+                            artist = self.artist.as_str(),
+                            "Resolved queue song to Atv track (broad search)"
+                        );
+                        return Some(result.video_id.clone());
+                    }
+                }
+            }
+            None
+        }
+    }
+}
+
 impl BackendTask<ArcServer> for SearchPlaylists {
     type Output = Result<Vec<SearchResultPlaylist>>;
     type MetadataType = TaskMetadata;
@@ -212,7 +321,27 @@ impl BackendStreamingTask<ArcServer> for DownloadSong {
         backend: &ArcServer,
     ) -> impl futures::Stream<Item = Self::Output> + Send + Unpin + 'static {
         let backend = backend.clone();
-        backend.song_downloader.download_song(self.0, self.1, Some(self.2), self.3)
+        let (tx, rx) = tokio::sync::mpsc::channel(1);
+        tokio::spawn(async move {
+            tx.try_send(DownloadProgressUpdate::Downloading).ok();
+            let result = song_downloader::download_and_decode(
+                &backend.config.yt_dlp_command,
+                self.0.get_raw(),
+                self.2,
+                backend.po_token.as_deref(),
+                None,
+                None,
+            ).await;
+            match result {
+                Ok(decoder) => {
+                    tx.send(DownloadProgressUpdate::Completed(Box::new(decoder))).await.ok();
+                }
+                Err(e) => {
+                    tx.send(DownloadProgressUpdate::Error(e)).await.ok();
+                }
+            }
+        });
+        ReceiverStream::new(rx)
     }
 }
 impl BackendTask<ArcServer> for Seek {
@@ -235,16 +364,6 @@ impl BackendTask<ArcServer> for SeekTo {
     ) -> impl Future<Output = Self::Output> + Send + 'static {
         let backend = backend.clone();
         async move { backend.player.seek_to(self.position, self.id).await }
-    }
-}
-impl BackendTask<ArcServer> for DecodeSong {
-    type Output = std::result::Result<DecodedInMemSong, DecoderError>;
-    type MetadataType = TaskMetadata;
-    fn into_future(
-        self,
-        _backend: &ArcServer,
-    ) -> impl Future<Output = Self::Output> + Send + 'static {
-        Player::try_decode(self.0)
     }
 }
 impl BackendTask<ArcServer> for IncreaseVolume {
@@ -342,7 +461,18 @@ impl BackendStreamingTask<ArcServer> for PlaySong {
         backend: &ArcServer,
     ) -> impl Stream<Item = Self::Output> + Send + Unpin + 'static {
         let backend = backend.clone();
-        backend.player.play_song(self.song, self.id)
+        let (tx, rx) = tokio::sync::mpsc::channel(64);
+        let stream = backend.player.play_song(self.song, self.id);
+        tokio::spawn(async move {
+            use futures::StreamExt;
+            tokio::pin!(stream);
+            while let Some(item) = stream.next().await {
+                if tx.send(item).await.is_err() {
+                    break;
+                }
+            }
+        });
+        tokio_stream::wrappers::ReceiverStream::new(rx)
     }
     fn metadata() -> Vec<Self::MetadataType> {
         vec![TaskMetadata::PlayingSong]
@@ -356,7 +486,18 @@ impl BackendStreamingTask<ArcServer> for AutoplaySong {
         backend: &ArcServer,
     ) -> impl Stream<Item = Self::Output> + Send + Unpin + 'static {
         let backend = backend.clone();
-        backend.player.autoplay_song(self.song, self.id)
+        let (tx, rx) = tokio::sync::mpsc::channel(64);
+        let stream = backend.player.autoplay_song(self.song, self.id);
+        tokio::spawn(async move {
+            use futures::StreamExt;
+            tokio::pin!(stream);
+            while let Some(item) = stream.next().await {
+                if tx.send(item).await.is_err() {
+                    break;
+                }
+            }
+        });
+        tokio_stream::wrappers::ReceiverStream::new(rx)
     }
     fn metadata() -> Vec<Self::MetadataType> {
         vec![TaskMetadata::PlayingSong]
@@ -370,53 +511,24 @@ impl BackendStreamingTask<ArcServer> for QueueSong {
         backend: &ArcServer,
     ) -> impl Stream<Item = Self::Output> + Send + Unpin + 'static {
         let backend = backend.clone();
-        backend.player.queue_song(self.song, self.id)
+        let (tx, rx) = tokio::sync::mpsc::channel(64);
+        let stream = backend.player.queue_song(self.song, self.id);
+        tokio::spawn(async move {
+            use futures::StreamExt;
+            tokio::pin!(stream);
+            while let Some(item) = stream.next().await {
+                if tx.send(item).await.is_err() {
+                    break;
+                }
+            }
+        });
+        tokio_stream::wrappers::ReceiverStream::new(rx)
     }
     fn metadata() -> Vec<Self::MetadataType> {
         vec![TaskMetadata::PlayingSong]
     }
 }
 
-#[derive(PartialEq, Debug)]
-pub struct PlayDecodedSong(pub ListSongID);
-impl MapFn<DecodedInMemSong> for PlayDecodedSong {
-    type Output = PlaySong;
-    fn apply(self, input: DecodedInMemSong) -> Self::Output {
-        tracing::info!("Song decoded succesfully. {:?}", self.0);
-        PlaySong {
-            song: input,
-            id: self.0,
-        }
-    }
-}
-#[derive(PartialEq, Debug)]
-pub struct AutoplayDecodedSong(pub ListSongID);
-impl MapFn<DecodedInMemSong> for AutoplayDecodedSong {
-    type Output = AutoplaySong;
-    fn apply(self, input: DecodedInMemSong) -> Self::Output {
-        tracing::info!("Song decoded succesfully. {:?}", self.0);
-        AutoplaySong {
-            song: input,
-            id: self.0,
-        }
-    }
-}
-#[derive(PartialEq, Debug)]
-pub struct QueueDecodedSong(pub ListSongID);
-impl MapFn<DecodedInMemSong> for QueueDecodedSong {
-    type Output = QueueSong;
-    fn apply(self, input: DecodedInMemSong) -> Self::Output {
-        tracing::info!("Song decoded succesfully. {:?}", self.0);
-        QueueSong {
-            song: input,
-            id: self.0,
-        }
-    }
-}
-
-// FusedTask in async-callback-manager derives PartialEq unconditionally,
-// so these task types must implement PartialEq in all build configurations.
-// We compare all fields except DecodedInMemSong (wraps a Decoder, not comparable).
 impl PartialEq for HandleApiError {
     fn eq(&self, other: &Self) -> bool {
         self.error.to_string() == other.error.to_string() && self.message == other.message
@@ -447,7 +559,6 @@ mod tests {
         DownloadSong(
             VideoID::from_raw("test"),
             ListSongID(1),
-            Arc::new(CancellationToken::new()),
             AudioQuality::Best,
         )
     }
@@ -491,7 +602,6 @@ mod tests {
         let b = DownloadSong(
             VideoID::from_raw("test"),
             ListSongID(1),
-            Arc::new(CancellationToken::new()),
             AudioQuality::High,
         );
         assert_ne!(a, b);
@@ -503,7 +613,6 @@ mod tests {
         let b = DownloadSong(
             VideoID::from_raw("other"),
             ListSongID(1),
-            Arc::new(CancellationToken::new()),
             AudioQuality::Best,
         );
         assert_ne!(a, b);

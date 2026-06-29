@@ -4,7 +4,7 @@ use anyhow::{Result, bail};
 use error::wrong_auth_token_error_message;
 pub use error::*;
 use futures::{StreamExt, TryStreamExt};
-use rusty_ytdl::reqwest;
+use reqwest;
 use std::borrow::Borrow;
 use ytmapi_rs::auth::noauth::NoAuthToken;
 use ytmapi_rs::auth::{BrowserToken, OAuthToken};

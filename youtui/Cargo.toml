@@ -27,19 +27,16 @@ futures = "0.3.32"
 rat-text = "3.1.0"
 ratatui = { version = "0.30.0", features = ["all-widgets"] }
 tui-logger = { version = "0.18.2", features = ["tracing-support"] }
-serde = "1.0.228"
+serde = { version = "1.0.228", features = ["rc"] }
 serde_json = "1.0.149"
 ytmapi-rs = { path = "../ytmapi-rs", version = "0.3.2", features = [ "reqwest", "rustls" ] }
+reqwest = { version = "0.13", default-features = false, features = [] }
 tokio = { version = "1.52.1", features = ["full"] }
-gag = "1.0.0"
 async-callback-manager = { path = "../async-callback-manager", version = "0.1.1" }
 tracing = "0.1.44"
 tracing-subscriber = "0.3.23"
 directories = "6.0.0"
 toml = "1.1.2"
-# For intersperse feature. RFC in progress to bring to std
-# https://github.com/rust-lang/rust/issues/79524
-
 itertools = "0.14.0"
 tokio-stream = { version = "0.1.18", features = ["fs"] }
 async_cell = "0.2.3"
@@ -53,26 +50,26 @@ notify-rust = "4.11.7"
 rand = "0.9"
 fs-err = { version = "3.3.0", features=["tokio"] }
 tokio-util = { version = "0.7.18", features = ["io"] }
+
+# Audio playback library (rodio with symphonia-all codecs)
+[dependencies.rodio]
+version = "0.22.2"
+features = ["symphonia-all", "tracing"]
+
+
+# Direct Symphonia usage (not through rodio, avoiding SeekError panic)
+# Symphonia 0.5 supports: isomp4 (MP4/M4A), mkv (WebM), ogg (Ogg/Vorbis)
+# Codecs: aac, alac, flac, mp3, pcm, vorbis (via rodio's symphonia-all).
+# NO Opus support. Feature unification with rodio provides the full set,
+# so no additional features needed here.
+[dependencies.symphonia]
+version = "0.5"
+
 # These platforms require an open window to use media controls.
 # https://github.com/Sinono3/souvlaki/blob/master/examples/window.rs
 [target.'cfg(any(target_os="windows",target_os="macos"))'.dependencies]
 raw-window-handle = "0.6.2"
 winit = "0.30.13"
-
-[dependencies.rusty_ytdl]
-# version = "0.7.4"
-# package = "rusty_ytdl"
-version = "0.7.4-youtui-vendored.4"
-package = "youtui-vendored-rusty_ytdl"
-default-features = false
-features = ["live"]
-
-# Accommodate for vendoring if required - a change to YouTube API may break downloading or playback.
-[dependencies.rodio]
-version = "0.22.2"
-# version = "0.19.0-youtui-vendored.1"
-# package = "youtui-vendored-rodio"
-features = ["symphonia-all", "tracing"]
 
 [dev-dependencies]
 pretty_assertions = "1.4.1"

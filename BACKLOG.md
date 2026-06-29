@@ -1,114 +1,376 @@
 # Youtui Backlog
 
 **Build:** 0 errors, 0 warnings, 0 clippy
-**Tests:** 259 youtui + 98 ytmapi-rs unit passed; 49 ytmapi-rs live integration failed (pre-existing YT API drift)
-**~400 pub functions** across youtui
-**Last updated:** 2026-06-17
+**Tests:** 263 youtui + 98 ytmapi-rs unit passed
+**Last updated:** 2026-06-25
 
 ---
 
-## 🛡️ Regression Guardrail Policy
+## Guardrails (Do Not Break)
 
-1. **Compile-time tests preferred** — type-level assertions (`&mc.field`, `fn(_: &Type)`) that fail at compile time if invariants break, zero runtime cost.
-2. **Hot-path changes require benchmarks** — any change to `get_field`, `compute_artists_string`, or `get_fields` must include a criterion benchmark proving no regression.
-3. **Notification system is protected** — `NotificationController`, `notify_track_change()`, and its call in `update_metadata()` each have a compile-time test. Removing any breaks the build.
-4. **Mako only supports `file://` URLs** — remote thumbnail URLs are silently skipped. Do not add thumbnail downloading to the notification path.
-5. **Never add `--print` to yt-dlp download args when `-o -` is also used** — combo causes empty stdout (yt-dlp >=2026.04.10), silently producing zero-byte audio. Guarded by `test_build_stream_args_no_print_flag`.
-6. **`VL` prefix lives in the query `header()`, not in callers** — `GetPlaylistTracksQuery::header()` and `GetPlaylistDetailsQuery::header()` auto-prepend `VL`. Callers pass raw `OLAK5uy_…` IDs. `PlaylistID` stays clean (no `VL` prefix).
-
----
-
-## P0 — Must Preserve (Do Not Remove)
-
-| # | File | Issue | Status |
-|---|------|-------|--------|
-| 1 | `media_controls.rs` | **Notification system** — `NotificationController` + `notify_track_change()` + call in `update_metadata()`. Was removed by `faf21ef`; restored. Has compile-time guard tests. | ✅ Guarded |
-| 2 | `structures.rs` | **artists_string / track_no_string cached fields** — were removed by `7d88983` causing per-frame allocation regression; restored and guarded. `get_field(Artists)` must return `Cow::Borrowed`. | ✅ Guarded |
-| 3 | `yt_dlp.rs` | **`--js-runtimes` must NOT be auto-detected.** Auto-detection spawns Node.js per yt-dlp instance → massive RAM waste. Only pass when user explicitly configures. | ✅ Fixed |
-| 4 | `yt_dlp.rs` | **Video IDs starting with `-` need `--` separator** before URL arg (e.g. `-6FvsKo162U` for Placebo — Special K). yt-dlp interprets leading `-` as flag. | ✅ Fixed |
-| 5 | `structures.rs` | **`deduplicate()` must be O(n) via HashSet.** Vec::contains O(n²) caused ~1.7B comparisons on 58k-song autosave. | ✅ Fixed |
-| 6 | `structures.rs` | **`push_song_list()` dedup must use `HashSet<String>` (owned).** Borrow-vs-move conflicts make `HashSet<&str>` impossible in `retain` closure. | 🔒 Invariant |
-| 7 | `yt_dlp.rs` | **`write_netscape_cookie_file()` must parse both Netscape (tab-separated) and Cookie: header formats.** Users' cookie.txt exports from Floorp/Firefox are often Netscape format. | ✅ Fixed |
-| 8 | `yt_dlp.rs` | **`--no-check-formats` removed** — skips yt-dlp's format verification which can cause rodio-incompatible streams. Fallback chain `bestaudio[ext=m4a]/bestaudio/best` is sufficient. | ✅ Fixed |
-| 9 | `yt_dlp.rs:267` | **`stream_song` stdout pipeline must NOT be tampered with.** `--print` on download command produces empty stdout → zero-byte audio → decode failure. Guarded by `test_build_stream_args_no_print_flag`. | ✅ Guarded |
-| 10 | `api.rs` | **`VL` prefix is added by query `header()`, not by callers.** `GetPlaylistTracksQuery::header()` and `GetPlaylistDetailsQuery::header()` auto-prepend `VL` (with double-VL guard). All callers pass raw IDs without `VL`. | ✅ Fixed |
+| # | Guardrail | Rationale |
+|---|-----------|-----------|
+| G1 | **Notifications** — `NotificationController` + `notify_track_change()` + call in `update_metadata()`. Has compile-time guard tests. | Active D-Bus system. Was removed once (`faf21ef`). |
+| G2 | **artists_string / track_no_string** cached on `ListSong` — `get_field(Artists)` returns `Cow::Borrowed`, not allocate. | Per-frame rendering perf. Was removed once (`7d88983`). |
+| G3 | **`--js-runtimes` must NOT be auto-detected.** Only pass when user explicitly configures. Auto-detection spawns Node.js per yt-dlp. | RAM waste |
+| G4 | **Video IDs starting with `-` need `--` separator** before URL arg (e.g. `-6FvsKo162U`). yt-dlp interprets leading `-` as flag. | Correct playback |
+| G5 | **`deduplicate()` must be O(n) via HashSet.** Vec::contains O(n²) caused ~1.7B comparisons on 58k-song autosave. | Startup perf |
+| G6 | **Never add `--print` to yt-dlp download args when `-o -` is also used** — combo causes empty stdout (yt-dlp >=2026.04.10). Guarded by test. | Zero-byte audio |
+| G7 | **`VL` prefix lives in query `header()`, not in callers.** `GetPlaylistTracksQuery`/`GetPlaylistDetailsQuery` auto-prepend `VL`. | Playlist loading |
+| G8 | **Mako only supports `file://` URLs** for notification icons. Remote URLs silently ignored. | Notification perf |
+| G9 | **Effect chain order: `stop_song_id` saved BEFORE `start_buffering`.** Old song stops immediately on skip/next. | Correct skip |
+| G10 | **`handle_playing` must transition `Buffering → Playing`**, not just `Paused → Playing`. | Status bar + media keys |
 
 ---
 
-## P0 — Bugs (Previously Fixed This Session)
+## P0 — Must Have (Playback UX)
 
-| # | File | Line | Issue | Fix |
-|---|------|------|-------|-----|
-| 1 | `shared_components.rs` | 85 | `SortAction::context()` returned `"Filter"` instead of `"Sort"` | `"Filter"` → `"Sort"` |
-| 2 | `playlistsearch/songs_panel.rs` | 59 | `BrowserPlaylistSongsAction::context()` returned `"Artist Songs Panel"` | `"Artist Songs Panel"` → `"Playlist Songs Panel"` |
-| 3 | `ui.rs` | 428-442 | `ListAction::First/Last` for `Logs` navigated browser through it | `self.browser.go_to_first/last()` → `()` |
-| 4 | `api.rs` | 407-409 | `search_songs` failure logged at `debug!` only | `debug!` → `warn!` |
-| 5 | `api.rs` | 473-478 | Audio-playlist fetch failure logged at `debug!` only | `debug!` → `warn!` |
-| 6 | `yt_dlp.rs` | 354 | `stream_song` had no timeout — yt-dlp hang would leak forever | Added `timeout(Duration::from_secs(30), ...)` around spawn |
-| 7 | `artistsearch/songs_panel.rs:98-109`, `playlistsearch/songs_panel.rs:94-106` | `.expect()` in `apply_all_sort_commands` would panic on mismatch | `.expect("...")` → `.ok_or_else(|| anyhow!(...))?` |
-| 8 | `playlistsearch.rs:380` | Error message said "sorting album songs panel" | `"album"` → `"playlist"` |
-| 9 | `artistsearch/songs_panel.rs:420-434`, `playlistsearch/songs_panel.rs:419-433`, `songsearch.rs:342-356` | `Loaded` state with 0 songs showed `"Songs - 0 results"` | Special-case `len == 0` → `"Songs - no songs found"` |
+### P0.1 — Emit streaming decoder ASAP from download pipeline
 
----
+**What:** `download_and_decode` currently returns the streaming decoder as its final result — the caller (`DownloadSong` stream) gets it only when the function returns. Split the function so the decoder is sent via `oneshot` channel the moment it's created from the streaming buffer (after first yt-dlp progress line), BEFORE the function returns. This eliminates the 0-2s gap when `play_song_id` is called for a song whose download hasn't completed yet.
 
-## P1 — Silent Failures / UX Gaps
+**Why:** The existing pre-buffer infra (`download_upcoming_from_id`, `preloaded_sources`) already downloads songs 2-ahead and stores decoders for instant play. The remaining gap is when user skips to a song whose download is still in progress (status = `Queued`). `play_song_id` finds nothing in `preloaded_sources` and falls through — no `PlaySong` is sent until `download_and_decode` returns. With this fix, the decoder arrives immediately after the first yt-dlp progress line (~1s), not after the full download cycle.
 
-| # | File | Line | Issue | Status |
-|---|------|------|-------|--------|
-| 1 | `yt_dlp.rs` | 376-386 | **yt-dlp non-zero exit logged at `warn!`.** Exit code surfaced via wait-task. Prevents zombie processes. | ✅ Fixed |
-| 2 | `native.rs` | 48-56 | **No retry logic for transient network failures.** Single failure aborts download. | 🔜 |
-| 3 | `config/keymap.rs` | 300+ | **Modal keybindings not shown in help.** Users can't discover modal binds without reading source. | ✅ Fixed |
-| 4 | `config/keymap.rs` | 300+ | **Error messages use `type_name::<A>()`** producing unreadable names for complex generics. | 🔜 |
-| 5 | `yt_dlp.rs` | 282 | **`--ignore-config` bypasses user yt-dlp config** (rate limits, extractors, proxy). Tradeoff: prevents user config from breaking stdout streaming. | 🔒 Invariant |
-| 6 | `yt_dlp.rs` | 298-300 | **`BROWSER_SOURCE_CACHE` caches browser profile path.** yt-dlp reads fresh cookies at runtime from the cached profile. Low impact — profile changes mid-session are unlikely. | 🔒 Invariant |
-| 7 | `media_controls.rs` | — | **Notifications always fire with no config to disable.** Noisy on headless/WSL. | ✅ Fixed — added `notifications_enabled = true/false` to config |
-| 8 | `song_downloader.rs` | — | **Retry mismatch:** native=3 retries, yt-dlp=0. | ❌ False positive — both paths go through `download_song_using_downloader` with `MAX_RETRIES=5` |
-| 9 | `api.rs`:260-267 | — | **Broad song-search limited to 20 results.** Falls back to audio-playlist for tracks not in top 20. | 🔜 |
-| 10 | `api.rs:100` | — | **Dedup by title string, not video ID.** Two songs with same title could collide. | ✅ Fixed — both `build_search_map` and `resolve_omv_with_audio_playlist` now use `Entry::Vacant` with `warn!` on collision |
+**AC:**
+- `download_and_decode` refactored: sends streaming decoder via `oneshot` immediately after creation
+- `DownloadSong.into_stream` awaits the `oneshot` and sends `Completed(decoder)` earlier
+- Background download + cache population continues independently
+- When `play_song_id` is called for a `Queued` song, the existing download stream emits `Completed(decoder)` within ~1s instead of waiting for download completion
+- All existing tests pass
+- No regression in cache population (cache still populated after full download)
+
+**Dep:** None
+**Effort:** M (2-3 days)
+**Status:** ✅ Done
+
+**What was done:**
+- Discovered the actual bottleneck: `tokio::time::timeout(15s, stderr_handle).await` waited for the **entire stderr stream to end** (yt-dlp to finish), not just the first progress line. Decoder creation was delayed by 8-60s.
+- Fix: replaced with `buffer.wait_for_total_len(15s)` which returns immediately after the first progress line is parsed (~1-2s), reducing decoder creation from 8-60s down to ~1-2s.
+- Added `wait_for_total_len(&self, timeout: Duration) -> Option<u64>` to `SharedBuffer` (streaming_buffer.rs).
+- `stderr_handle` is no longer awaited — it continues running in the background to log ERROR/WARNING lines.
+- 3 new tests for `wait_for_total_len`.
 
 ---
 
-## P2 — Code Quality / Maintainability
+### P0.2 — Graceful streaming error surfacing
 
-| # | File | Issue | Status |
-|---|------|-------|--------|
-| 1 | `gen_output.rs` + `gen_output/src/main.rs` | **Functional duplicate** — two code generators for test output files; identical logic. | 🔜 |
-| 2 | `ytmapi-rs/src/auth/noauth.rs:27-43` | **Fragile ytcfg parsing.** Uses `.split_once("ytcfg.set({")` — YouTube JS format changes will break silently. | ✅ Fixed |
-| 3 | `ytmapi-rs/src/auth/browser.rs:69-71` | **English-only browser version check.** Localized versions break silently. | 🔜 |
-| 4 | `PanickingReceiverStream` | **Panics on channel close** — `resume_unwind` aborts current task, too harsh for recoverable errors. | ✅ Fixed |
-| 5 | `core.rs:32` + `async_rodio_sink.rs:847` | **`blocking_send_or_error` defined twice** (identical signatures). | ✅ Fixed — removed duplicate, import from core |
-| 6 | `songsearch.rs` / `artistsearch.rs` / `playlistsearch.rs` | **Triplicated song-clone-and-callback pattern.** Previous extraction failed (RPITIT + self in macro). | ⏳ Postponed |
-| 7 | `api.rs:118-161, 75-116` | **Both `resolve_omv_*` functions** share the same HashMap-based pattern. Extract common helper. | 🔜 |
-| 8 | `ytmapi-rs/src/error.rs:38` | **`ErrorKind::Header` has no context string** — impossible to diagnose which header failed. | ✅ Fixed |
-| 9 | `structures.rs:56-57` | **`ListSongID` has different layout in test vs release** (`#[cfg(test)] pub usize`). | 🔜 |
-| 10 | `async-callback-manager/src/adapt.rs:22-30` | **Blanket impl gated on `not(task-equality)`** — enabling either feature breaks compilation. | 🔜 |
+**What:** When yt-dlp fails mid-stream (timeout, 403, empty output, non-zero exit), the UI currently freezes silently. Surface the error so user sees feedback.
 
----
+**Why:** Silent failure is the #1 confusing UX for new users.
 
-## P3 — Performance / Memory
+**AC:**
+- yt-dlp non-zero exit → status bar shows "Download failed: yt-dlp exited with code N" for 5s
+- yt-dlp timeout (120s) → status bar shows "Download timed out" for 5s
+- yt-dlp empty output → status bar shows "Download produced no audio data" for 5s
+- Error clears on next song / manual action
+- No panic, no endless spinner
+- Existing `PlayUpdate` variants suffice, or add `PlayUpdate::DownloadError(String)`
 
-| # | File | Issue | Status |
-|---|------|-------|--------|
-| 1 | `server.rs` | **`RwLock<DynamicYtMusic>` write-held across entire HTTP request** — serializes concurrent queries. | 🔜 |
-| 2 | `api.rs:415-427` | **`FuturesOrdered` adds sequential overhead** — audio-playlist pass 2 for album N delays pass 2 for album N+1. | ✅ Fixed — switched to `FuturesUnordered` with index-based reordering |
-| 3 | `api.rs:128-132` | **HashMap rebuilt per album** in cross-ref — build once before loop. | ✅ Fixed — `build_search_map` returns owned `HashMap<String, VideoID>` for `Arc`-sharing across concurrent futures |
-| 4 | `ytmapi-rs/src/auth.rs:30-44` | **`RawResult` holds entire response as `String`** — clones via `from_str`. | 🔜 |
-| 5 | `ytmapi-rs/src/client.rs:47` | **`response.text().await?` collects entire body** — memory-heavy. | 🔜 |
-| 6 | `queue_persistence.rs:88` | **`to_string_pretty` for 20MB autosave** — pretty-printing wastes space. | ⏳ Future |
-| 7 | `manager.rs:176` | **`DEFAULT_STREAM_CHANNEL_SIZE=20` hardcoded.** | ⏳ Future |
+**Dep:** None (self-contained in `playlist.rs`)
+**Effort:** S (1 day)
+**Status:** ✅ Done
+
+**What was done:**
+- When `DownloadProgressUpdate::Error(e)` arrives and the song is in `Buffering` state, transition to `PlayState::Error(id)` and call `play_next_or_stop(id)` to skip.
+- Status bar shows `''` (warning icon) + song title for the failed song, matching existing `PlayState::Error` UI handling.
+- Error message is logged at `error!` level; the `handle_set_to_error` path auto-skips to the next available song.
 
 ---
 
-## P4 — Infrastructure / Testing Gaps
+## P1 — Should Have (UX / Configurability)
 
-| # | File | Issue | Status |
-|---|------|-------|--------|
-| 1 | `.github/` | **No CI pipeline** — only `dependabot.yml`. No automated builds, tests, or linting. | 🔜 |
-| 2 | `youtui/src/tests.rs:1-67` | **Only 1 integration test** (download, `#[ignore]`d). | 🔜 |
-| 3 | `api.rs` | **`resolve_omv_*` with zero-Atv results** untested. | 🔜 |
-| 4 | `api.rs` | **`GetAlbumsSongsError`** never tested. | 🔜 |
-| 5 | `api.rs:390-393` | **Batch empty-list guard** untested. | 🔜 |
-| 6 | `ytmapi-rs/tests/` | **54 live integration test failures** (YT API drift). | 🔒 External |
+### P1.1 — Configurable download cache size
+
+**What:** Move `CACHE_MAX_ENTRIES = 3` from compile-time constant to `config.toml` (`download_cache_size = 10`).
+
+**Why:** Heavy users replaying albums want 10+ entries. 3 is too small for album replay.
+
+**AC:**
+- `Config` + `ConfigIR` gains `download_cache_size: Option<usize>` (default: 3)
+- `song_downloader.rs` reads value at init
+- Range validated: 0 = disabled, 1-100 allowed
+- `cache_put` / `CACHE_ORDER` use runtime value instead of compile-time const
+
+**Dep:** None
+**Effort:** S (half day)
+**Status:** 🔜
+
+---
+
+### P1.2 — Status bar streaming indicator
+
+**What:** Show distinct icon in status bar footer when download is still in progress vs fully cached.
+
+**Why:** User has no feedback whether the song is still streaming or fully cached.
+
+**AC:**
+- Status bar shows `⬇ Song Title` while download incomplete, `▶ Song Title` when fully cached
+- Transition happens when `SharedBuffer::is_finished()` becomes true
+- Does NOT add latency to the playback pipeline (purely cosmetic UI state)
+- Works correctly with P0.1 pre-buffering (pre-buffered songs are always fully cached by play time)
+
+**Dep:** P0.1 (design must account for pre-buffer — a pre-buffered song is always fully cached at swap time, so the streaming state is only relevant for the first song or cache misses)
+**Effort:** S (half day)
+**Status:** 🔜
+
+---
+
+### P1.3 — Configurable pre-buffer count
+
+**What:** Extend P0.1 to pre-buffer N upcoming songs (configurable, default 1).
+
+**Why:** Albums/podcasts: pre-buffering the next 3-5 songs eliminates all download latency for the entire listening session.
+
+**AC:**
+- `prebuffer_count: usize` in `config.toml` (default: 1, max: 10)
+- N SharedBuffers + decoders allocated in background
+- FIFO rotation: oldest pre-buffered decoder is the next to play; new download fills the vacated slot
+- Respects memory: N * (peak song size) should not exhaust RAM (document tradeoff)
+
+**Dep:** P0.1
+**Effort:** M (3 days)
+**Status:** 🔜
+
+---
+
+## P2 — Code Quality
+
+### P2.1 — Remove dead decoder integration test file
+
+**What:** Delete `decoder_integration_test.rs`. Its coverage is subsumed by `song_downloader.rs` tests.
+
+**Why:** Dead code. Confuses navigation.
+
+**AC:** File deleted. `cargo test` passes. Nothing references it.
+
+**Dep:** None
+**Effort:** XS (5 min)
+**Status:** 🔜
+
+---
+
+### P2.2 — Deduplicate code generators
+
+**What:** `gen_expected.rs` (standalone binary for generating expected outputs) vs `gen_output.rs` + `gen_output/src/main.rs` (test helper, same logic).
+
+**Why:** Two independent implementations of the same thing. Changes to one silently rot the other.
+
+**AC:** One generator serves both purposes. The other is deleted. `gen_output/` tests still pass.
+
+**Dep:** Need to understand what each does and whether they're truly equivalent.
+**Effort:** S (1 day)
+**Status:** 🔜
+
+**Sub-tasks:**
+1. Read both files, document what each does
+2. If truly equivalent: delete one, alias the other
+3. If different: extract shared logic, delete duplicate
+4. Verify tests pass
+
+---
+
+### P2.3 — English-only browser version check
+
+**File:** `ytmapi-rs/src/auth/browser.rs:69-71`
+
+**What:** Version detection string-matches `" "` (English "Version" substring). Localized browsers (e.g. Firefox in German "Version" → "Version" still works, but some languages differ) break silently.
+
+**Why:** Fragile. Will break for non-English browser users.
+
+**AC:** Use numeric `Int` parsing from `"ver {int}"` pattern or regex `Version\s+(\d+)` instead of English-specific string match.
+
+**Dep:** None
+**Effort:** S (half day)
+**Status:** 🔜
+
+---
+
+### P2.4 — Error messages with `type_name::<A>()` produce unreadable text
+
+**File:** `config/keymap.rs:300+`
+
+**What:** Error messages use `std::any::type_name::<A>()` which for complex generic types produces strings like `youtui::app::ui::playlist::Playlist<(youtui::app::ui::playlist::QueueState, alloc::sync::Arc<tokio::sync::Mutex<...>>)>`.
+
+**Why:** Useless to users. They can't act on "type_name garbled."
+
+**AC:** Replace with hand-written display strings or a `type_name_short` helper that strips module paths and generic params. Verify all error paths render readable text.
+
+**Dep:** None
+**Effort:** S (half day)
+**Status:** 🔜
+
+---
+
+### P2.5 — Triplicated song-clone-and-callback pattern
+
+**Files:** `songsearch.rs` / `artistsearch.rs` / `playlistsearch.rs`
+
+**What:** ~50 lines of the "clone song, send callback with progress" pattern duplicated 3x with minor variations. Previous extraction failed due to RPITIT + self-in-macro limitations.
+
+**Why:** DRY. Reduces maintenance surface.
+
+**AC:** Single shared implementation. All 3 call sites use it. Tests pass. No new trait constraints leaked into callers.
+
+**Dep:** None (but previous attempt failed — may be dead end)
+**Effort:** M (2-3 days, risk of failure again)
+**Status:** 🔜
+
+---
+
+### P2.6 — `resolve_omv_*` shared pattern extraction
+
+**Files:** `api.rs:118-161`, `api.rs:75-116`
+
+**What:** Both `resolve_omv_with_audio_playlist` and `resolve_omv_album_songs_with_search` use the same HashMap cross-ref logic.
+
+**Why:** Duplicated code. Low risk, mechanical extraction.
+
+**AC:** Single `resolve_omv_crossref()` helper. Both callers use it. Tests pass. Coverage for edge cases (zero results, all results matched, partial match).
+
+**Dep:** None
+**Effort:** S (half day)
+**Status:** 🔜
+
+---
+
+## P3 — Performance
+
+### P3.1 — Compact autosave: `to_string_pretty` → `to_string`
+
+**File:** `queue_persistence.rs:88`
+
+**What:** Autosave JSON uses `serde_json::to_string_pretty` producing 20MB files for 58k songs. Switch to compact `to_string()`.
+
+**Why:** Smaller file (~10MB), faster writes, faster reads.
+
+**AC:** Autosave file is ~50% smaller. Loading still works (JSON is valid either way). No data loss.
+
+**Dep:** None
+**Effort:** XS (15 min)
+**Status:** 🔜
+
+---
+
+### P3.2 — `DEFAULT_STREAM_CHANNEL_SIZE` increase
+
+**File:** `manager.rs:176`
+
+**What:** `DEFAULT_STREAM_CHANNEL_SIZE = 20` hardcoded. 20 is small for high-throughput audio events.
+
+**Why:** Potential backpressure under heavy seeking / rapid song switches.
+
+**AC:** Increase to `256` (consistent with rodio queue sizes) or make configurable. Verify no adverse memory impact (256 * message_size ≈ negligible).
+
+**Dep:** None
+**Effort:** XS (15 min)
+**Status:** 🔜
+
+---
+
+### P3.3 — `RwLock<DynamicYtMusic>` write contention
+
+**File:** `server.rs`
+
+**What:** `RwLock` write lock held across entire HTTP request duration serializes concurrent API queries.
+
+**Why:** Album fetch + search run in parallel today but the RwLock serializes them.
+
+**AC:** Measure current contention (add metrics or log). If significant, use `Arc<DynamicYtMusic>` + clone-on-write or split reader/writer. If negligible, close as wontfix.
+
+**Dep:** None
+**Effort:** S (1 day to investigate + fix if needed)
+**Status:** 🔜
+
+---
+
+## P4 — Testing / CI
+
+### P4.1 — GitHub Actions CI pipeline
+
+**Files:** `.github/`
+
+**What:** Add workflow for `cargo check` + `cargo test` + `cargo clippy` on PR/push.
+
+**Why:** Currently zero automation. Regressions go undetected between sessions.
+
+**AC:**
+- Workflow triggers on `push` to main + `pull_request` to main
+- `cargo check` fails the build on warnings (or just compiles)
+- `cargo test` runs all non-live-integration tests
+- `cargo clippy` runs with `--deny warnings`
+- Total CI time < 5 min (use caching)
+- Badge in README
+
+**Dep:** None
+**Effort:** S (1 day)
+**Status:** 🔜
+
+---
+
+### P4.2 — Criterion benchmarks for `get_field` hot-path
+
+**File:** `benches/` (new)
+
+**What:** Perf regression detection for `get_field` which is called per frame.
+
+**Why:** Any change to `get_field` that causes allocation degrades frame rendering.
+
+**AC:** 
+- `cargo bench` runs and produces stable measurements
+- Benchmarks cover: `Artists` (Cow::Borrowed), `Title`, `Album`, `Duration`
+- Baseline stored in repo or compared against previous run
+
+**Dep:** None
+**Effort:** S (1 day)
+**Status:** 🔜
+
+---
+
+### P4.3 — Coverage for `resolve_omv_*` edge cases
+
+**File:** `api.rs` tests
+
+**What:** Untested error paths: zero-Atv results, batch empty-list guard, `GetAlbumsSongsError`.
+
+**Why:** These branches silently catch errors — if the logic is wrong, we never know.
+
+**AC:** Unit tests with mock JSON responses for each edge case. Tests fail if the error path is removed/changed.
+
+**Dep:** P2.6 (refactoring first makes testing easier)
+**Effort:** S (half day)
+**Status:** 🔜
+
+---
+
+### P4.4 — Artist album pagination
+
+**What:** `GetArtistAlbumsQuery` only returns first page. Needs `ParseFromContinuable` impl for the album response type.
+
+**Why:** Artists with many albums show incomplete discography.
+
+**AC:**
+- `GetArtistAlbumsQuery` implements `ParseFromContinuable` 
+- Pagination wired in browser: user scrolls past last album → fetches next page
+- Existing continuation token from API response is used
+- All pages loaded before reaching end of list
+
+**Dep:** Requires understanding the YT API album response continuation format
+**Effort:** M (3-5 days, needs API reverse-engineering)
+**Status:** 🔜
+
+---
+
+## P5 — Far Future (Not Ready)
+
+| # | Item | Why blocked |
+|---|------|-------------|
+| F1 | Replace async-callback-manager with native Tokio | 29 usages, ~2000 line rewrite, unclear payoff. Needs dependency analysis. |
+| F2 | Gapless playback | Blocked on symphonia AAC gapless support (upstream). Not actionable. |
+| F3 | Mouse support | Needs ratatui MouseEvent impl across key stack. Pure scope. |
+| F4 | Offline disk cache | Serialize `BYTE_CACHE` to disk on shutdown. Needs shutdown hook. |
+| F5 | Display lyrics | Requires GetLyrics integration + new UI component. Pure scope. |
+| F6 | Theming | Color scheme config. Pure scope. Low demand. |
+| F7 | Stats Tab | CPU/memory/cache metrics in TUI. Pure scope. |
 
 ---
 
@@ -116,95 +378,8 @@
 
 | Icon | Meaning |
 |------|---------|
-| ✅ Done / Fixed | Resolved in this or prior session |
-| ✅ Guarded | Compile-time test prevents regression |
-| 🔜 Planned | Picked for upcoming work |
-| ⏳ Postponed | Deferred — blocked or lower priority |
-| ⏳ Future | Far future / integration-only |
-| 🔒 Invariant | Verified correct, do not "fix" |
-| 🔒 External | Blocked on external change |
+| 🔜 Pending | Ready to work on |
+| ✅ Done | Completed |
+| 🔒 External | Blocked on upstream / needs investigation |
 
----
-
-## Session Summary (2026-06-17)
-
-**Goal:** Bug hunt and systematic fix of P0/P1 issues across the codebase.
-
-**10 true bugs fixed:**
-| Area | Files Changed |
-|------|--------------|
-| Context labels | `shared_components.rs:85`, `playlistsearch/songs_panel.rs:59` |
-| Wrong handler dispatch | `ui.rs:428-442` |
-| Silent failures → visible | `api.rs:407-409,473-478` |
-| yt-dlp spawn timeout | `yt_dlp.rs:354` |
-| yt-dlp exit code propagation + zombie prevention | `yt_dlp.rs:376-406` |
-| `.expect()` → proper errors | `artistsearch/songs_panel.rs`, `playlistsearch/songs_panel.rs` |
-| Wrong error message | `playlistsearch.rs:380` |
-| "0 results" → "no songs found" | 3 songs panel `get_title()` impls |
-
-**20 false positives eliminated** — verified correct as-is after reading source:
-- `#[should_panic]` test correctly panics (r1 is out of bounds)
-- OAuth hash is within-process only → SipHash fine
-- `blocking_send` called from `spawn_blocking` threads → correct
-- `BrowserSongsList` has no `cur_selected` → not duplicated
-- `--ignore-config` prevents user config from breaking stdout streaming → intentional
-- `config.rs` already has `deny_unknown_fields`
-- `"reqwest"` feature exists in ytmapi-rs
-- Column headings use `"Song"` consistently
-
-**20 typo fixes:** `recieved`/`receieved` → `received` (16 sites), `ConstraitType` → `ConstraintType` (4 sites).
-
-**P3.3 HashMap optimization:** `resolve_omv_album_songs_with_search` takes pre-built `&HashMap` instead of rebuilding per album. Extracted `build_search_map()` helper outside `#[cfg(test)]` for shared use.
-
-## Session Summary (2026-06-17 cont.)
-
-**P2.2 — Fragile ytcfg parsing:** Replaced `split_once`-based matching with `extract_ytcfg_json()` using brace-depth tracking. Handles whitespace, nested braces, escaped quotes, and `}` inside string values. 7 unit tests.
-
-**P2.8 — `ErrorKind::Header` no context:** Added `message: String` field. `Error::header()` now takes a string; 4 call sites in `browser.rs` provide descriptive context (e.g. "missing INNERTUBE_CLIENT_VERSION in YouTube Music page").
-
-## Session Summary (2026-06-18)
-
-**Spinner:** `draw_loadable` now shows animated braille spinner (`⠋⠙⠹...`) instead of static "Loading" text. `cur_tick` parameter added.
-
-**P1.3 — Modal keybindings shown in help:** Added `flatten_keybinds_as_readable()` + `flatten_tree()` in `keyaction.rs` that recursively expand `KeyActionTree::Mode` entries into individual rows with `{trigger} → {sub_key}` keybinds. `get_help_list_items()` in `ui.rs` now uses the new flattener.
-
-**P1.7 — Notifications config:** Added `notifications_enabled: bool` to `Config` and `ConfigIR`. `MediaController::new()` takes the flag; `update_metadata` skips `notify_track_change` when disabled. Example `config.toml` updated.
-
-**Spinner fixes (artist song loading):**
-- Speed: divisor `/8` → `/1` — now animates 1 frame/sec (was 1 frame/8sec) matching the 1s tick rate.
-- Centered: uses `centered_rect` + `Paragraph::alignment(Alignment::Center)` instead of top-left corner.
-
-**P3.2 — Concurrent album fetching:** Switched `FuturesOrdered` → `FuturesUnordered` with index-based reordering. Album queries now run in parallel; an artist with N albums fetches in ~max(N latency) instead of ~sum(N latency).
-
-**P3.2 follow-up — Audio-playlist fold:** Audio-playlist fetch (pass 2 of Omv→Atv correction) folded into each per-album `FuturesUnordered` future so all N playlist fetches run concurrently instead of sequentially after album fetch.
-
-**P3.3 — Owned HashMap for Arc-sharing:** `build_search_map` returns `HashMap<String, VideoID<'static>>` instead of `HashMap<&str, &SearchResultSong>`. Wrapped in `Arc` and shared across concurrent per-album futures. `resolve_omv_album_songs_with_search` updated accordingly.
-
-**P2.4 — PanickingReceiverStream logs instead of panics:** `resume_unwind` replaced with `tracing::error!` log + `Poll::Ready(None)`. Background task panics no longer crash the consuming task.
-
-**P2.5 — Duplicate `blocking_send_or_error` removed:** Defined in both `core.rs` and `async_rodio_sink.rs` (identical). Removed the `async_rodio_sink.rs` copy, import from `core` instead.
-
-**search_songs parallelized with album ID collection:** Spawned via `tokio::spawn` before collecting album browse IDs, awaited after. Search query runs concurrently with paginated album-list fetches.
-
-**HashSet dedup:** Album ID dedup uses `HashSet::insert` (O(n)) instead of `Vec::contains` (O(n²)).
-
-**try_send for Loading signals:** Both `GetArtistSongsProgressUpdate::Loading` and `GetPlaylistSongsProgressUpdate::Loading` use `tx.try_send` (non-blocking) instead of `send_or_error` (blocking).
-
-**AlbumProgress variant:** New `GetArtistSongsProgressUpdate::AlbumProgress { current, total }` sent incrementally as each album finishes processing. Handled with `debug!` log in the UI layer.
-
-### Totals
-| Metric | Count |
-|--------|-------|
-| True bugs fixed | 10 |
-| Code quality fixes | 8 |
-| New features | 4 (spinner, help mode expansion, notification config, AlbumProgress) |
-| Performance improvements | 5 (concurrent album fetch, audio-playlist fold, owned HashMap, HashSet dedup, parallelized search_songs) |
-| Code quality | 2 (blocking_send_or_error dedup, PanickingReceiverStream) |
-| False positives eliminated | 21 |
-| Pending | 20 items in P1–P4 remain |
-
-**Next highest-impact picks:**
-- P1.4 — `type_name::<A>()` in error messages
-- P2.4 — `PanickingReceiverStream` panics on channel close
-- P2.1 — Duplicate code generators
-- P2.9 — `ListSongID` cfg-gated field
+**Effort:** XS (< 1h), S (< 1 day), M (3-5 days), L (1-2 weeks)
