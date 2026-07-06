@@ -56,6 +56,10 @@ fn default_notifications_enabled() -> bool {
     true
 }
 
+fn default_cache_size() -> usize {
+    3
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct Config {
     pub auth_type: AuthType,
@@ -64,6 +68,7 @@ pub struct Config {
     pub volume: u8,
     pub audio_quality: AudioQuality,
     pub notifications_enabled: bool,
+    pub download_cache_size: usize,
 }
 
 impl Default for Config {
@@ -75,6 +80,7 @@ impl Default for Config {
             volume: default_volume(),
             audio_quality: AudioQuality::default(),
             notifications_enabled: true,
+            download_cache_size: default_cache_size(),
         }
     }
 }
@@ -93,6 +99,8 @@ pub struct ConfigIR {
     pub audio_quality: AudioQuality,
     #[serde(default = "default_notifications_enabled")]
     pub notifications_enabled: bool,
+    #[serde(default = "default_cache_size")]
+    pub download_cache_size: usize,
 }
 
 impl TryFrom<ConfigIR> for Config {
@@ -106,6 +114,7 @@ impl TryFrom<ConfigIR> for Config {
             volume,
             audio_quality,
             notifications_enabled,
+            download_cache_size,
         } = value;
         Ok(Config {
             auth_type,
@@ -114,6 +123,7 @@ impl TryFrom<ConfigIR> for Config {
             volume,
             audio_quality,
             notifications_enabled,
+            download_cache_size,
         })
     }
 }
@@ -212,6 +222,7 @@ raisevolume = {action = "vol_up", visiblity = "hidden"}"#;
             volume: super::default_volume(),
             audio_quality: super::AudioQuality::default(),
             notifications_enabled: true,
+            download_cache_size: super::default_cache_size(),
         };
         assert_eq!(config, Config::default());
     }

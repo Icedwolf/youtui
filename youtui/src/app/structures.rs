@@ -230,19 +230,6 @@ pub enum AudioQuality {
     Low,
 }
 
-impl PlayState {
-    pub fn list_icon(&self) -> char {
-        match self {
-            PlayState::Buffering(_) => '',
-            PlayState::NotPlaying => '',
-            PlayState::Playing(_) => '',
-            PlayState::Paused(_) => '',
-            PlayState::Stopped => '',
-            PlayState::Error(_) => '',
-        }
-    }
-}
-
 impl DownloadStatus {
     pub fn list_icon_str(&self) -> &'static str {
         match self {

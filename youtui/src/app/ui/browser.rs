@@ -22,7 +22,7 @@ use songsearch::{BrowserSongsAction, SongSearchBrowser};
 use std::borrow::Cow;
 use std::convert::Into;
 use std::iter::{IntoIterator, Iterator};
-use tracing::warn;
+use tracing::debug;
 
 pub mod artistsearch;
 mod draw;
@@ -111,7 +111,7 @@ impl ActionHandler<BrowserArtistSongsAction> for Browser {
                     &mut this.artist_search_browser
                 });
             }
-            _ => warn!(
+            _ => debug!(
                 "Received action {:?} but artist search browser not active",
                 action
             ),
@@ -127,7 +127,7 @@ impl ActionHandler<BrowserArtistsAction> for Browser {
                     &mut this.artist_search_browser
                 });
             }
-            _ => warn!(
+            _ => debug!(
                 "Received action {:?} but artist search browser not active",
                 action
             ),
@@ -143,7 +143,7 @@ impl ActionHandler<BrowserSongsAction> for Browser {
                     &mut this.song_search_browser
                 });
             }
-            _ => warn!(
+            _ => debug!(
                 "Received action {:?} but song search browser not active",
                 action
             ),
@@ -159,7 +159,7 @@ impl ActionHandler<BrowserPlaylistsAction> for Browser {
                     &mut this.playlist_search_browser
                 });
             }
-            _ => warn!(
+            _ => debug!(
                 "Received action {:?} but playlist search browser not active",
                 action
             ),
@@ -178,7 +178,7 @@ impl ActionHandler<BrowserPlaylistSongsAction> for Browser {
                     &mut this.playlist_search_browser
                 });
             }
-            _ => warn!(
+            _ => debug!(
                 "Received action {:?} but playlist search browser not active",
                 action
             ),

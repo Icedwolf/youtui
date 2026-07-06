@@ -1,35 +1,38 @@
 use std::io::{Read, Seek, SeekFrom};
-use std::sync::{Arc, Condvar, Mutex};
+use std::sync::{Arc, Condvar, Mutex, RwLock};
 
-struct SharedBufferInner {
-    data: Vec<u8>,
+struct SharedBufferMeta {
     finished: bool,
     failed: bool,
     total_len: Option<u64>,
 }
 
 pub struct SharedBuffer {
-    inner: Mutex<SharedBufferInner>,
+    meta: Mutex<SharedBufferMeta>,
+    data: RwLock<Vec<u8>>,
     cvar: Condvar,
 }
 
 impl SharedBuffer {
+    #[must_use]
     pub fn new() -> Arc<Self> {
         Arc::new(Self {
-            inner: Mutex::new(SharedBufferInner {
-                data: Vec::new(),
+            meta: Mutex::new(SharedBufferMeta {
                 finished: false,
                 failed: false,
                 total_len: None,
             }),
+            data: RwLock::new(Vec::new()),
             cvar: Condvar::new(),
         })
     }
 
+    #[must_use]
     pub fn len(&self) -> usize {
-        self.inner.lock().unwrap_or_else(|e| e.into_inner()).data.len()
+        self.data.read().unwrap_or_else(|e| e.into_inner()).len()
     }
 
+    #[must_use]
     pub fn writer(self: &Arc<Self>) -> SharedBufferWriter {
         SharedBufferWriter {
             buffer: self.clone(),
@@ -38,43 +41,37 @@ impl SharedBuffer {
     }
 
     pub fn set_total_len(&self, len: u64) {
-        let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
-        inner.total_len = Some(len);
+        let mut meta = self.meta.lock().unwrap_or_else(|e| e.into_inner());
+        meta.total_len = Some(len);
         self.cvar.notify_all();
     }
 
+    #[must_use]
     pub fn total_len(&self) -> Option<u64> {
-        self.inner.lock().unwrap_or_else(|e| e.into_inner()).total_len
+        self.meta.lock().unwrap_or_else(|e| e.into_inner()).total_len
     }
 
-    /// Block until `total_len` is set or `timeout` elapses.
-    /// Returns `None` if the timeout fires before total_len is set,
-    /// or if the buffer transitions to finished/failed before total_len.
-    /// WARNING: this blocks the calling thread (std::sync::Condvar).
-    /// Do NOT call from async contexts — use the async polling loop
-    /// in `download_and_decode` instead.
-    #[allow(dead_code)]
-    pub fn wait_for_total_len(&self, timeout: std::time::Duration) -> Option<u64> {
-        let start = std::time::Instant::now();
-        let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
-        while inner.total_len.is_none() && !inner.finished && !inner.failed {
-            let elapsed = start.elapsed();
-            if elapsed >= timeout {
-                return None;
-            }
-            let (guard, _) = self
-                .cvar
-                .wait_timeout(inner, timeout - elapsed)
-                .unwrap();
-            inner = guard;
-        }
-        inner.total_len
-    }
-
+    #[must_use]
     pub fn data(&self) -> Vec<u8> {
-        self.inner.lock().unwrap_or_else(|e| e.into_inner()).data.clone()
+        self.data.read().unwrap_or_else(|e| e.into_inner()).clone()
     }
 
+    #[must_use]
+    pub fn is_failed(&self) -> bool {
+        self.meta.lock().unwrap_or_else(|e| e.into_inner()).failed
+    }
+
+    pub fn fail(&self) {
+        let mut meta = self.meta.lock().unwrap_or_else(|e| e.into_inner());
+        meta.failed = true;
+        meta.finished = true;
+        if meta.total_len.is_none() {
+            meta.total_len = Some(self.data.read().unwrap_or_else(|e| e.into_inner()).len() as u64);
+        }
+        self.cvar.notify_all();
+    }
+
+    #[must_use]
     pub fn reader(self: &Arc<Self>) -> SharedBufferReader {
         SharedBufferReader {
             buffer: self.clone(),
@@ -90,27 +87,26 @@ pub struct SharedBufferWriter {
 
 impl SharedBufferWriter {
     pub fn write(&mut self, data: &[u8]) {
-        let mut inner = self.buffer.inner.lock().unwrap_or_else(|e| e.into_inner());
-        inner.data.extend_from_slice(data);
+        self.buffer.data.write().unwrap_or_else(|e| e.into_inner()).extend_from_slice(data);
         self.buffer.cvar.notify_all();
     }
 
     pub fn finish(&mut self) {
-        let mut inner = self.buffer.inner.lock().unwrap_or_else(|e| e.into_inner());
-        inner.finished = true;
-        if inner.total_len.is_none() {
-            inner.total_len = Some(inner.data.len() as u64);
+        let mut meta = self.buffer.meta.lock().unwrap_or_else(|e| e.into_inner());
+        meta.finished = true;
+        if meta.total_len.is_none() {
+            meta.total_len = Some(self.buffer.data.read().unwrap_or_else(|e| e.into_inner()).len() as u64);
         }
         self.finished = true;
         self.buffer.cvar.notify_all();
     }
 
     pub fn fail(&mut self) {
-        let mut inner = self.buffer.inner.lock().unwrap_or_else(|e| e.into_inner());
-        inner.failed = true;
-        inner.finished = true;
-        if inner.total_len.is_none() {
-            inner.total_len = Some(inner.data.len() as u64);
+        let mut meta = self.buffer.meta.lock().unwrap_or_else(|e| e.into_inner());
+        meta.failed = true;
+        meta.finished = true;
+        if meta.total_len.is_none() {
+            meta.total_len = Some(self.buffer.data.read().unwrap_or_else(|e| e.into_inner()).len() as u64);
         }
         self.finished = true;
         self.buffer.cvar.notify_all();
@@ -133,22 +129,27 @@ pub struct SharedBufferReader {
 
 impl Read for SharedBufferReader {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        let mut inner = self.buffer.inner.lock().unwrap_or_else(|e| e.into_inner());
-        // If buffer is finished, clamp position to the actual data length
-        // to handle SeekFrom::End positions computed from an overestimated
-        // total_len (yt-dlp progress line may slightly overestimate).
-        if inner.finished && self.pos >= inner.data.len() {
-            self.pos = inner.data.len();
+        let mut meta = self.buffer.meta.lock().unwrap_or_else(|e| e.into_inner());
+        loop {
+            let data_len = self.buffer.data.read().unwrap_or_else(|e| e.into_inner()).len();
+            if self.pos < data_len || meta.finished || meta.failed {
+                break;
+            }
+            meta = self.buffer.cvar.wait(meta).unwrap_or_else(|e| e.into_inner());
         }
-        while self.pos >= inner.data.len() && !inner.finished && !inner.failed {
-            inner = self.buffer.cvar.wait(inner).unwrap_or_else(|e| e.into_inner());
+        // Clamp position in case the buffer finished while we were waiting
+        // and total_len was slightly overestimated.
+        let data_len = self.buffer.data.read().unwrap_or_else(|e| e.into_inner()).len();
+        if meta.finished && self.pos >= data_len {
+            self.pos = data_len;
         }
-        if self.pos >= inner.data.len() || inner.failed {
+        if self.pos >= data_len || meta.failed {
             return Ok(0);
         }
-        let available = inner.data.len() - self.pos;
+        let data = self.buffer.data.read().unwrap_or_else(|e| e.into_inner());
+        let available = data.len() - self.pos;
         let to_read = buf.len().min(available);
-        buf[..to_read].copy_from_slice(&inner.data[self.pos..self.pos + to_read]);
+        buf[..to_read].copy_from_slice(&data[self.pos..self.pos + to_read]);
         self.pos += to_read;
         Ok(to_read)
     }
@@ -156,40 +157,28 @@ impl Read for SharedBufferReader {
 
 impl Seek for SharedBufferReader {
     fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
-        let mut inner = self.buffer.inner.lock().unwrap_or_else(|e| e.into_inner());
+        let mut meta = self.buffer.meta.lock().unwrap_or_else(|e| e.into_inner());
         let new_pos = match pos {
             SeekFrom::Start(offset) => offset as i64,
             SeekFrom::Current(delta) => self.pos as i64 + delta,
             SeekFrom::End(offset) => {
-                // Use total_len estimate (set from yt-dlp progress) for
-                // immediate non-blocking return when download is in progress.
-                // When finished, use the actual data length (total_len may
-                // slightly overestimate, and SeekFrom::End positions computed
-                // from an overestimate would exceed available data — the
-                // subsequent read() would return EOF, causing symphonia's
-                // isomp4 reader to fail with "end of stream").
-                if inner.finished {
-                    inner.data.len() as i64 + offset
-                } else if inner.total_len.is_some() {
-                    inner.total_len.unwrap() as i64 + offset
+                if meta.finished {
+                    self.buffer.data.read().unwrap_or_else(|e| e.into_inner()).len() as i64 + offset
+                } else if let Some(total_len) = meta.total_len {
+                    total_len as i64 + offset
                 } else {
-                    while !inner.finished && !inner.failed {
-                        inner = self.buffer.cvar.wait(inner).unwrap_or_else(|e| e.into_inner());
+                    while !meta.finished && !meta.failed {
+                        meta = self.buffer.cvar.wait(meta).unwrap_or_else(|e| e.into_inner());
                     }
-                    inner.data.len() as i64 + offset
+                    self.buffer.data.read().unwrap_or_else(|e| e.into_inner()).len() as i64 + offset
                 }
             }
         };
-        // Clamp to total_len when known and download is in progress so
-        // SeekFrom::End(0) returns the actual file size (used by
-        // Symphonia's isomp4 reader).  Clamp to available data when
-        // total_len is unknown (legacy path).  Either way, subsequent
-        // read() blocks on Condvar if data isn't available yet, so the
-        // streaming behaviour works naturally.
-        let upper = inner
+        let data_len = self.buffer.data.read().unwrap_or_else(|e| e.into_inner()).len() as u64;
+        let upper = meta
             .total_len
-            .filter(|_| !inner.finished)
-            .unwrap_or(inner.data.len() as u64) as usize;
+            .filter(|_| !meta.finished)
+            .unwrap_or(data_len) as usize;
         self.pos = (new_pos.max(0) as usize).min(upper);
         Ok(self.pos as u64)
     }
@@ -260,9 +249,7 @@ mod tests {
             // Extend the buffer — just write padding to reach the needed size
             // then write the target bytes.
             {
-                let inner = w.buffer.inner.lock().unwrap_or_else(|e| e.into_inner());
-                let current = inner.data.len();
-                drop(inner);
+                let current = w.buffer.data.read().unwrap_or_else(|e| e.into_inner()).len();
                 let pad = vec![0u8; needed - current];
                 w.write(&pad);
             }
@@ -348,33 +335,4 @@ mod tests {
         assert_eq!(pos, 300);
     }
 
-    #[test]
-    fn wait_for_total_len_returns_when_set_from_another_thread() {
-        let buf = SharedBuffer::new();
-
-        let buf2 = buf.clone();
-        std::thread::spawn(move || {
-            std::thread::sleep(Duration::from_millis(20));
-            buf2.set_total_len(42);
-        });
-
-        let got = buf.wait_for_total_len(Duration::from_secs(5));
-        assert_eq!(got, Some(42));
-    }
-
-    #[test]
-    fn wait_for_total_len_timeout_returns_none() {
-        let buf = SharedBuffer::new();
-        // No one sets total_len — should time out.
-        let got = buf.wait_for_total_len(Duration::from_millis(10));
-        assert_eq!(got, None);
-    }
-
-    #[test]
-    fn wait_for_total_len_returns_some_when_already_set() {
-        let buf = SharedBuffer::new();
-        buf.set_total_len(100);
-        let got = buf.wait_for_total_len(Duration::from_secs(5));
-        assert_eq!(got, Some(100));
-    }
 }

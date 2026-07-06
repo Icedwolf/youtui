@@ -1,7 +1,6 @@
 use super::YoutuiWindow;
 use crate::app::media_controls::{MediaControlsStatus, MediaControlsUpdate, MediaControlsVolume};
 use crate::app::structures::PlayState;
-use itertools::Itertools;
 use std::time::Duration;
 
 pub fn draw_app_media_controls(w: &YoutuiWindow) -> MediaControlsUpdate<'_> {
@@ -39,11 +38,8 @@ pub fn draw_app_media_controls(w: &YoutuiWindow) -> MediaControlsUpdate<'_> {
         thumb.map(|t| t.url.clone())
     });
     let artist_title = cur_active_song
-        .map(|s| s.artists.as_ref())
-        .map(|s| {
-            Itertools::intersperse(s.iter().map(|s| s.name.as_str()), ", ").collect::<String>()
-        })
-        .unwrap_or("".to_string())
+        .map(|s| s.artists_string.as_str())
+        .unwrap_or("")
         .into();
     let playback_status = match w.playlist.play_status {
         PlayState::Playing(_) => MediaControlsStatus::Playing { progress },

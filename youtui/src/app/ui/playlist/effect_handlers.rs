@@ -3,13 +3,12 @@ use crate::app::server::{ArcServer, DownloadProgressUpdate, TaskMetadata};
 use crate::app::structures::ListSongID;
 use crate::app::ui::playlist::Playlist;
 use crate::async_rodio_sink::{
-    AllStopped, AutoplayUpdate, PausePlayResponse, Paused, PlayUpdate, ProgressUpdate, QueueUpdate,
-    Resumed, Stopped, VolumeUpdate,
+    AllStopped, AutoplayUpdate, PausePlayResponse, Paused, PlayUpdate, ProgressUpdate, Resumed,
+    Stopped, VolumeUpdate,
 };
 use async_callback_manager::{AsyncTask, FrontendEffect};
-use rodio::decoder::DecoderError;
 use std::fmt::Debug;
-use tracing::{error, info};
+use tracing::info;
 use ytmapi_rs::common::{VideoID, YoutubeID};
 
 #[derive(Debug, PartialEq)]
@@ -30,12 +29,6 @@ pub struct HandlePausedResponse;
 pub struct HandlePlayUpdateOk;
 #[derive(Debug, PartialEq, Clone)]
 pub struct HandleAutoplayUpdateOk;
-#[allow(dead_code)]
-#[derive(Debug, PartialEq, Clone)]
-pub struct HandleQueueUpdateOk;
-#[allow(dead_code)]
-#[derive(Debug, PartialEq, Clone)]
-pub struct HandlePlayUpdateError(pub ListSongID);
 #[derive(Debug, PartialEq, Clone)]
 pub struct HandleSongDownloadProgressUpdate(pub ListSongID);
 #[derive(Debug, PartialEq)]
@@ -50,12 +43,7 @@ enum PlaylistEffect {
     HandlePausePlayResponse(PausePlayResponse<ListSongID>),
     HandleResumed(ListSongID),
     HandlePaused(ListSongID),
-    HandlePlayUpdate(PlayUpdate<ListSongID>),
-    #[allow(dead_code)]
-    HandleQueueUpdate(QueueUpdate<ListSongID>),
     HandleAutoplayUpdate(AutoplayUpdate<ListSongID>),
-    #[allow(dead_code)]
-    HandleSetToError(ListSongID),
     HandleSongDownloadProgressUpdate(DownloadProgressUpdate, ListSongID),
     HandleResolveAudioResult(Option<VideoID<'static>>, ListSongID),
 }
@@ -78,28 +66,15 @@ impl_youtui_task_handler!(
     HandlePlayUpdateOk,
     PlayUpdate<ListSongID>,
     Playlist,
-    |_, input| PlaylistEffect::HandlePlayUpdate(input)
-);
-impl_youtui_task_handler!(
-    HandleQueueUpdateOk,
-    QueueUpdate<ListSongID>,
-    Playlist,
-    |_, input| PlaylistEffect::HandleQueueUpdate(input)
+    |_, input: PlayUpdate<ListSongID>| {
+        PlaylistEffect::HandleAutoplayUpdate(input.into())
+    }
 );
 impl_youtui_task_handler!(
     HandleAutoplayUpdateOk,
     AutoplayUpdate<ListSongID>,
     Playlist,
     |_, input| PlaylistEffect::HandleAutoplayUpdate(input)
-);
-impl_youtui_task_handler!(
-    HandlePlayUpdateError,
-    DecoderError,
-    Playlist,
-    |this: HandlePlayUpdateError, input| {
-        error!("Error {input} received when trying to decode {:?}", this.0);
-        PlaylistEffect::HandleSetToError(this.0)
-    }
 );
 impl_youtui_task_handler!(
     HandleSongDownloadProgressUpdate,
@@ -158,12 +133,9 @@ impl FrontendEffect<Playlist, ArcServer, TaskMetadata> for PlaylistEffect {
                 return target.handle_set_song_play_progress(msg.duration, msg.identifier);
             }
             PlaylistEffect::HandleVolumeUpdate(msg) => target.handle_volume_update(msg),
-            PlaylistEffect::HandleQueueUpdate(msg) => return target.handle_queue_update(msg),
-            PlaylistEffect::HandlePlayUpdate(msg) => return target.handle_play_update(msg),
             PlaylistEffect::HandleAutoplayUpdate(msg) => {
                 return target.handle_autoplay_update(msg);
             }
-            PlaylistEffect::HandleSetToError(msg) => return target.handle_set_to_error(msg),
             PlaylistEffect::HandleSongDownloadProgressUpdate(update, id) => {
                 return target.handle_song_download_progress_update(update, id);
             }

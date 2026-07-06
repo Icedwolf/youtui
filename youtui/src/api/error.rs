@@ -14,13 +14,19 @@ use crate::config::AuthType;
 #[derive(Clone, Debug)]
 pub struct DynamicApiError(String);
 
+/// Strip Rust module paths to get just the type name (last segment after ::).
+fn short_type_name<T: ?Sized>() -> &'static str {
+    let full = std::any::type_name::<T>();
+    full.rsplit("::").next().unwrap_or(full)
+}
+
 pub fn wrong_auth_token_error_message<Q>(
     current_authtype: AuthType,
     expected_authtypes: &[AuthType],
 ) -> String {
     format!(
         "Query <{}> not supported on auth type {:?}. Expected auth type: {:?}",
-        std::any::type_name::<Q>(),
+        short_type_name::<Q>(),
         current_authtype,
         expected_authtypes
     )

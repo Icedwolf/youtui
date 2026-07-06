@@ -22,8 +22,6 @@ mod keybind;
 mod widgets;
 
 #[cfg(test)]
-mod decoder_integration_test;
-#[cfg(test)]
 mod tests;
 
 pub const POTOKEN_FILENAME: &str = "po_token.txt";

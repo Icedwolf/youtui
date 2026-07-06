@@ -64,12 +64,10 @@ impl BrowserToken {
             ("Cookie", cookies.as_str().into()),
         ];
         let response_text = client.get_query(YTM_URL, initial_headers, &()).await?.text;
-        // Check for rejected user agent (English message; localized versions fall
-        // through to the "missing INNERTUBE_CLIENT_VERSION" Header error below with
-        // a descriptive message instead of the old opaque "Error parsing header.").
-        if response_text.contains("Sorry, YouTube Music is not optimised for your browser. Check for updates or try Google Chrome.") {
-            return Err(Error::invalid_user_agent(user_agent));
-        };
+        // If the response is an error page (rejected user agent), INNERTUBE_CLIENT_VERSION
+        // won't be present and the parsing below will produce a descriptive error.
+        // Previously this was an English-only `contains` check that broke for non-English
+        // locales — the INNERTUBE_CLIENT_VERSION fallback works for all languages.
         let client_version = response_text
             .split_once("INNERTUBE_CLIENT_VERSION\":\"")
             .ok_or(Error::header("missing INNERTUBE_CLIENT_VERSION in YouTube Music page"))?

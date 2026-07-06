@@ -22,6 +22,7 @@ enum TabGridConstraint {
 
 impl<'a> TabGrid<'a> {
     #[allow(dead_code)]
+    #[must_use]
     pub fn new_with_max_cols(
         titles: impl IntoIterator<Item = impl Into<Cow<'a, str>>>,
         cols: u16,
@@ -35,6 +36,7 @@ impl<'a> TabGrid<'a> {
         }
     }
 
+    #[must_use]
     pub fn new_with_max_rows(
         titles: impl IntoIterator<Item = impl Into<Cow<'a, str>>>,
         rows: u16,
@@ -49,6 +51,7 @@ impl<'a> TabGrid<'a> {
     }
 
     /// zero indexed
+    #[must_use]
     pub fn select(self, selected: usize) -> Self {
         Self {
             selected: Some(selected),
@@ -56,6 +59,7 @@ impl<'a> TabGrid<'a> {
         }
     }
 
+    #[must_use]
     pub fn highlight_style(self, highlight_style: Style) -> Self {
         Self {
             highlight_style: Some(highlight_style),
@@ -64,6 +68,7 @@ impl<'a> TabGrid<'a> {
     }
 
     /// Returns 0 if there are 0 cols or 0 titles.
+    #[must_use]
     pub fn required_width(&self) -> usize {
         match self.constraint {
             TabGridConstraint::MaxCols(cols) => self
@@ -85,6 +90,7 @@ impl<'a> TabGrid<'a> {
     }
 
     /// Returns 0 if there are 0 cols (instead of panicing)
+    #[must_use]
     pub fn required_height(&self) -> usize {
         match self.constraint {
             TabGridConstraint::MaxCols(cols) => {

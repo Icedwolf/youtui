@@ -1,0 +1,35 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  // ALWAYS-LOADED INSTRUCTIONS — these files are merged into agent context
+  // every session. They contain architectural invariants and design decisions
+  // that must not be violated.
+  "instructions": [
+    "DECISIONS.md",
+    "CODEBASE_GUIDE.md",
+    "BACKLOG.md"
+  ],
+  // PERMISSIONS GATE — every file edit requires user approval.
+  // This is the enforcement mechanism for the AGENTS.md pre-flight checklist:
+  // the agent MUST stop and ask before writing code, giving the user a chance
+  // to verify that path enumeration + state table + dry-run were completed.
+  "permission": {
+    "edit": "ask",
+    // bash is unrestricted for research (grep, cargo), but destructive ops
+    // (git commit, git push, rm, etc.) require approval.
+    "bash": {
+      "*": "ask",
+      "cargo *": "allow",
+      "rtk *": "allow",
+      "grep *": "allow",
+      "find *": "allow",
+      "ls *": "allow",
+      "wc *": "allow",
+      "which *": "allow",
+      "mkdir *": "allow",
+      "touch *": "allow",
+      "cat *": "allow",
+      "head *": "allow",
+      "tail *": "allow"
+    }
+  }
+}

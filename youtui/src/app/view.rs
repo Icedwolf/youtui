@@ -41,6 +41,7 @@ impl TableFilterCommand {
             TableFilterCommand::All(f) => format!("ALL{}", f.as_readable()),
         }
     }
+    #[must_use]
     pub fn matches_row<const N: usize>(
         &self,
         row: &ListSong,
@@ -66,6 +67,7 @@ impl Filter {
 impl FilterString {
     /// Constructs a CaseInsensitive filter, pre-computing the lowercased form
     /// so it is not recomputed on every call to is_in/is_equal.
+    #[must_use]
     pub fn case_insensitive(s: String) -> Self {
         let lowercased = s.to_ascii_lowercase();
         Self::CaseInsensitive {
@@ -78,6 +80,7 @@ impl FilterString {
             FilterString::CaseInsensitive { original, .. } => format!("a=A:{original}"),
         }
     }
+    #[must_use]
     pub fn is_in<S: AsRef<str>>(&self, test_str: S) -> bool {
         match self {
             FilterString::CaseInsensitive { lowercased, .. } => test_str
@@ -95,6 +98,7 @@ pub enum BasicConstraint {
 }
 
 /// Use basic constraints to construct dynamic column widths for a table.
+#[must_use]
 pub fn basic_constraints_to_table_constraints(
     basic_constraints: &[BasicConstraint],
     length: u16,

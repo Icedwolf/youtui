@@ -1,7 +1,7 @@
 use crate::app::component::actionhandler::ComponentEffect;
 use crate::app::structures::ListSong;
 use crate::app::structures::Thumbnail;
-use crate::app::ui::playlist::Playlist;
+use crate::app::ui::playlist::{PlayMode, Playlist};
 use crate::get_data_dir;
 use async_callback_manager::AsyncTask;
 use fs_err as fs;
@@ -85,7 +85,7 @@ pub fn save_queue(playlist: &Playlist, name: &str) -> Result<(), Box<dyn std::er
     let path = queue_dir.join(format!("{}.json", name));
     let temp_path = queue_dir.join(format!("{}.json.tmp", name));
 
-    let json = serde_json::to_string_pretty(&saved)?;
+    let json = serde_json::to_string(&saved)?;
     let mut temp_file = fs::File::create(&temp_path)?;
     temp_file.write_all(json.as_bytes())?;
     temp_file.sync_all()?;
@@ -155,10 +155,10 @@ fn load_compact_queue(playlist: &mut Playlist, saved: CompactSavedQueue) -> Resu
         
         if let Some(idx) = saved.current_index {
             if let Some(song_id) = playlist.get_id_from_index(idx) {
-                effect = effect.push(playlist.play_song_id(song_id));
+                effect = effect.push(playlist.play_song(song_id, PlayMode::UserInitiated));
                 debug!("Restored playback to song at index {}", idx);
             } else {
-                effect = effect.push(playlist.play_song_id(first_id));
+                effect = effect.push(playlist.play_song(first_id, PlayMode::UserInitiated));
                 debug!("Saved index {} out of bounds, playing first song", idx);
             }
         }

@@ -21,6 +21,7 @@ impl ScrollingTableState {
         }
         self.table_state.select(index);
     }
+    #[must_use]
     pub fn offset(&self) -> usize {
         self.table_state.offset()
     }
@@ -60,6 +61,7 @@ pub struct ScrollingTable<I, H> {
 impl<I, H> ScrollingTable<I, H> {
     /// `cur_tick` should represent a monotonically and periodically increasing
     /// tick count passed on every render, to determine list scroll frame.
+    #[must_use]
     pub fn new<'a, C, II>(
         items: I,
         headings: H,

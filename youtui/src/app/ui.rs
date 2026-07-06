@@ -1,6 +1,6 @@
 use self::browser::Browser;
 use self::logger::Logger;
-use self::playlist::Playlist;
+use self::playlist::{PlayMode, Playlist};
 use super::AppCallback;
 use super::component::actionhandler::{
     ActionHandler, ComponentEffect, DominantKeyRouter, KeyHandleAction, KeyRouter, Scrollable,
@@ -350,6 +350,7 @@ impl YoutuiWindow {
         match event {
             Event::Key(k) => return self.handle_key_event(k),
             Event::Mouse(m) => return self.handle_mouse_event(m).into(),
+            Event::Resize(..) => tracing::debug!("Received Resize event"),
             other => tracing::warn!("Received unimplemented {:?} event", other),
         }
         AsyncTask::new_no_op().into()
@@ -411,7 +412,7 @@ impl YoutuiWindow {
         &mut self,
         mouse_event: crossterm::event::MouseEvent,
     ) -> ComponentEffect<Self> {
-        tracing::warn!("Received unimplemented {:?} mouse event", mouse_event);
+        tracing::debug!("Received unimplemented {:?} mouse event", mouse_event);
         AsyncTask::new_no_op()
     }
     pub fn handle_list_action(&mut self, action: ListAction) -> ComponentEffect<Self> {
@@ -540,7 +541,7 @@ impl YoutuiWindow {
         let (id, next_effect) = self.playlist.push_song_list(song_list);
         effect
             .push(next_effect)
-            .push(self.playlist.play_song_id(id))
+            .push(self.playlist.play_song(id, PlayMode::UserInitiated))
             .map_frontend(|this: &mut Self| &mut this.playlist)
     }
     fn global_handle_key_stack(&mut self) -> YoutuiEffect<Self> {

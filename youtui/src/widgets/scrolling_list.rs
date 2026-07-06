@@ -42,6 +42,7 @@ pub struct ScrollingList<'a, I> {
 impl<'a, I> ScrollingList<'a, I> {
     /// `cur_tick` should represent a monotonically and periodically increasing
     /// tick count passed on every render, to determine list scroll frame.
+    #[must_use]
     pub fn new<II>(items: I, cur_tick: u64) -> ScrollingList<'a, I>
     where
         I: IntoIterator<Item = II> + 'a,

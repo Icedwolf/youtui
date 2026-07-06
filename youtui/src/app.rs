@@ -19,7 +19,6 @@ use std::borrow::Cow;
 use std::fmt::Display;
 use std::io;
 use std::sync::Arc;
-pub use structures::AudioQuality;
 use structures::ListSong;
 use tracing::{debug, error, info, trace, warn};
 use tracing_subscriber::prelude::*;
@@ -122,7 +121,7 @@ impl Youtui {
         // Setup components
         let mut task_manager = async_callback_manager::AsyncCallbackManager::new()
             .with_on_task_spawn_callback(|task| {
-                info!(
+                debug!(
                     "Received task {:?}: type_id: {:?},  constraint: {:?}",
                     task.type_debug, task.type_id, task.constraint
                 )
@@ -144,6 +143,7 @@ impl Youtui {
             (Some(media_controls), Some(media_control_event_stream))
         };
         let event_handler = EventHandler::new(EVENT_CHANNEL_SIZE, media_control_event_stream)?;
+        server::song_downloader::set_cache_max_entries(config.download_cache_size);
         let (mut window_state, effect) = YoutuiWindow::new(config);
         // Even the creation of a YoutuiWindow causes an effect. We'll spawn it straight
         // away.
@@ -169,7 +169,7 @@ impl Youtui {
                 );
             }
             Err(e) => {
-                warn!("Auto-load failed ({}). Starting with empty playlist.", e);
+                debug!("Auto-load failed ({}). Starting with empty playlist.", e);
             }
         }
 
@@ -238,7 +238,7 @@ impl Youtui {
                 task_id,
                 ..
             } => {
-                info!(
+                debug!(
                     "Stream task {:?}: type_id: {:?}, task_id: {:?} finished",
                     type_debug, type_id, task_id
                 );

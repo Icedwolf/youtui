@@ -71,6 +71,7 @@ impl DynamicYtMusic {
         })
     }
 
+    #[must_use]
     pub fn get_token_hash(&self) -> Result<Option<u64>> {
         Ok(match self {
             DynamicYtMusic::Browser(_) | DynamicYtMusic::NoAuth(_) => None,

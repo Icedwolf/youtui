@@ -9,7 +9,7 @@ use tokio::signal::unix::SignalKind;
 use tokio::sync::mpsc::{Receiver, Sender, channel};
 use tokio::task::JoinHandle;
 use tokio::time::interval;
-use tracing::warn;
+use tracing::debug;
 
 const TICK_RATE: Duration = Duration::from_secs(1);
 
@@ -60,7 +60,7 @@ impl EventSpawner<MediaControlsWatcher> {
                     .send(AppEvent::MediaControls(event))
                     .await
                     .unwrap_or_else(|e| {
-                        warn!("Error {:?} received when sending media controls event", e)
+                        debug!("Error {:?} received when sending media controls event", e)
                     });
             }
         });
@@ -84,7 +84,7 @@ impl EventSpawner<Ticker> {
                 handler_tx
                     .send(AppEvent::Tick)
                     .await
-                    .unwrap_or_else(|e| warn!("Error {:?} received when sending tick event", e));
+                    .unwrap_or_else(|e| debug!("Error {:?} received when sending tick event", e));
             }
         });
         Self {
@@ -116,7 +116,7 @@ impl EventSpawner<SignalWatcher> {
                 handler_tx
                     .send(AppEvent::QuitSignal)
                     .await
-                    .unwrap_or_else(|e| warn!("Error {:?} received when sending signal event", e));
+                    .unwrap_or_else(|e| debug!("Error {:?} received when sending signal event", e));
             }
         });
         Ok(Self {
@@ -146,11 +146,11 @@ impl EventSpawner<SignalWatcher> {
                    _ = ctrl_close.recv() => {}
                    _ = ctrl_logoff.recv() => {}
                    _ = ctrl_shutdown.recv() => {}
-                }
-                handler_tx
-                    .send(AppEvent::QuitSignal)
-                    .await
-                    .unwrap_or_else(|e| warn!("Error {:?} received when sending signal event", e));
+                 }
+                 handler_tx
+                     .send(AppEvent::QuitSignal)
+                     .await
+                     .unwrap_or_else(|e| debug!("Error {:?} received when sending signal event", e));
             }
         });
         Ok(Self {
@@ -187,7 +187,7 @@ impl EventSpawner<CrosstermWatcher> {
                         .send(AppEvent::Crossterm(event))
                         .await
                         .unwrap_or_else(|e| {
-                            warn!("Error {:?} received when sending Crossterm event", e)
+                            debug!("Error {:?} received when sending Crossterm event", e)
                         }),
                 }
             }

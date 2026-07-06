@@ -1,8 +1,18 @@
 # Youtui Backlog
 
 **Build:** 0 errors, 0 warnings, 0 clippy
-**Tests:** 263 youtui + 98 ytmapi-rs unit passed
-**Last updated:** 2026-06-25
+**Tests:** 267 youtui + 98 ytmapi-rs unit passed
+**Last updated:** 2026-07-01
+
+**Session (2026-07-01):** Logging audit (P1.4–1.7), dead code + imports (P2.9, P2.15, P2.19), poisons/unwraps (P2.13), magic numbers → named constants (P2.12), `Arc<[u8]>` for BYTE_CACHE (P3.4), row number cache (P3.6), `NonZero` const + hot path trace (decoder/mod.rs). `cargo check` — 0 errors, 0 warnings, 0 clippy.
+
+**Session (2026-07-01 pt2):** `.into_iter().next()` → `.first()` (P2.18), removed dead `decoder_integration_test.rs` (P2.1), added `#[must_use]` to 26 pure functions (P2.16), merged `handle_play_update` → `handle_autoplay_update` via `From` conversion (P2.10), documented 8 fire-and-forget `tokio::spawn` calls (P2.14). `cargo check` — 0 errors, 0 warnings, 0 clippy.
+
+**Session (2026-07-02):** Process overhaul — restructured AGENTS.md with failure story + compulsory pre-flight, added `opencode.jsonc` with `edit:ask` + `instructions`, created `.opencode/skills/preflight/SKILL.md`. Code: P2.10 (actually done — removed `handle_play_update` method + `HandlePlayUpdate` effect variant), P2.11 (actually done — unified `resolve_to_audio_track` + `ResolveSongToAudio`), P2.17 (done — all 24 `String` error sites in `song_downloader.rs` → `anyhow::{bail, Context}`, removed dead `search_broad` method on `Api`), reverted half-baked po_token retry. `cargo check` — 0 errors, 0 warnings. `cargo test -p youtui` — 255 passed, 2 ignored.
+
+**Live log analysis (debug128.log):** Fixed 3 bugs — (1) prebuffer no longer includes the currently-playing song (`download_upcoming_from_id` filters out `get_cur_playing_id()`), (2) buffering songs marked `Queued` so prebuffer won't re-queue them, (3) yt-dlp ERROR lines on stderr now call `SharedBuffer::fail()` so the 5s buffer deadline aborts early instead of waiting for timeout. `cargo check` — 0 errors, 0 warnings, 0 clippy.
+
+**Priority fix:** Removed `download_upcoming_from_id` from `prepare_playback_id`. Prebuffer now only fires AFTER the selected song starts playing (via `handle_playing` → `regenerate_downloads_for_current`). During download, future songs are NOT queued — 100% bandwidth goes to the selected song. `cargo check` — 0 errors, 0 warnings, 0 clippy.
 
 ---
 
@@ -93,7 +103,7 @@
 
 **Dep:** None
 **Effort:** S (half day)
-**Status:** 🔜
+**Status:** ✅ Done
 
 ---
 
@@ -133,6 +143,57 @@
 
 ---
 
+## P1 — Logging Audit
+
+### P1.4 — Hot path log demotion (`decoder/mod.rs:209`)
+
+**What:** `info!("current_span_len -> Some(0) (eos)")` fires on every audio `current_span_len()` query during playback (hot path, ~40/sec).
+
+**Fix:** `info!` → `trace!`
+**Effort:** XS (1 min)
+**Status:** ✅ Done
+
+---
+
+### P1.5 — Per-keystroke log demotion (`async_rodio_sink.rs`)
+
+**What:** ~15 `info!` calls for seek, volume, pause, play, skip — fire on every user keystroke. Also 2 `error!` calls that are normal transitions (autoplay already playing, queue-empty).
+
+**Fix:** All 15 `info!` → `debug!`, 2 `error!` → `debug!`
+**Effort:** XS (15 min)
+**Status:** ✅ Done
+
+---
+
+### P1.6 — Per-download pipeline noise (`song_downloader.rs`, `playlist.rs`)
+
+**What:** yt-dlp WARNING stderr (`info!`, every download), download scope/queue dump (`info!`, every song transition), normal stream termination messages.
+
+**Fix:**
+- `song_downloader.rs:307,383` `info!` → `debug!`
+- `song_downloader.rs:310,386,364,404` `info!` → `debug!`
+- `song_downloader.rs:142,358,398` `info!` → `warn!` (really errors, fix wrong level)
+- `song_downloader.rs:173,448,548` `info!` → `error!` (panics)
+- `playlist.rs:840-886` `info!` → `debug!`
+**Effort:** S (30 min)
+**Status:** ✅ Done
+
+---
+
+### P1.7 — Per-event noise (shutdown, browser routing, task tracking)
+
+**What:**
+- `appevent.rs:63-190` `warn!` → `debug!` — channel send errors during normal shutdown
+- `browser.rs:114-186` `warn!` → `debug!` — wrong-browser variant key routing
+- `app.rs:125,241` `info!` → `debug!` — task spawn/finish (fires per async task)
+- `api.rs:342-622` `error!` → `warn!` — recoverable API query failures
+- `async_rodio_sink.rs:48,95` `error!` → `debug!` — normal autoplay/queue transitions
+
+**Effort:** S (30 min)
+**Status:** ✅ Done
+
+---
+
 ## P2 — Code Quality
 
 ### P2.1 — Remove dead decoder integration test file
@@ -145,7 +206,7 @@
 
 **Dep:** None
 **Effort:** XS (5 min)
-**Status:** 🔜
+**Status:** ✅ Done
 
 ---
 
@@ -233,7 +294,273 @@
 
 ---
 
-## P3 — Performance
+### P2.7 — `download_and_decode()` 536-line monolith extraction
+
+**Files:** `song_downloader.rs:88-624`
+
+**What:** Function has 3 async sub-pipelines (URL-cache fast path, ffmpeg relay, M4A direct), 6+ nesting levels, and ~80% duplicated structure between paths.
+
+**Why:** Maintainability — any change to the download pipeline risks missing one of the duplicated paths.
+
+**AC:**
+- Extract stdout writer pattern → `spawn_stdout_writer()`
+- Extract stderr monitor pattern → `spawn_stderr_monitor()`
+- Extract "wait for completion + cache" postlude → helper
+- All paths share the same helpers
+- Tests pass, no behavior change
+
+**Dep:** None
+**Effort:** M (1-2 days)
+**Status:** 🔜
+
+---
+
+### P2.8 — `get_artist_songs()` 241-line async nest
+
+**File:** `api.rs:330-571`
+
+**What:** Nested closures, 5+ match levels, inline `PerAlbumResult` enum, `FuturesUnordered` — undocumented async logic with zero tests for the orchestration.
+
+**Why:** Maintainability — undocumented, untested.
+
+**AC:**
+- Extract per-album async future into named fn
+- Add unit tests for the extracted helper
+
+**Dep:** None
+**Effort:** S (1 day)
+**Status:** 🔜
+
+---
+
+### P2.9 — Remove dead `#[allow(dead_code)]` items (18 annotations)
+
+**Files:** `async_rodio_sink.rs`, `messages.rs`, `player.rs`, `streaming_buffer.rs`, `decoder/mod.rs`, `core.rs`, `drawutils.rs`, `widgets/`, `actionhandler.rs`, `footer.rs`
+
+**What:** `queue_song` feature is fully wired but never called. `map_to_play_update`, `map_to_queue_update`, `map_to_autoplay_update` duplicate inline match logic. `wait_for_total_len` is dead and dangerous (sync Condvar in async context). Various unused fields/functions.
+
+**Why:** Dead code confuses navigation, litters warnings.
+
+**AC:**
+- Remove `QueueSong` variant/impl/method from async_rodio_sink, messages, player
+- Remove `map_to_*` functions (3)
+- Remove `wait_for_total_len` (dead, uses sync Condvar — dangerous)
+- Remove unused fields/widgets/helpers
+- Verify no compilation errors
+
+**Dep:** None
+**Effort:** S (1 day)
+**Status:** ✅ Done
+
+---
+
+### P2.10 — Merge `handle_play_update` / `handle_autoplay_update`
+
+**File:** `playlist.rs:1671-1689`, `effect_handlers.rs:66-71,135-138`
+
+**What:** `handle_play_update` was a 1-line delegating wrapper (`self.handle_autoplay_update(update.into())`). `handle_autoplay_update` contained the real implementation with all match branches. The separate `PlaylistEffect::HandlePlayUpdate` enum variant and its dispatch case duplicated the routing logic.
+
+**Why:** Reduces maintenance surface — eliminates dead delegation and enum variants.
+
+**AC:**
+- `handle_play_update` method removed
+- `PlaylistEffect::HandlePlayUpdate` variant removed
+- `PlayUpdate` → `AutoplayUpdate` conversion moved into the effect handler closure for `HandlePlayUpdateOk`
+- Tests pass
+
+**Dep:** None
+**Effort:** XS (15 min)
+**Status:** ✅ Done
+
+---
+
+### P2.11 — Unify duplicate OMV resolution
+
+**Files:** `api.rs:647-689`, `messages.rs:233-274`
+
+**What:** Both `resolve_to_audio_track()` in api.rs and `ResolveSongToAudio::into_future()` in messages.rs implemented the same algorithm: `search_songs` → check is_audio_track + title + artist → `search_broad` fallback → return.
+
+**Why:** DRY — duplicated code diverges silently.
+
+**AC:**
+- `resolve_to_audio_track` made the canonical implementation (takes title/artist/raw_id, returns `Option<VideoID>`)
+- `ResolveSongToAudio::into_future` now delegates to `resolve_to_audio_track`
+- `search_broad` method removed from `Api` struct (dead code — callers use free function directly)
+- Old `search_songs` + `search_broad` free functions remain behind the shared helper
+- Tests pass
+
+**Dep:** None
+**Effort:** XS (30 min)
+**Status:** ✅ Done
+
+---
+
+### P2.12 — Magic numbers → named constants
+
+**Files:** `song_downloader.rs`
+
+**What:** `64 * 1024` (read buffer, 12+ occurrences), `120` (download timeout, 6+), `1024` (stream init threshold, 2), `270` (WAV header size, comments only), `5` (decoder init deadline, 3+).
+
+**Why:** Maintainability — magic numbers are undocumented.
+
+**AC:**
+- `const READ_BUF_SIZE: usize = 64 * 1024`
+- `const DOWNLOAD_TIMEOUT_S: u64 = 120`
+- `const STREAM_INIT_THRESHOLD: usize = 1024`
+- `const DECODER_INIT_DEADLINE_S: u64 = 5`
+- `const M4A_TOTAL_LEN_TIMEOUT_S: u64 = 15`
+- Replace all occurrences
+
+**Dep:** None
+**Effort:** XS (30 min)
+**Status:** ✅ Done
+
+---
+
+### P2.13 — Poisons & unwraps (crash safety)
+
+**Files:** `song_downloader.rs:83`, `streaming_buffer.rs:65,174`, `decoder/mod.rs:218,223`
+
+**What:** `URL_CACHE.lock().unwrap()` panic risk on poisoned mutex. `cvar.wait_timeout().unwrap()` — waits indefinitely if poisoned. `inner.total_len.unwrap()` — panics if total_len not set. `NonZero::new(2u16).unwrap()` — always safe but non-idiomatic.
+
+**Why:** Crash safety — poisoned mutexes cause cascade panics.
+
+**AC:**
+- `song_downloader.rs:83` → `unwrap_or_else(|e| e.into_inner())`
+- `streaming_buffer.rs:65` → proper error handling
+- `streaming_buffer.rs:174` → `.expect("total_len must be set before seek")`
+- `decoder/mod.rs:218,223` → `const` `NonZero` or `NonZero::MIN`
+
+**Dep:** None
+**Effort:** XS (15 min)
+**Status:** ✅ Done
+
+---
+
+### P2.14 — Fire-and-forget `tokio::spawn` (lost panics)
+
+**Files:** `messages.rs:216,335,476,501,526`, `song_downloader.rs:544`
+
+**What:** Spawned tasks are not bound to variables — panics are silently swallowed.
+
+**Why:** Debuggability — silent failures hide bugs.
+
+**AC:**
+- Bind `JoinHandle` and log `JoinError` on panic
+- At minimum, add `// fire-and-forget: panics here are benign because …` comment documenting intent
+
+**Dep:** None
+**Effort:** S (half day)
+**Status:** ✅ Done (added fire-and-forget comments to 8 unbound spawns: messages.rs ×4, song_downloader.rs ×3, api.rs ×1)
+
+---
+
+### P2.15 — `needless_range_loop` in messages.rs
+
+**Files:** `messages.rs:192,213`
+
+**What:** `for idx in 0..top_count { results[idx] }` → use `.iter().enumerate().take(top_count)`.
+
+**Why:** Idiomatic Rust.
+
+**AC:** Replace with iterator chain
+**Effort:** XS (5 min)
+**Status:** ✅ Done
+
+---
+
+### P2.16 — Missing `#[must_use]` on pure functions (26 functions across 8 files)
+
+**Files:** `streaming_buffer.rs`, `scrolling_list.rs`, `tab_grid.rs`, `scrolling_table.rs`, `player.rs`, `view.rs`, `api.rs`, `server/api.rs`
+
+**What:** Pure `fn(&self) -> T` and constructor/public functions returning values without side effects are missing `#[must_use]`.
+
+**Why:** Prevents callers from accidentally discarding return values.
+
+**AC:** Add `#[must_use]` to all identified functions
+**Effort:** XS (15 min)
+**Status:** ✅ Done
+
+**Files:** `streaming_buffer.rs`, `decoder/mod.rs`, `widgets/`, `player.rs`, `view.rs`, `api.rs`
+
+**What:** ~15 pure `fn(&self) -> T` functions that return a value without side effects are missing `#[must_use]`.
+
+**Why:** Best practice — prevents callers from accidentally discarding return values.
+
+**AC:** Add `#[must_use]` to all identified functions
+**Effort:** XS (15 min)
+**Status:** ✅ Done (player.rs: 9 async functions annotated)
+
+---
+
+### P2.17 — `String` error types → `anyhow`
+
+**Files:** `song_downloader.rs:426,488,492,499,586,590,597,607`
+
+**What:** Multiple `Err(format!(...))` and `.map_err(|e| format!(...))` calls use `String` as error type, losing original error context (`.source()`). The project standardizes on `anyhow` everywhere else.
+
+**Why:** Best practice — `String` errors lose chain context.
+
+**AC:**
+- Replace `Result<T, String>` with `anyhow::Result<T>` in `download_and_decode`, `try_streaming_init`, `create_decoder_from`
+- Use `anyhow::{bail, Context}` (`.context("msg")` / `bail!(...)`)
+- `search_broad` method removed from `Api` struct (dead code)
+- Call site in `messages.rs` converts anyhow error to `String` with `.to_string()`
+
+**Dep:** None
+**Effort:** S (half day)
+**Status:** ✅ Done
+
+---
+
+### P2.18 — `.into_iter().next()` → `.first()` in querybuilder
+
+**File:** `cli/querybuilder.rs:663,670,704,711`
+
+**What:** `sources.into_iter().next().unwrap_or_default()` constructs an iterator just to get index 0. Use `sources.first().cloned().unwrap_or_default()`.
+
+**Why:** Idiomatic — avoids iterator allocation.
+
+**AC:** 4 replacements
+**Effort:** XS (5 min)
+**Status:** ✅ Done
+
+---
+
+### P2.19 — Unused test imports & dead test code
+
+**Files:** `playlist/tests.rs:6`, `tests.rs:9,11,13`
+
+**What:** Unused `PlayMode` import, `.nth(0)` → `.next()`, dead `COOKIE_PATH`/`API`/`get_api` in integration tests.
+
+**Why:** Cleanliness — warnings from dead test code.
+
+**AC:** 5 changes
+**Effort:** XS (5 min)
+**Status:** ✅ Done
+
+---
+
+### P2.20 — Merge `cache_put`/`CACHE_ORDER` behind single Mutex
+
+**Files:** `song_downloader.rs:28-38`
+
+**What:** `cache_put()` acquires `BYTE_CACHE` then `CACHE_ORDER` sequentially (2 lock round-trips). Risk of deadlock if future code reverses order.
+
+**Why:** Safety + perf — single lock is faster and deadlock-free.
+
+**AC:**
+- `struct AudioCache { data: HashMap<String, Vec<u8>>, order: VecDeque<String> }` behind single `Mutex`
+- `cache_put` / `cache_get` operate on the same lock
+- All tests pass
+
+**Dep:** None
+**Effort:** S (half day)
+**Status:** ✅ Done
+
+---
+
+## P3
 
 ### P3.1 — Compact autosave: `to_string_pretty` → `to_string`
 
@@ -247,11 +574,142 @@
 
 **Dep:** None
 **Effort:** XS (15 min)
-**Status:** 🔜
+**Status:** ✅ Done
+
+**Files:** `song_downloader.rs`, `streaming_buffer.rs`, `decoder/mod.rs`
+
+**What:** `cache_get()` clones the entire audio buffer (up to 50+ MB for WAV) on every cache-hit decoder init. Store `Arc<Vec<u8>>` in the cache so clones are refcount bumps (~8 bytes). `SharedBuffer::data()` similarly returns `Arc<Vec<u8>>` instead of `Vec<u8>`.
+
+**Why:** P0 perf — eliminates repeated 50MB heap allocations during song replay.
+
+**AC:**
+- `BYTE_CACHE` stores `Arc<Vec<u8>>`, `cache_get()` returns `Arc<Vec<u8>>`
+- `SharedBuffer::data()` returns `Arc<Vec<u8>>` (wraps existing `data` field into `Arc`)
+- `SharedBuffer::data()` callers updated
+- `Arc::make_mut()` used for writer paths to avoid copy-on-write on every write
+- All tests pass
+
+**Dep:** None
+**Effort:** S (half day)
+**Status:** ✅ Done
 
 ---
 
-### P3.2 — `DEFAULT_STREAM_CHANNEL_SIZE` increase
+### P3.5 — `SampleBuffer` reuse in decoder (40 fewer allocs/sec)
+
+**File:** `decoder/mod.rs:182-183`
+
+**What:** `SampleBuffer::new(num_frames, spec)` allocates a new heap buffer on every decoded packet (~38-43/sec). Use `resize()` to reuse the existing buffer when capacity suffices.
+
+**Why:** P0 perf — reduces heap alloc churn in the audio decode hot path.
+
+**AC:**
+- Replace `self.buffer = SampleBuffer::new(num_frames, self.spec)` with `self.buffer.resize(num_frames, self.spec)` when buffer already exists
+- Arm for the initial creation (no `resize` on `SampleBuffer` before any allocation — only `new` for the first time)
+- `copy_interleaved_ref` still works identically on resized buffer
+- Audio output is bit-exact identical (test by ear or by checksum)
+
+**Dep:** symphonia 0.5 `SampleBuffer` has no `resize()` method — only `new()`.
+**Effort:** XS (15 min)
+**Status:** ❌ Wontfix (symphonia 0.5 lacks `resize()`)
+
+---
+
+### P3.6 — Row number formatting cache (60k allocs/sec at 60fps)
+
+**File:** `playlist.rs:400`
+
+**What:** `get_items()` is called every render frame. For every non-playing row, `(visual_i + 1).to_string()` allocates a `String` on the heap. With 1000 songs at 60fps = 60,000 allocs/sec.
+
+**Why:** P0 perf — reduces GC pressure and frame render time.
+
+**AC:**
+- Pre-format row numbers into a `Vec` cache when playlist changes
+- Cache invalidated on: song push, delete, shuffle, search filter change
+- `get_items` uses cached `Cow::Borrowed` values
+- No measurable increase in song-add latency
+
+**Dep:** None
+**Effort:** S (half day)
+**Status:** ✅ Done
+
+---
+
+### P3.7 — `RwLock` for `SharedBuffer` (reduce audio-thread lock contention)
+
+**File:** `streaming_buffer.rs`
+
+**What:** `Mutex` is locked on every audio `read()` call in the playback thread (hundreds of times/sec), contending with the ffmpeg writer. A single writer + N readers pattern favors `RwLock` for the data field.
+
+**Why:** P1 perf — reduces lock contention between audio decode thread and download pipeline.
+
+**AC:**
+- `SharedBufferInner.data` protected by `RwLock` instead of `Mutex`
+- `finished`/`failed`/`total_len` fields can stay under `Mutex` (rarely read)
+- Reader path acquires read lock (no contention with other readers)
+- Writer path acquires write lock
+- All tests pass
+
+**Dep:** None
+**Effort:** S (half day)
+**Status:** ✅ Done
+
+---
+
+### P3.8 — Cache playlist title string
+
+**File:** `playlist.rs:461-468`
+
+**What:** `get_title()` calls `format!("Local playlist - N songs[Q:...][SHUFFLE][SEARCH: ...]")` every render frame. Cache and invalidate on mutation.
+
+**Why:** P1 perf — eliminates format! alloc every render cycle.
+
+**AC:**
+- `cached_title: Option<String>` field on Playlist
+- Invalidated on: `push_song_list`, `toggle_shuffle`, `toggle_search`, `cycle_audio_quality`
+- `get_title()` returns `Cow::Borrowed` from cache
+
+**Dep:** None
+**Effort:** XS (15 min)
+**Status:** ✅ Done
+
+---
+
+### P3.9 — Artist string
+
+**File:** `draw_media_controls.rs:44`
+
+**What:** `Itertools::intersperse(...).collect::<String>()` rebuilds the full artist string from `Vec<ListSongArtist>` every 100ms for desktop integration.
+
+**Why:** P2 perf — medium CPU in the hot path.
+
+**AC:**
+- Use cached `ListSong::artists_string` instead of rebuilding
+- Verify `artists_string` is populated at song creation time
+
+**Dep:** None
+**Effort:** XS (5 min)
+**Status:** ✅ Done
+
+---
+
+### P3.10 — `_audio_quality`
+
+**File:** `song_downloader.rs:91`
+
+**What:** `_audio_quality: AudioQuality` parameter is threaded through the entire download pipeline but never used — format selection is hardcoded in format strings.
+
+**Why:** P2 — dead code parameter, makes API misleading.
+
+**AC:**
+- Remove parameter from `download_and_decode` and all callers
+- If future quality-based format selection is planned, add TODO with reference
+
+**Dep:** None
+**Effort:** XS (15 min)
+**Status:** ✅ Done
+
+---
 
 **File:** `manager.rs:176`
 
@@ -263,11 +721,11 @@
 
 **Dep:** None
 **Effort:** XS (15 min)
-**Status:** 🔜
+**Status:** ✅ Done
 
 ---
 
-### P3.3 — `RwLock<DynamicYtMusic>` write contention
+### P3.3
 
 **File:** `server.rs`
 
@@ -279,11 +737,11 @@
 
 **Dep:** None
 **Effort:** S (1 day to investigate + fix if needed)
-**Status:** 🔜
+**Status:** ✅ Done
 
 ---
 
-## P4 — Testing / CI
+## P4
 
 ### P4.1 — GitHub Actions CI pipeline
 

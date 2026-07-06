@@ -10,16 +10,6 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Gauge, Paragraph};
 use std::time::Duration;
 
-#[allow(dead_code)]
-pub fn parse_simple_time_to_secs<S: AsRef<str>>(time_string: S) -> usize {
-    time_string
-        .as_ref()
-        .rsplit(':')
-        .flat_map(|n| n.parse::<usize>().ok())
-        .zip([1, 60, 3600])
-        .fold(0, |acc, (time, multiplier)| acc + time * multiplier)
-}
-
 pub fn secs_to_time_string(secs: usize) -> String {
     // Naive implementation
     let hours = secs / 3600;
@@ -90,7 +80,7 @@ pub fn draw_footer(
         .map(|song| {
             let mut s = format!(
                 "{} {} - ",
-                w.playlist.play_status.list_icon(),
+                w.playlist.status_bar_icon(),
                 song.title,
             );
             for (i, artist) in song.artists.iter().enumerate() {

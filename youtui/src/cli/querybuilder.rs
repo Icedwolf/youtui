@@ -660,14 +660,14 @@ where
         CliQuery {
             query_type: QueryType::FromSourceFiles(sources),
             show_source: true,
-        } => Ok(sources.into_iter().next().unwrap_or_default()),
+        } => Ok(sources.first().cloned().unwrap_or_default()),
         CliQuery {
             query_type: QueryType::FromSourceFiles(sources),
             show_source: false,
         } => {
             // Note - if multiple sources are provided, only the first is processed - the
             // rest are ignored.
-            if let Some(first_source) = sources.into_iter().next() {
+            if let Some(first_source) = sources.first().cloned() {
                 process_json_based_on_dyn_api(&yt, first_source, q)
             } else {
                 Ok(String::new())
@@ -701,14 +701,14 @@ where
         CliQuery {
             query_type: QueryType::FromSourceFiles(sources),
             show_source: true,
-        } => Ok(sources.into_iter().next().unwrap_or_default()),
+        } => Ok(sources.first().cloned().unwrap_or_default()),
         CliQuery {
             query_type: QueryType::FromSourceFiles(sources),
             show_source: false,
         } => {
             // Note - if multiple sources are provided, only the first is processed - the
             // rest are ignored.
-            if let Some(first_source) = sources.into_iter().next() {
+            if let Some(first_source) = sources.first().cloned() {
                 process_json_based_on_dyn_api_browser_or_oauth(&yt, first_source, q)
             } else {
                 Ok(String::new())

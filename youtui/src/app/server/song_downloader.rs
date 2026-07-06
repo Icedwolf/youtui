@@ -1,18 +1,28 @@
 use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
 use std::sync::{Arc, LazyLock, Mutex};
+use std::sync::atomic::{AtomicUsize, Ordering};
 
+use anyhow::{bail, Context};
 use symphonia::core::io::MediaSourceStream;
 use tokio::sync::Semaphore;
-use tracing::{info, warn};
+use tracing::{debug, error, info, warn};
 
-use crate::app::AudioQuality;
 use crate::app::server::streaming_buffer::SharedBuffer;
 use crate::decoder::read_seek_source::ReadSeekSource;
 use crate::decoder::SymphoniaDecoder;
 
 const MAX_CONCURRENT_DOWNLOADS: usize = 1;
-const CACHE_MAX_ENTRIES: usize = 3;
+static CACHE_MAX_ENTRIES: AtomicUsize = AtomicUsize::new(3);
+
+pub fn set_cache_max_entries(val: usize) {
+    CACHE_MAX_ENTRIES.store(val.clamp(0, 100), Ordering::Relaxed);
+}
+const READ_BUF_SIZE: usize = 64 * 1024;
+const STREAM_INIT_THRESHOLD: usize = 1024;
+const DOWNLOAD_TIMEOUT_S: u64 = 120;
+const DECODER_INIT_DEADLINE_S: u64 = 5;
+const M4A_TOTAL_LEN_TIMEOUT_S: u64 = 15;
 
 static DOWNLOAD_SEMAPHORE: LazyLock<Semaphore> =
     LazyLock::new(|| Semaphore::new(MAX_CONCURRENT_DOWNLOADS));
@@ -20,25 +30,45 @@ static DOWNLOAD_SEMAPHORE: LazyLock<Semaphore> =
 // Bounded cache of raw audio bytes for recently completed downloads.
 // Keyed by video_id, evicts oldest entry when full.
 // Enables instant re-play of recently played songs without re-download.
-static BYTE_CACHE: LazyLock<Mutex<HashMap<String, Vec<u8>>>> =
-    LazyLock::new(|| Mutex::new(HashMap::new()));
-static CACHE_ORDER: LazyLock<Mutex<VecDeque<String>>> =
-    LazyLock::new(|| Mutex::new(VecDeque::new()));
-
-fn cache_put(key: String, data: Vec<u8>) {
-    let mut cache = BYTE_CACHE.lock().unwrap_or_else(|e| e.into_inner());
-    let mut order = CACHE_ORDER.lock().unwrap_or_else(|e| e.into_inner());
-    if cache.len() >= CACHE_MAX_ENTRIES {
-        if let Some(old) = order.pop_front() {
-            cache.remove(&old);
-        }
-    }
-    cache.insert(key.clone(), data);
-    order.push_back(key);
+// Stores Arc<[u8]> so cache hits avoid cloning 50MB+ buffers —
+// the Arc<[u8]> refcount bump is ~8 bytes vs a full Vec clone.
+struct AudioCache {
+    data: HashMap<String, Arc<[u8]>>,
+    order: VecDeque<String>,
 }
 
-fn cache_get(key: &str) -> Option<Vec<u8>> {
-    BYTE_CACHE.lock().unwrap_or_else(|e| e.into_inner()).get(key).cloned()
+impl AudioCache {
+    fn new() -> Self {
+        Self { data: HashMap::new(), order: VecDeque::new() }
+    }
+
+    fn put(&mut self, key: String, data: Vec<u8>) {
+        let max = CACHE_MAX_ENTRIES.load(Ordering::Relaxed);
+        if max > 0 && self.data.len() >= max {
+            if let Some(old) = self.order.pop_front() {
+                self.data.remove(&old);
+            }
+        }
+        if max > 0 {
+            self.data.insert(key.clone(), Arc::from(data));
+            self.order.push_back(key);
+        }
+    }
+
+    fn get(&self, key: &str) -> Option<Arc<[u8]>> {
+        self.data.get(key).cloned()
+    }
+}
+
+static BYTE_CACHE: LazyLock<Mutex<AudioCache>> =
+    LazyLock::new(|| Mutex::new(AudioCache::new()));
+
+fn cache_put(key: String, data: Vec<u8>) {
+    BYTE_CACHE.lock().unwrap_or_else(|e| e.into_inner()).put(key, data);
+}
+
+fn cache_get(key: &str) -> Option<Arc<[u8]>> {
+    BYTE_CACHE.lock().unwrap_or_else(|e| e.into_inner()).get(key)
 }
 
 /// Cache of pre-resolved stream URLs (video_id → googlevideo URL).
@@ -51,7 +81,7 @@ static URL_CACHE: LazyLock<Mutex<HashMap<String, String>>> =
 /// `yt-dlp --print url`.  The resolved URL is cached so that the next
 /// time the same song plays, we can skip the 2+ second yt-dlp negotiation
 /// and stream directly via ffmpeg.
-pub async fn resolve_url(video_id: &str, yt_dlp_cmd: &str) -> Option<String> {
+pub async fn resolve_url(video_id: &str, yt_dlp_cmd: &str, po_token: Option<&str>) -> Option<String> {
     // Check cache first.
     {
         let cache = URL_CACHE.lock().unwrap_or_else(|e| e.into_inner());
@@ -62,11 +92,16 @@ pub async fn resolve_url(video_id: &str, yt_dlp_cmd: &str) -> Option<String> {
 
     let cmd = if yt_dlp_cmd.is_empty() { "yt-dlp" } else { yt_dlp_cmd };
     let url = format!("https://music.youtube.com/watch?v={video_id}");
+    let skip = "hls,translated_subs";
+    let extractor_args = match po_token {
+        Some(pt) => format!("youtube:po_token={pt};skip={skip}"),
+        None => format!("youtube:skip={skip}"),
+    };
 
     let output = tokio::process::Command::new(cmd)
         .args(["--print", "url", "-f", "bestaudio[ext=webm]/bestaudio[ext=m4a]/bestaudio/bestaudio*",
             "--no-warnings", "--no-playlist",
-            "--extractor-args", "youtube:skip=dash,hls,translated_subs",
+            "--extractor-args", &extractor_args,
             &url])
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::null())
@@ -80,7 +115,7 @@ pub async fn resolve_url(video_id: &str, yt_dlp_cmd: &str) -> Option<String> {
         return None;
     }
 
-    let mut cache = URL_CACHE.lock().unwrap();
+    let mut cache = URL_CACHE.lock().unwrap_or_else(|e| e.into_inner());
     cache.insert(video_id.to_string(), url.clone());
     Some(url)
 }
@@ -88,11 +123,10 @@ pub async fn resolve_url(video_id: &str, yt_dlp_cmd: &str) -> Option<String> {
 pub async fn download_and_decode(
     yt_dlp_command: &str,
     video_id: &str,
-    _audio_quality: AudioQuality,
     po_token: Option<&str>,
     cookie_path: Option<PathBuf>,
     js_runtime: Option<&str>,
-) -> Result<SymphoniaDecoder, String> {
+) -> anyhow::Result<SymphoniaDecoder> {
     // Check cache first — instant replay without re-download.
     if let Some(cached) = cache_get(video_id) {
         info!(%video_id, len = cached.len(), "Reusing cached buffer");
@@ -100,14 +134,26 @@ pub async fn download_and_decode(
         let cursor = std::io::Cursor::new(cached);
         let source = ReadSeekSource::new(cursor, Some(len));
         let mss = MediaSourceStream::new(Box::new(source), Default::default());
-        return SymphoniaDecoder::new(mss).map_err(|e| format!("decoder (cached): {e}"));
+        return SymphoniaDecoder::new(mss).context("decoder (cached)");
     }
 
     let _permit = DOWNLOAD_SEMAPHORE
         .acquire()
         .await
-        .map_err(|_| "Semaphore closed".to_string())?;
+        .context("Semaphore closed")?;
     let t0 = tokio::time::Instant::now();
+
+    // ── URL pre-resolution ─────────────────────────────────────────────
+    // Resolve the stream URL first (lightweight yt-dlp --print url).
+    // Once cached, download_and_decode skips yt-dlp entirely and feeds
+    // the resolved URL directly to ffmpeg. This avoids the rate-limited
+    // -o - download path that causes "format not available" on rapid
+    // sequential calls.
+    // resolve_url is a no-op if already cached (from SearchSongs warming
+    // or a previous download).
+    if check_ffmpeg() {
+        resolve_url(video_id, yt_dlp_command, po_token).await;
+    }
 
     // ── URL-cache fast path ────────────────────────────────────────────
     // If the stream URL was pre-resolved (background resolve_url), feed
@@ -127,19 +173,19 @@ pub async fn download_and_decode(
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::null())
             .kill_on_drop(true);
-        let mut child = ffmpeg.spawn().map_err(|e| format!("spawn ffmpeg (url-cache): {e}"))?;
-        let ffmpeg_stdout = child.stdout.take().ok_or("no ffmpeg stdout")?;
+        let mut child = ffmpeg.spawn().context("spawn ffmpeg (url-cache)")?;
+        let ffmpeg_stdout = child.stdout.take().context("no ffmpeg stdout")?;
 
         let write_handle = tokio::spawn(async move {
             use tokio::io::AsyncReadExt;
             let mut rdr = tokio::io::BufReader::new(ffmpeg_stdout);
-            let mut buf = vec![0u8; 64 * 1024];
+            let mut buf = vec![0u8; READ_BUF_SIZE];
             loop {
                 match rdr.read(&mut buf).await {
                     Ok(0) => break,
                     Ok(n) => writer.write(&buf[..n]),
                     Err(e) => {
-                        info!(error = %e, "ffmpeg stdout read error (url-cache), failing buffer");
+                        warn!(error = %e, "ffmpeg stdout read error (url-cache), failing buffer");
                         writer.fail();
                         return;
                     }
@@ -149,8 +195,10 @@ pub async fn download_and_decode(
         });
 
         // Wait for enough data, then try streaming init.
-        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(5);
-        while buffer.len() < 4096 && tokio::time::Instant::now() < deadline {
+        // WAV header is ~270 bytes (RIFF + fmt + data chunk start),
+        // so 1024 bytes is enough for probe + first audio frame.
+        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(DECODER_INIT_DEADLINE_S);
+        while buffer.len() < STREAM_INIT_THRESHOLD && tokio::time::Instant::now() < deadline {
             tokio::time::sleep(std::time::Duration::from_millis(5)).await;
         }
 
@@ -164,11 +212,12 @@ pub async fn download_and_decode(
 
                 let vid = video_id.to_string();
                 let buf_for_cache = buffer.clone();
+                // fire-and-forget: cache population continues in background; failure is non-fatal
                 tokio::spawn(async move {
-                    match tokio::time::timeout(std::time::Duration::from_secs(120), write_handle).await {
+                    match tokio::time::timeout(std::time::Duration::from_secs(DOWNLOAD_TIMEOUT_S), write_handle).await {
                         Ok(Ok(())) => {}
                         Ok(Err(join_err)) => {
-                            info!(%vid, error = %join_err, "ffmpeg writer panicked (url-cache)");
+                            error!(%vid, error = %join_err, "ffmpeg writer panicked (url-cache)");
                             return;
                         }
                         Err(_) => {
@@ -194,24 +243,29 @@ pub async fn download_and_decode(
                 info!(%video_id, elapsed = ?t0.elapsed(), "download_and_decode returning decoder (URL-cache)");
                 return Ok(decoder);
             }
-            Err(stream_err) => {
-                info!(%video_id, error = %stream_err,
+            Err(_stream_err) => {
+                info!(%video_id,
                     "Streaming decoder init failed (URL-cache), waiting for full download");
 
-                match tokio::time::timeout(std::time::Duration::from_secs(120), write_handle).await {
+                match tokio::time::timeout(std::time::Duration::from_secs(DOWNLOAD_TIMEOUT_S), write_handle).await {
                     Ok(Ok(())) => {}
                     Ok(Err(join_err)) => {
-                        return Err(format!("ffmpeg writer panicked (url-cache): {join_err}"));
+                        URL_CACHE.lock().unwrap_or_else(|e| e.into_inner()).remove(video_id);
+                        bail!("ffmpeg writer panicked (url-cache): {join_err}");
                     }
                     Err(_) => {
                         let _ = child.start_kill();
-                        return Err("ffmpeg (url-cache) download timed out (120s)".to_string());
+                        URL_CACHE.lock().unwrap_or_else(|e| e.into_inner()).remove(video_id);
+                        bail!("ffmpeg (url-cache) download timed out ({}s)", DOWNLOAD_TIMEOUT_S);
                     }
                 }
-                let status = child.wait().await.map_err(|e| format!("wait ffmpeg (url-cache): {e}"))?;
+                let status = child.wait().await.context("wait ffmpeg (url-cache)")?;
                 if !status.success() {
                     let code = status.code().map_or("unknown".into(), |c| c.to_string());
-                    return Err(format!("ffmpeg (url-cache) exited with code {code}"));
+                    URL_CACHE.lock().unwrap_or_else(|e| e.into_inner()).remove(video_id);
+                    let msg = format!("ffmpeg (url-cache) exited with code {code}");
+                    info!(%video_id, error = %msg, "Removed stale URL from cache");
+                    bail!("{}", msg);
                 }
 
                 info!(%video_id, buf_len = buffer.len(),
@@ -219,7 +273,7 @@ pub async fn download_and_decode(
                 let reader = buffer.reader();
                 let source = ReadSeekSource::new(reader, None);
                 let mss = MediaSourceStream::new(Box::new(source), Default::default());
-                let d = SymphoniaDecoder::new(mss).map_err(|e| format!("decoder (url-cache fallback): {e}"))?;
+                let d = SymphoniaDecoder::new(mss).context("decoder (url-cache fallback)")?;
                 drop(_permit);
                 return Ok(d);
             }
@@ -232,8 +286,13 @@ pub async fn download_and_decode(
     let is_relay = ffmpeg_avail;
 
     let quality = if is_relay {
-        "bestaudio[ext=webm]/bestaudio[ext=m4a]/bestaudio/bestaudio*"
+        // ffmpeg handles any container/codec, so use yt-dlp's most permissive
+        // audio-only selector. "ba" = bestaudio* with internal fallback logic.
+        // Avoid extension filters — they reject valid streams for some videos.
+        "ba/bestaudio"
     } else {
+        // Direct M4A: symphonia isomp4 reader requires AAC-in-MP4.
+        // Opus/webm is not decodable by symphonia 0.5, so restrict to m4a.
         "bestaudio[ext=m4a]/bestaudio/bestaudio*"
     };
 
@@ -250,7 +309,7 @@ pub async fn download_and_decode(
     let mut yt_cmd = tokio::process::Command::new(&yt_dlp_cmd);
     yt_cmd.args(["-f", quality, "-o", "-", "--no-warnings", "--no-playlist"]);
 
-    let skip = "dash,hls,translated_subs";
+    let skip = "hls,translated_subs";
     let extractor_args = match po_token {
         Some(pt) => format!("youtube:po_token={pt};skip={skip}"),
         None => format!("youtube:skip={skip}"),
@@ -273,9 +332,9 @@ pub async fn download_and_decode(
     // kill_on_drop is paired with capturing yt_dlp_child in a spawned
     // task below, so it stays alive as long as the relay pipeline.
     yt_cmd.kill_on_drop(true);
-    let mut yt_dlp_child = yt_cmd.spawn().map_err(|e| format!("spawn yt-dlp: {e}"))?;
-    let yt_stdout = yt_dlp_child.stdout.take().ok_or("no stdout from yt-dlp")?;
-    let yt_stderr = yt_dlp_child.stderr.take().ok_or("no stderr from yt-dlp")?;
+    let mut yt_dlp_child = yt_cmd.spawn().context("spawn yt-dlp")?;
+    let yt_stdout = yt_dlp_child.stdout.take().context("no stdout from yt-dlp")?;
+    let yt_stderr = yt_dlp_child.stderr.take().context("no stderr from yt-dlp")?;
     info!(%video_id, elapsed = ?t0.elapsed(), "yt-dlp spawned");
 
     // ── Build relay pipeline or read directly ─────────────────────────
@@ -295,12 +354,13 @@ pub async fn download_and_decode(
                     info!(total_bytes = bytes, "Parsed total size from yt-dlp progress");
                     buf_for_stderr.set_total_len(bytes);
                 } else if line.contains("ERROR") {
-                    warn!(stderr_line = %line.trim(), "yt-dlp stderr (error)");
+                    warn!(stderr_line = %line.trim(), "yt-dlp stderr (error), failing buffer");
+                    buf_for_stderr.fail();
                 } else if line.contains("WARNING") {
-                    info!(stderr_line = %line.trim(), "yt-dlp stderr (warning)");
+                    debug!(stderr_line = %line.trim(), "yt-dlp stderr (warning)");
                 }
             }
-            info!("yt-dlp stderr stream ended");
+            debug!("yt-dlp stderr stream ended");
         });
 
         // Spawn ffmpeg: transcodes WebM/Opus to MP3 on-the-fly.
@@ -315,15 +375,15 @@ pub async fn download_and_decode(
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::null())
             .kill_on_drop(true);
-        let mut ffmpeg_child = ffmpeg.spawn().map_err(|e| format!("spawn ffmpeg: {e}"))?;
-        let mut ffmpeg_stdin = ffmpeg_child.stdin.take().ok_or("no ffmpeg stdin")?;
-        let ffmpeg_stdout = ffmpeg_child.stdout.take().ok_or("no ffmpeg stdout")?;
+        let mut ffmpeg_child = ffmpeg.spawn().context("spawn ffmpeg")?;
+        let mut ffmpeg_stdin = ffmpeg_child.stdin.take().context("no ffmpeg stdin")?;
+        let ffmpeg_stdout = ffmpeg_child.stdout.take().context("no ffmpeg stdout")?;
 
         // Relay: yt-dlp stdout → ffmpeg stdin (runs until yt-dlp EOF).
         let relay = tokio::spawn(async move {
             use tokio::io::{AsyncReadExt, AsyncWriteExt};
             let mut rdr = tokio::io::BufReader::new(yt_stdout);
-            let mut buf = vec![0u8; 64 * 1024];
+            let mut buf = vec![0u8; READ_BUF_SIZE];
             loop {
                 match rdr.read(&mut buf).await {
                     Ok(0) => break,
@@ -342,19 +402,19 @@ pub async fn download_and_decode(
         let write_handle = tokio::spawn(async move {
             use tokio::io::AsyncReadExt;
             let mut rdr = tokio::io::BufReader::new(ffmpeg_stdout);
-            let mut buf = vec![0u8; 64 * 1024];
+            let mut buf = vec![0u8; READ_BUF_SIZE];
             loop {
                 match rdr.read(&mut buf).await {
                     Ok(0) => break,
                     Ok(n) => writer.write(&buf[..n]),
                     Err(e) => {
-                        info!(error = %e, "ffmpeg stdout read error, failing buffer");
+                        warn!(error = %e, "ffmpeg stdout read error, failing buffer");
                         writer.fail();
                         return;
                     }
                 }
             }
-            info!("ffmpeg mp3 stream ended, finishing buffer");
+            debug!("ffmpeg mp3 stream ended, finishing buffer");
             writer.finish();
         });
 
@@ -371,30 +431,31 @@ pub async fn download_and_decode(
                     info!(total_bytes = bytes, "Parsed total size from yt-dlp progress");
                     buf_for_stderr.set_total_len(bytes);
                 } else if line.contains("ERROR") {
-                    warn!(stderr_line = %line.trim(), "yt-dlp stderr (error)");
+                    warn!(stderr_line = %line.trim(), "yt-dlp stderr (error), failing buffer");
+                    buf_for_stderr.fail();
                 } else if line.contains("WARNING") {
-                    info!(stderr_line = %line.trim(), "yt-dlp stderr (warning)");
+                    debug!(stderr_line = %line.trim(), "yt-dlp stderr (warning)");
                 }
             }
-            info!("yt-dlp stderr stream ended");
+            debug!("yt-dlp stderr stream ended");
         });
 
         let write_handle = tokio::spawn(async move {
             use tokio::io::AsyncReadExt;
             let mut rdr = tokio::io::BufReader::new(yt_stdout);
-            let mut buf = vec![0u8; 64 * 1024];
+            let mut buf = vec![0u8; READ_BUF_SIZE];
             loop {
                 match rdr.read(&mut buf).await {
                     Ok(0) => break,
                     Ok(n) => writer.write(&buf[..n]),
                     Err(e) => {
-                        info!(error = %e, "yt-dlp stdout read error, failing buffer");
+                        warn!(error = %e, "yt-dlp stdout read error, failing buffer");
                         writer.fail();
                         return;
                     }
                 }
             }
-            info!("yt-dlp stdout stream ended, finishing buffer");
+            debug!("yt-dlp stdout stream ended, finishing buffer");
             writer.finish();
         });
 
@@ -407,12 +468,25 @@ pub async fn download_and_decode(
     // (don't wait for total_len).
     // M4A direct: must wait for total_len AND full download (moov-at-end).
     let (decoder, needs_cache) = if is_relay {
-        // Wait for at least 4 KB of MP3 data in the buffer.
-        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(5);
-        while buffer.len() < 2048 && tokio::time::Instant::now() < deadline {
+        // WAV header is ~270 bytes, STREAM_INIT_THRESHOLD is enough for probe + first frame.
+        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(DECODER_INIT_DEADLINE_S);
+        while buffer.len() < STREAM_INIT_THRESHOLD
+            && tokio::time::Instant::now() < deadline
+            && !buffer.is_failed()
+        {
             tokio::time::sleep(std::time::Duration::from_millis(10)).await;
         }
+        if buffer.is_failed() {
+            info!(%video_id, elapsed = ?t0.elapsed(),
+                "yt-dlp failed before data arrived — bailing early");
+            bail!("format not available (yt-dlp error)");
+        }
         let current = buffer.len();
+        if current == 0 {
+            info!(%video_id, elapsed = ?t0.elapsed(),
+                "No data after {}s, format may be unavailable — bailing early", DECODER_INIT_DEADLINE_S);
+            bail!("format not available (empty pipe after {}s)", DECODER_INIT_DEADLINE_S);
+        }
         info!(
             %video_id,
             stream_type = "ffmpeg→wav",
@@ -421,7 +495,7 @@ pub async fn download_and_decode(
             "Trying early decoder init (spawn_blocking + 5s timeout)"
         );
         match try_streaming_init(&buffer, None).await {
-            Ok(decoder) => {
+        Ok(decoder) => {
                 info!(%video_id, buf_len = buffer.len(), elapsed = ?t0.elapsed(),
                     "Streaming decoder init succeeded");
 
@@ -429,20 +503,21 @@ pub async fn download_and_decode(
                 let vid = video_id.to_string();
                 let buf_for_cache = buffer.clone();
                 let _t0 = t0;
+                // fire-and-forget: cache population continues in background; failure is non-fatal
                 tokio::spawn(async move {
-                    match tokio::time::timeout(std::time::Duration::from_secs(120), stdout_handle).await {
+                    match tokio::time::timeout(std::time::Duration::from_secs(DOWNLOAD_TIMEOUT_S), stdout_handle).await {
                         Ok(Ok(())) => {}
                         Ok(Err(join_err)) => {
-                            info!(%vid, error = %join_err, "ffmpeg writer task panicked");
+                            error!(%vid, error = %join_err, "ffmpeg writer task panicked");
                             return;
                         }
                         Err(elapsed) => {
-                            info!(%vid, elapsed = ?elapsed, "ffmpeg download timed out (120s), killing");
+                            warn!(%vid, elapsed = ?elapsed, "ffmpeg download timed out ({}s), killing", DOWNLOAD_TIMEOUT_S);
                             let _ = child.start_kill();
                             return;
                         }
                     }
-                    let status = child.wait().await.map_err(|e| format!("wait ffmpeg: {e}"));
+                    let status = child.wait().await.context("wait ffmpeg");
                     match status {
                         Ok(s) if !s.success() => {
                             info!(%vid, code = s.code().map_or("unknown".into(), |c| c.to_string()),
@@ -470,21 +545,21 @@ pub async fn download_and_decode(
                 info!(%video_id, error = %stream_err,
                     "Streaming decoder init failed, waiting for ffmpeg stream to complete");
 
-                match tokio::time::timeout(std::time::Duration::from_secs(120), stdout_handle).await {
+                match tokio::time::timeout(std::time::Duration::from_secs(DOWNLOAD_TIMEOUT_S), stdout_handle).await {
                     Ok(Ok(())) => {}
                     Ok(Err(join_err)) => {
-                        return Err(format!("ffmpeg writer task panicked: {join_err}"));
+                        bail!("ffmpeg writer task panicked: {join_err}");
                     }
                     Err(_elapsed) => {
                         let _ = child.start_kill();
-                        return Err(format!("ffmpeg download timed out (120s)"));
+                        bail!("ffmpeg download timed out ({}s)", DOWNLOAD_TIMEOUT_S);
                     }
                 }
 
-                let status = child.wait().await.map_err(|e| format!("wait ffmpeg: {e}"))?;
+                let status = child.wait().await.context("wait ffmpeg")?;
                 if !status.success() {
                     let code = status.code().map_or("unknown".into(), |c| c.to_string());
-                    return Err(format!("ffmpeg exited with code {code}"));
+                    bail!("ffmpeg exited with code {code}");
                 }
                 info!(%video_id, "ffmpeg completed successfully");
 
@@ -493,15 +568,18 @@ pub async fn download_and_decode(
                 let reader = buffer.reader();
                 let source = ReadSeekSource::new(reader, None);
                 let mss = MediaSourceStream::new(Box::new(source), Default::default());
-                let d = SymphoniaDecoder::new(mss).map_err(|e| format!("decoder (fallback): {e}"))?;
+                let d = SymphoniaDecoder::new(mss).context("decoder (fallback)")?;
                 (d, true)
             }
         }
     } else {
         // M4A direct: wait for total_len + full download.
         let _total_len = {
-            let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(15);
+            let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(M4A_TOTAL_LEN_TIMEOUT_S);
             loop {
+                if buffer.is_failed() {
+                    break None;
+                }
                 if let Some(tl) = buffer.total_len() {
                     break Some(tl);
                 }
@@ -518,7 +596,7 @@ pub async fn download_and_decode(
             stream_type = "direct m4a",
             buf_len = buffer.len(),
             elapsed = ?t0.elapsed(),
-            "Trying early decoder init (spawn_blocking + 5s timeout)"
+            "Trying early decoder init (spawn_blocking + {}s timeout)", DECODER_INIT_DEADLINE_S
         );
         match try_streaming_init(&buffer, Some(_total_len)).await {
         Ok(decoder) => {
@@ -529,27 +607,28 @@ pub async fn download_and_decode(
             let vid = video_id.to_string();
             let buf_for_cache = buffer.clone();
             let pipe_name = if is_relay { "ffmpeg" } else { "yt-dlp" };
+            // fire-and-forget: cache population continues in background; failure is non-fatal
             tokio::spawn(async move {
-                match tokio::time::timeout(std::time::Duration::from_secs(120), stdout_handle).await {
+                match tokio::time::timeout(std::time::Duration::from_secs(DOWNLOAD_TIMEOUT_S), stdout_handle).await {
                     Ok(Ok(())) => {}
                     Ok(Err(join_err)) => {
-                        info!(%vid, error = %join_err, "{pipe_name} writer task panicked");
+                        error!(%vid, error = %join_err, "{pipe_name} writer task panicked");
                         return;
                     }
                     Err(_elapsed) => {
-                        info!(%vid, "{pipe_name} download timed out (120s), killing");
+                        warn!(%vid, "{pipe_name} download timed out ({}s), killing", DOWNLOAD_TIMEOUT_S);
                         let _ = child.start_kill();
                         return;
                     }
                 }
-                let status = child.wait().await.map_err(|e| format!("wait {pipe_name}: {e}"));
+                let status = child.wait().await.context("wait {pipe_name}");
                 match status {
                     Ok(s) if !s.success() => {
-                        info!(%vid, code = s.code().map_or("unknown".into(), |c| c.to_string()),
+                        warn!(%vid, code = s.code().map_or("unknown".into(), |c| c.to_string()),
                             "{pipe_name} exited with non-zero code (post-stream)");
                         return;
                     }
-                    Ok(_) => info!(%vid, "{pipe_name} completed successfully"),
+                    Ok(_) => debug!(%vid, "{pipe_name} completed successfully"),
                     Err(e) => {
                         info!(%vid, error = %e, "{pipe_name} wait failed");
                         return;
@@ -568,21 +647,21 @@ pub async fn download_and_decode(
             info!(%video_id, error = %stream_err,
                 "Streaming decoder init failed, waiting for {pipe_name} stream to complete");
 
-            match tokio::time::timeout(std::time::Duration::from_secs(120), stdout_handle).await {
+            match tokio::time::timeout(std::time::Duration::from_secs(DOWNLOAD_TIMEOUT_S), stdout_handle).await {
                 Ok(Ok(())) => {}
                 Ok(Err(join_err)) => {
-                    return Err(format!("{pipe_name} writer task panicked: {join_err}"));
+                    bail!("{pipe_name} writer task panicked: {join_err}");
                 }
                 Err(_elapsed) => {
                     let _ = child.start_kill();
-                    return Err(format!("{pipe_name} download timed out (120s)"));
+                    bail!("{pipe_name} download timed out ({}s)", DOWNLOAD_TIMEOUT_S);
                 }
             }
 
-            let status = child.wait().await.map_err(|e| format!("wait {pipe_name}: {e}"))?;
+            let status = child.wait().await.context("wait {pipe_name}")?;
             if !status.success() {
                 let code = status.code().map_or("unknown".into(), |c| c.to_string());
-                return Err(format!("{pipe_name} exited with code {code}"));
+                bail!("{pipe_name} exited with code {code}");
             }
             info!(%video_id, "{pipe_name} completed successfully");
 
@@ -592,7 +671,7 @@ pub async fn download_and_decode(
             let reader = buffer.reader();
             let source = ReadSeekSource::new(reader, Some(_total_len));
             let mss = MediaSourceStream::new(Box::new(source), Default::default());
-            let d = SymphoniaDecoder::new(mss).map_err(|e| format!("decoder (fallback): {e}"))?;
+            let d = SymphoniaDecoder::new(mss).context("decoder (fallback)")?;
             (d, true)
         }
         }
@@ -662,7 +741,7 @@ fn check_ffmpeg() -> bool {
 async fn try_streaming_init(
     buffer: &Arc<SharedBuffer>,
     byte_len: Option<u64>,
-) -> Result<SymphoniaDecoder, String> {
+) -> anyhow::Result<SymphoniaDecoder> {
     let buf = buffer.clone();
     let reader = buf.reader();
     let blen = byte_len;
@@ -676,14 +755,14 @@ async fn try_streaming_init(
     let inner = async move {
         handle
             .await
-            .map_err(|e| format!("blocking task panicked: {e}"))?
-            .map_err(|e| format!("decoder: {e}"))
+            .context("blocking task panicked")?
+            .context("decoder")
     };
 
-    match tokio::time::timeout(std::time::Duration::from_secs(5), inner).await {
+    match tokio::time::timeout(std::time::Duration::from_secs(DECODER_INIT_DEADLINE_S), inner).await {
         Ok(result) => result,
         Err(_elapsed) => {
-            Err("decoder init timed out (format reader blocked on Condvar)".to_string())
+            bail!("decoder init timed out (format reader blocked on Condvar)")
         }
     }
 }
@@ -776,12 +855,12 @@ mod tests {
     }
 
     /// Helper: create a SymphoniaDecoder from a SharedBuffer.
-    fn create_decoder_from(buf: &Arc<SharedBuffer>) -> Result<SymphoniaDecoder, String> {
+    fn create_decoder_from(buf: &Arc<SharedBuffer>) -> anyhow::Result<SymphoniaDecoder> {
         let total = buf.total_len().unwrap_or(buf.len() as u64);
         let reader = buf.reader();
         let source = ReadSeekSource::new(reader, Some(total));
         let mss = MediaSourceStream::new(Box::new(source), Default::default());
-        SymphoniaDecoder::new(mss).map_err(|e| format!("{e:?}"))
+        SymphoniaDecoder::new(mss).context("decoder")
     }
 
     /// Consume audio frames from the decoder until at least `target_frames`

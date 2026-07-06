@@ -12,6 +12,7 @@ pub struct SearchBlock {
     pub search_contents: TextInputState,
     pub search_suggestions: Vec<SearchSuggestion>,
     pub suggestions_cur: Option<usize>,
+    last_fetched_text: Option<String>,
 }
 impl_youtui_component!(SearchBlock);
 
@@ -202,10 +203,17 @@ impl SearchBlock {
         // No need to fetch search suggestions if contents is empty.
         if self.search_contents.is_empty() {
             self.search_suggestions.clear();
+            self.last_fetched_text = None;
             return AsyncTask::new_no_op();
         }
+        let text = self.search_contents.text().to_owned();
+        // Skip if text hasn't changed since last fetch (debounce).
+        if self.last_fetched_text.as_deref() == Some(&text) {
+            return AsyncTask::new_no_op();
+        }
+        self.last_fetched_text = Some(text.clone());
         AsyncTask::new_future_try(
-            GetSearchSuggestions(self.search_contents.text().to_owned()),
+            GetSearchSuggestions(text),
             HandleSearchSuggestionsOk,
             HandleSearchSuggestionsErr,
             Some(Constraint::new_kill_same_type()),

@@ -2,10 +2,9 @@ use super::api::{GetArtistSongsProgressUpdate, GetPlaylistSongsProgressUpdate, r
 use super::ArcServer;
 use super::song_downloader;
 use tracing::info;
-use crate::app::AudioQuality;
 use crate::app::structures::ListSongID;
 use crate::async_rodio_sink::{
-    AllStopped, AutoplayUpdate, PausePlayResponse, Paused, PlayUpdate, ProgressUpdate, QueueUpdate,
+    AllStopped, AutoplayUpdate, PausePlayResponse, Paused, PlayUpdate, ProgressUpdate,
     Resumed, SeekDirection, Stopped, VolumeUpdate,
 };
 use anyhow::{Error, Result};
@@ -73,11 +72,11 @@ pub struct GetPlaylistSongs {
 }
 
 #[derive(Debug)]
-pub struct DownloadSong(pub VideoID<'static>, pub ListSongID, pub AudioQuality);
+pub struct DownloadSong(pub VideoID<'static>, pub ListSongID);
 
 impl PartialEq for DownloadSong {
     fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0 && self.1 == other.1 && self.2 == other.2
+        self.0 == other.0 && self.1 == other.1
     }
 }
 
@@ -150,17 +149,6 @@ impl std::fmt::Debug for AutoplaySong {
         f.debug_struct("AutoplaySong").field("id", &self.id).finish()
     }
 }
-#[allow(dead_code)]
-pub struct QueueSong {
-    pub song: Box<dyn Source<Item = f32> + Send + 'static>,
-    pub id: ListSongID,
-}
-impl std::fmt::Debug for QueueSong {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("QueueSong").field("id", &self.id).finish()
-    }
-}
-
 impl BackendTask<ArcServer> for SearchArtists {
     type Output = Result<Vec<SearchResultArtist>>;
     type MetadataType = TaskMetadata;
@@ -184,30 +172,46 @@ impl BackendTask<ArcServer> for SearchSongs {
             let mut results = backend.api.search_songs(self.0).await?;
 
             // Pre-resolve stream URLs + resolve non-Atv to Atv for top 5.
+            // #1 result resolves URL synchronously so URL_CACHE is populated
+            // before the user can select it. Others are background tasks.
             let yt_dlp = backend.config.yt_dlp_command.clone();
             let top_count = results.len().min(5);
             let mut atv_replaced: Vec<(usize, VideoID<'static>)> = Vec::new();
-            for idx in 0..top_count {
-                let song = &results[idx];
-                // Start URL pre-resolution in background.
-                let vid = song.video_id.get_raw().to_string();
-                let yt = yt_dlp.clone();
-                tokio::spawn(async move {
-                    song_downloader::resolve_url(&vid, &yt).await;
-                });
-                // Resolve non-Atv to Atv.
+            for (idx, song) in results.iter().enumerate().take(top_count) {
+                // Resolve non-Atv to Atv first (may change video_id).
                 if !song.is_audio_track() {
                     if let Ok(concurrent_api) = backend.api.get_api().await {
-                        let resolved = resolve_to_audio_track(&concurrent_api, song).await;
-                        if resolved.get_raw() != song.video_id.get_raw() {
-                            atv_replaced.push((idx, resolved));
+                        let new_id = resolve_to_audio_track(
+                            &concurrent_api,
+                            &song.title,
+                            &song.artist,
+                            song.video_id.get_raw(),
+                        ).await.unwrap_or_else(|| song.video_id.clone());
+                        if new_id.get_raw() != song.video_id.get_raw() {
+                            atv_replaced.push((idx, new_id));
                         }
                     }
                 }
             }
-            for (idx, new_id) in atv_replaced {
-                results[idx].video_id = new_id;
+            // Apply Atv replacements BEFORE URL resolve so we resolve the
+            // corrected video_id.
+            for (idx, new_id) in &atv_replaced {
+                results[*idx].video_id = new_id.clone();
             }
+            let vid0 = results[0].video_id.get_raw().to_string();
+            let yt0 = yt_dlp.clone();
+            let _0_r = song_downloader::resolve_url(&vid0, &yt0, backend.po_token.as_deref()).await;
+            info!(video_id = %vid0, resolved = _0_r, "Synchronous URL pre-resolve for top result");
+            for result in results.iter().skip(1).take(top_count.saturating_sub(1)) {
+                let vid = result.video_id.get_raw().to_string();
+                let yt = yt_dlp.clone();
+                let pt = backend.po_token.clone();
+                // fire-and-forget: best-effort URL cache warming for non-top results
+                tokio::spawn(async move {
+                    song_downloader::resolve_url(&vid, &yt, pt.as_deref()).await;
+                });
+            }
+
 
             Ok(results)
         }
@@ -233,46 +237,16 @@ impl BackendTask<ArcServer> for ResolveSongToAudio {
     ) -> impl Future<Output = Self::Output> + Send + 'static {
         let backend = backend.clone();
         async move {
-            let search_query = format!("{} {}", self.title, self.artist);
-            // First try the filtered songs search (deduplicates by title+artist).
-            if let Ok(results) = backend.api.search_songs(search_query.clone()).await {
-                for result in &results {
-                    if result.is_audio_track()
-                        && result.title == self.title
-                        && result.artist == self.artist
-                        && result.video_id.get_raw() != self.video_id.get_raw()
-                    {
-                        info!(
-                            original = self.video_id.get_raw(),
-                            resolved = result.video_id.get_raw(),
-                            title = self.title.as_str(),
-                            artist = self.artist.as_str(),
-                            "Resolved queue song to Atv track"
-                        );
-                        return Some(result.video_id.clone());
-                    }
-                }
+            if let Ok(api) = backend.api.get_api().await {
+                resolve_to_audio_track(
+                    &api,
+                    &self.title,
+                    &self.artist,
+                    self.video_id.get_raw(),
+                ).await
+            } else {
+                None
             }
-            // Fallback: broad search (may return multiple results per title+artist).
-            if let Ok(results) = backend.api.search_broad(search_query).await {
-                for result in &results.songs {
-                    if result.is_audio_track()
-                        && result.title == self.title
-                        && result.artist == self.artist
-                        && result.video_id.get_raw() != self.video_id.get_raw()
-                    {
-                        info!(
-                            original = self.video_id.get_raw(),
-                            resolved = result.video_id.get_raw(),
-                            title = self.title.as_str(),
-                            artist = self.artist.as_str(),
-                            "Resolved queue song to Atv track (broad search)"
-                        );
-                        return Some(result.video_id.clone());
-                    }
-                }
-            }
-            None
         }
     }
 }
@@ -322,12 +296,12 @@ impl BackendStreamingTask<ArcServer> for DownloadSong {
     ) -> impl futures::Stream<Item = Self::Output> + Send + Unpin + 'static {
         let backend = backend.clone();
         let (tx, rx) = tokio::sync::mpsc::channel(1);
+        // fire-and-forget: result sent via tx channel; panics surface as rx channel close
         tokio::spawn(async move {
             tx.try_send(DownloadProgressUpdate::Downloading).ok();
             let result = song_downloader::download_and_decode(
                 &backend.config.yt_dlp_command,
                 self.0.get_raw(),
-                self.2,
                 backend.po_token.as_deref(),
                 None,
                 None,
@@ -337,7 +311,7 @@ impl BackendStreamingTask<ArcServer> for DownloadSong {
                     tx.send(DownloadProgressUpdate::Completed(Box::new(decoder))).await.ok();
                 }
                 Err(e) => {
-                    tx.send(DownloadProgressUpdate::Error(e)).await.ok();
+                    tx.send(DownloadProgressUpdate::Error(e.to_string())).await.ok();
                 }
             }
         });
@@ -463,6 +437,7 @@ impl BackendStreamingTask<ArcServer> for PlaySong {
         let backend = backend.clone();
         let (tx, rx) = tokio::sync::mpsc::channel(64);
         let stream = backend.player.play_song(self.song, self.id);
+        // fire-and-forget: stream bridged via tx/rx; rx close on drop terminates loop
         tokio::spawn(async move {
             use futures::StreamExt;
             tokio::pin!(stream);
@@ -488,6 +463,7 @@ impl BackendStreamingTask<ArcServer> for AutoplaySong {
         let backend = backend.clone();
         let (tx, rx) = tokio::sync::mpsc::channel(64);
         let stream = backend.player.autoplay_song(self.song, self.id);
+        // fire-and-forget: stream bridged via tx/rx; rx close on drop terminates loop
         tokio::spawn(async move {
             use futures::StreamExt;
             tokio::pin!(stream);
@@ -503,32 +479,6 @@ impl BackendStreamingTask<ArcServer> for AutoplaySong {
         vec![TaskMetadata::PlayingSong]
     }
 }
-impl BackendStreamingTask<ArcServer> for QueueSong {
-    type Output = QueueUpdate<ListSongID>;
-    type MetadataType = TaskMetadata;
-    fn into_stream(
-        self,
-        backend: &ArcServer,
-    ) -> impl Stream<Item = Self::Output> + Send + Unpin + 'static {
-        let backend = backend.clone();
-        let (tx, rx) = tokio::sync::mpsc::channel(64);
-        let stream = backend.player.queue_song(self.song, self.id);
-        tokio::spawn(async move {
-            use futures::StreamExt;
-            tokio::pin!(stream);
-            while let Some(item) = stream.next().await {
-                if tx.send(item).await.is_err() {
-                    break;
-                }
-            }
-        });
-        tokio_stream::wrappers::ReceiverStream::new(rx)
-    }
-    fn metadata() -> Vec<Self::MetadataType> {
-        vec![TaskMetadata::PlayingSong]
-    }
-}
-
 impl PartialEq for HandleApiError {
     fn eq(&self, other: &Self) -> bool {
         self.error.to_string() == other.error.to_string() && self.message == other.message
@@ -544,12 +494,6 @@ impl PartialEq for AutoplaySong {
         self.id == other.id
     }
 }
-impl PartialEq for QueueSong {
-    fn eq(&self, other: &Self) -> bool {
-        self.id == other.id
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -559,7 +503,6 @@ mod tests {
         DownloadSong(
             VideoID::from_raw("test"),
             ListSongID(1),
-            AudioQuality::Best,
         )
     }
 
@@ -590,21 +533,10 @@ mod tests {
     }
 
     #[test]
-    fn download_song_partial_eq_matches() {
+    fn download_song_partial_eq_eq() {
         let a = make_download_song();
         let b = make_download_song();
         assert_eq!(a, b);
-    }
-
-    #[test]
-    fn download_song_partial_eq_differs_on_quality() {
-        let a = make_download_song();
-        let b = DownloadSong(
-            VideoID::from_raw("test"),
-            ListSongID(1),
-            AudioQuality::High,
-        );
-        assert_ne!(a, b);
     }
 
     #[test]
@@ -613,7 +545,6 @@ mod tests {
         let b = DownloadSong(
             VideoID::from_raw("other"),
             ListSongID(1),
-            AudioQuality::Best,
         );
         assert_ne!(a, b);
     }

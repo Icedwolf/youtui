@@ -16,7 +16,10 @@ use symphonia::core::io::MediaSourceStream;
 use symphonia::core::meta::MetadataOptions;
 use symphonia::core::probe::Hint;
 use symphonia::core::units::Time;
-use tracing::info;
+use tracing::{debug, info};
+
+const DEFAULT_CHANNELS: NonZero<u16> = NonZero::<u16>::new(2).unwrap();
+const DEFAULT_SAMPLE_RATE: NonZero<u32> = NonZero::<u32>::new(44100).unwrap();
 
 
 pub mod read_seek_source;
@@ -51,7 +54,6 @@ pub struct SymphoniaDecoder {
     duration: Option<Duration>,
 }
 
-#[allow(dead_code)]
 impl SymphoniaDecoder {
     pub fn new(mss: MediaSourceStream) -> Result<Self, SymphoniaError> {
         let probe_result = symphonia::default::get_probe().format(
@@ -119,14 +121,6 @@ impl SymphoniaDecoder {
             eos: false,
             duration,
         })
-    }
-
-    pub fn total_duration(&self) -> Option<Duration> {
-        self.duration
-    }
-
-    pub fn seekable(&self) -> bool {
-        true
     }
 
     pub fn try_seek_to(&mut self, pos: Duration) -> Result<(), SymphoniaError> {
@@ -206,7 +200,7 @@ impl Iterator for SymphoniaDecoder {
 impl Source for SymphoniaDecoder {
     fn current_span_len(&self) -> Option<usize> {
         if self.eos {
-            info!("current_span_len -> Some(0) (eos)");
+            debug!("current_span_len -> Some(0) (eos)");
             Some(0)
         } else {
             None
@@ -215,12 +209,12 @@ impl Source for SymphoniaDecoder {
 
     fn channels(&self) -> ChannelCount {
         let c = u16::try_from(self.spec.channels.count()).unwrap_or(2);
-        NonZero::new(c).unwrap_or(NonZero::new(2u16).unwrap())
+        NonZero::new(c).unwrap_or(DEFAULT_CHANNELS)
     }
 
     fn sample_rate(&self) -> SampleRate {
         let r = self.spec.rate;
-        NonZero::new(r).unwrap_or(NonZero::new(44100u32).unwrap())
+        NonZero::new(r).unwrap_or(DEFAULT_SAMPLE_RATE)
     }
 
     fn total_duration(&self) -> Option<Duration> {

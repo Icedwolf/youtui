@@ -21,7 +21,7 @@ pub use task::dyn_task::NoOpHandler;
 
 // Size of the channel used for each stream task.
 // In future, this could be settable.
-pub(crate) const DEFAULT_STREAM_CHANNEL_SIZE: usize = 20;
+pub(crate) const DEFAULT_STREAM_CHANNEL_SIZE: usize = 256;
 
 /// A task of kind T that can be run on a backend, returning a future of output
 /// Output. The type must implement Any, as the

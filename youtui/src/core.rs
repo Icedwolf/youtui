@@ -16,7 +16,7 @@ use tokio::fs::DirEntry;
 use tokio::sync::mpsc;
 use tokio_stream::StreamExt;
 use tokio_stream::wrappers::ReadDirStream;
-use tracing::error;
+use tracing::debug;
 
 /// Send a message to the specified Tokio mpsc::Sender, and if sending fails,
 /// log an error with Tracing.
@@ -25,7 +25,7 @@ pub async fn send_or_error<T, S: Borrow<mpsc::Sender<T>>>(tx: S, msg: T) {
     tx.borrow()
         .send(msg)
         .await
-        .unwrap_or_else(|e| error!("Error {e} received when sending message"));
+        .unwrap_or_else(|e| debug!("Error {e} received when sending message"));
 }
 
 /// Send a message to the specified Tokio mpsc::Sender, and if sending fails,
@@ -33,7 +33,7 @@ pub async fn send_or_error<T, S: Borrow<mpsc::Sender<T>>>(tx: S, msg: T) {
 pub fn blocking_send_or_error<T, S: Borrow<mpsc::Sender<T>>>(tx: S, msg: T) {
     tx.borrow()
         .blocking_send(msg)
-        .unwrap_or_else(|e| error!("Error {e} received when sending message"));
+        .unwrap_or_else(|e| debug!("Error {e} received when sending message"));
 }
 
 /// Search directory for files matching the pattern {filename}{NUMBER}.{filext}
