@@ -11,22 +11,12 @@ use std::marker::PhantomData;
 use std::ops::Add;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use std::time::SystemTime;
+use std::sync::PoisonError;
 use tokio::fs::DirEntry;
 use tokio::sync::mpsc;
 use tokio_stream::StreamExt;
 use tokio_stream::wrappers::ReadDirStream;
-use tracing::debug;
-
-/// Send a message to the specified Tokio mpsc::Sender, and if sending fails,
-/// log an error with Tracing.
-#[allow(dead_code)]
-pub async fn send_or_error<T, S: Borrow<mpsc::Sender<T>>>(tx: S, msg: T) {
-    tx.borrow()
-        .send(msg)
-        .await
-        .unwrap_or_else(|e| debug!("Error {e} received when sending message"));
-}
+use tracing::{debug, warn};
 
 /// Send a message to the specified Tokio mpsc::Sender, and if sending fails,
 /// log an error with Tracing.
@@ -104,93 +94,6 @@ pub async fn get_limited_sequential_file(
     ))
 }
 
-/// Either creates a new directory at dir, or deletes all files in the directory
-/// starting with managed_file_prefix that are older (last modified) than
-/// max_age. Returns the number of files cleaned up, if any.
-#[allow(dead_code)]
-pub async fn create_or_clean_directory(
-    dir: &Path,
-    managed_file_prefix: impl AsRef<str>,
-    max_age: std::time::Duration,
-) -> std::io::Result<usize> {
-    fs_err::tokio::create_dir_all(dir).await?;
-    let time_now = SystemTime::now();
-    let album_art_dir_reader = tokio::fs::read_dir(dir).await?;
-    let filename_prefix_matches = |entry: &DirEntry| {
-        futures::future::ready(
-            entry
-                .file_name()
-                .to_str()
-                .is_some_and(|s| s.starts_with(managed_file_prefix.as_ref())),
-        )
-    };
-    let delete_file_if_aged = |entry: DirEntry| async move {
-        let last_modified = entry.metadata().await?.modified()?;
-        if !time_now
-            .duration_since(last_modified)
-            .is_ok_and(|dif| dif <= max_age)
-        {
-            fs_err::tokio::remove_file(entry.path()).await.map(Some)
-        } else {
-            Ok(None)
-        }
-    };
-    let files_deleted = ReadDirStream::new(album_art_dir_reader)
-        .try_filter(filename_prefix_matches)
-        .try_filter_map(delete_file_if_aged)
-        .try_collect::<Vec<_>>()
-        .await?
-        .len();
-    Ok(files_deleted)
-}
-
-/// Update the modified and accessed timestamps of a file that exists with
-/// `timestamp`, asynchronously.
-#[allow(dead_code)]
-pub async fn touch_file_with_timestamp(
-    path: impl Into<PathBuf>,
-    timestamp: SystemTime,
-) -> std::io::Result<()> {
-    let path: PathBuf = path.into();
-    // Polyfill for missing tokio equivalent to std
-    //
-    // https://github.com/tokio-rs/tokio/issues/6368
-    tokio::task::spawn_blocking(move || {
-        let times = std::fs::FileTimes::new()
-            .set_accessed(timestamp)
-            .set_modified(timestamp);
-        let file = fs_err::OpenOptions::new().write(true).open(path)?;
-        file.set_times(times)?;
-        Ok::<_, std::io::Error>(())
-    })
-    .await
-    .map_err(std::io::Error::other)??;
-    Ok(())
-}
-
-/// Get a stream of the paths of all files in a directory  or any errors
-/// encountered when traversing files.
-#[allow(dead_code)]
-pub async fn get_dir_file_paths(
-    dir: &Path,
-) -> std::io::Result<impl futures::Stream<Item = std::io::Result<PathBuf>> + 'static> {
-    let dir_contents = tokio::fs::read_dir(dir).await?;
-    let dir_contents = tokio_stream::wrappers::ReadDirStream::new(dir_contents);
-    let dir_contents =
-        futures::stream::StreamExt::filter_map(dir_contents, |maybe_dir_entry| async {
-            let dir_entry = match maybe_dir_entry {
-                Ok(dir_entry) => dir_entry,
-                Err(e) => return Some(Err(e)),
-            };
-            match dir_entry.file_type().await {
-                Ok(file_type) => file_type.is_file().then_some(Ok(dir_entry)),
-                Err(e) => Some(Err(e)),
-            }
-        });
-    let dir_contents = dir_contents.map_ok(|dir_entry| dir_entry.path());
-    Ok(dir_contents)
-}
-
 /// From serde documentation: [<https://serde.rs/string-or-struct.html>]
 pub fn string_or_struct<'de, T, D>(deserializer: D) -> std::result::Result<T, D::Error>
 where
@@ -231,155 +134,36 @@ where
     deserializer.deserialize_any(StringOrStruct(PhantomData))
 }
 
+/// Extension trait for recovering from poisoned mutexes/RwLocks with a warning.
+pub trait PoisonRecovery {
+    type Inner;
+    fn unwrap_or_warn(self) -> Self::Inner;
+}
+
+impl<T> PoisonRecovery for Result<T, PoisonError<T>> {
+    type Inner = T;
+    fn unwrap_or_warn(self) -> T {
+        match self {
+            Ok(v) => v,
+            Err(e) => {
+                warn!("Lock poisoned: {e}");
+                e.into_inner()
+            }
+        }
+    }
+}
+
 /// Get monotonically increasing file handles with prefix filename and ext
 /// fileext, but if there are more than max_files with this pattern, delete the
 /// lowest one first.
 #[cfg(test)]
 mod tests {
-    use crate::core::{
-        create_or_clean_directory, get_dir_file_paths, get_limited_sequential_file,
-        touch_file_with_timestamp,
-    };
+    use crate::core::get_limited_sequential_file;
     use pretty_assertions::assert_eq;
-    use std::time::{Duration, SystemTime};
     use tempfile::TempDir;
     use tokio_stream::StreamExt;
     use tokio_stream::wrappers::ReadDirStream;
 
-    #[tokio::test]
-    async fn test_get_dir_file_paths_error_if_not_found() {
-        let tmpdir = TempDir::new().unwrap();
-        tokio::fs::remove_dir(tmpdir.path()).await.unwrap();
-        let Err(e) = get_dir_file_paths(tmpdir.path()).await else {
-            panic!("Expected an error");
-        };
-        assert_eq!(e.kind(), std::io::ErrorKind::NotFound);
-    }
-    #[tokio::test]
-    async fn test_get_dir_file_paths_gets_only_files() {
-        let tmpdir = TempDir::new().unwrap();
-        let tmpfile_1 = tmpdir.path().join("test_file_1");
-        let tmpfile_2 = tmpdir.path().join("test_file_2");
-        let tmpfile_3_dir = tmpdir.path().join("test_file_3_dir");
-        tokio::fs::File::create_new(&tmpfile_1).await.unwrap();
-        tokio::fs::File::create_new(&tmpfile_2).await.unwrap();
-        tokio::fs::create_dir(&tmpfile_3_dir).await.unwrap();
-        let mut found = get_dir_file_paths(tmpdir.path())
-            .await
-            .unwrap()
-            .collect::<Result<Vec<_>, _>>()
-            .await
-            .unwrap();
-        found.sort();
-        assert_eq!(found.as_slice(), &[tmpfile_1, tmpfile_2]);
-    }
-    #[tokio::test]
-    async fn test_touch_file_updates_timestamps() {
-        let tmpdir = TempDir::new().unwrap();
-        let tmpfile = tmpdir.path().join("test_file");
-        let file = fs_err::tokio::File::create_new(tmpfile.clone())
-            .await
-            .unwrap();
-        let metadata = file.metadata().await.unwrap();
-        let (old_accessed, old_modified) =
-            (metadata.accessed().unwrap(), metadata.modified().unwrap());
-        let new_timestamp = SystemTime::now();
-        assert_ne!(old_accessed, new_timestamp);
-        assert_ne!(old_modified, new_timestamp);
-        touch_file_with_timestamp(tmpfile.clone(), new_timestamp)
-            .await
-            .unwrap();
-        let new_metadata = fs_err::tokio::File::open(tmpfile.clone())
-            .await
-            .unwrap()
-            .metadata()
-            .await
-            .unwrap();
-        let (new_accessed, new_modified) = (
-            new_metadata.accessed().unwrap(),
-            new_metadata.modified().unwrap(),
-        );
-        assert_eq!(new_accessed, new_timestamp);
-        assert_eq!(new_modified, new_timestamp);
-    }
-    #[tokio::test]
-    async fn test_touch_file_file_not_found() {
-        let tmpdir = TempDir::new().unwrap();
-        let tmpfile = tmpdir.path().join("test_file");
-        assert!(!fs_err::tokio::try_exists(tmpfile.clone()).await.unwrap());
-        assert_eq!(
-            touch_file_with_timestamp(tmpfile.clone(), SystemTime::now())
-                .await
-                .unwrap_err()
-                .kind(),
-            std::io::ErrorKind::NotFound
-        );
-        assert!(!fs_err::tokio::try_exists(tmpfile).await.unwrap());
-    }
-    #[tokio::test]
-    async fn test_create_or_clean_directory_creates_directory() {
-        let tmpdir = TempDir::new().unwrap();
-        let target_dir = tmpdir.path().join("test_dir");
-        create_or_clean_directory(
-            &target_dir,
-            "test_",
-            std::time::Duration::from_secs(u64::MAX),
-        )
-        .await
-        .unwrap();
-        assert!(fs_err::tokio::remove_dir(target_dir).await.is_ok());
-    }
-    #[tokio::test]
-    async fn test_create_or_clean_directory_deletes_aged() {
-        let tmpdir = TempDir::new().unwrap();
-        let target_dir = tmpdir.path().join("test_dir");
-        let target_file = target_dir.join("test_file");
-        fs_err::tokio::create_dir_all(&target_dir).await.unwrap();
-        let file = fs_err::tokio::File::create(&target_file).await.unwrap();
-        file.into_std()
-            .await
-            .into_file()
-            .set_modified(SystemTime::now() - Duration::from_secs(60))
-            .unwrap();
-        create_or_clean_directory(&target_dir, "test_", std::time::Duration::from_secs(59))
-            .await
-            .unwrap();
-        assert!(fs_err::tokio::File::open(target_file).await.is_err());
-    }
-    #[tokio::test]
-    async fn test_create_or_clean_directory_doesnt_delete_aged_wrong_prefix() {
-        let tmpdir = TempDir::new().unwrap();
-        let target_dir = tmpdir.path().join("test_dir");
-        let target_file = target_dir.join("users file");
-        fs_err::tokio::create_dir_all(&target_dir).await.unwrap();
-        let file = fs_err::tokio::File::create(&target_file).await.unwrap();
-        file.into_std()
-            .await
-            .into_file()
-            .set_modified(SystemTime::now() - Duration::from_secs(60))
-            .unwrap();
-        create_or_clean_directory(&target_dir, "test_", std::time::Duration::from_secs(59))
-            .await
-            .unwrap();
-        assert!(fs_err::tokio::File::open(target_file).await.is_ok());
-    }
-    #[tokio::test]
-    async fn test_create_or_clean_directory_doesnt_delete_unaged() {
-        let tmpdir = TempDir::new().unwrap();
-        let target_dir = tmpdir.path().join("test_dir");
-        let target_file = target_dir.join("test_file");
-        fs_err::tokio::create_dir_all(&target_dir).await.unwrap();
-        let file = fs_err::tokio::File::create(&target_file).await.unwrap();
-        drop(file);
-        create_or_clean_directory(
-            &target_dir,
-            "test_",
-            std::time::Duration::from_secs(u64::MAX),
-        )
-        .await
-        .unwrap();
-        assert!(fs_err::tokio::File::open(target_file).await.is_ok());
-    }
     #[tokio::test]
     async fn test_get_limited_sequential_file_has_correct_filename() {
         let tmpdir = TempDir::new().unwrap();

@@ -192,7 +192,7 @@ impl PostQuery for EditPlaylistQuery<'_> {
             "playlistId" : self.id.get_raw(),
             "actions" : actions,
         }) else {
-            unreachable!()
+            unreachable!("playlist edit header is a JSON object from json! macro")
         };
         map
     }

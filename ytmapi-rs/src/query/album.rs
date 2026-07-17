@@ -17,7 +17,7 @@ impl PostQuery for GetAlbumQuery<'_> {
         let serde_json::Value::Object(map) = json!({
              "browseId" : self.browse_id.get_raw(),
         }) else {
-            unreachable!("Created a map");
+            unreachable!("album header is a JSON object from json! macro");
         };
         map
     }

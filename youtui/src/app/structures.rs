@@ -1,15 +1,15 @@
-use serde::{Serialize, Deserialize};
 use super::view::SortDirection;
 use itertools::Itertools;
+use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::ops::Deref;
 use std::rc::Rc;
 use std::time::Duration;
-use tracing::{debug, warn};
+use tracing::{debug, info, warn};
+pub use ytmapi_rs::common::Thumbnail;
 use ytmapi_rs::common::{
     AlbumID, ArtistChannelID, Explicit, UploadAlbumID, UploadArtistID, VideoID, YoutubeID,
 };
-pub use ytmapi_rs::common::Thumbnail;
 use ytmapi_rs::parse::{
     AlbumSong, ParsedSongAlbum, ParsedSongArtist, ParsedUploadArtist, ParsedUploadSongAlbum,
     PlaylistEpisode, PlaylistItem, PlaylistSong, PlaylistUploadSong, PlaylistVideo,
@@ -207,7 +207,9 @@ pub enum DownloadStatus {
     Downloading(Percentage),
     Downloaded,
     Failed,
-    Retrying { times_retried: usize },
+    Retrying {
+        times_retried: usize,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -247,7 +249,11 @@ fn compute_artists_string(artists: &[ListSongArtist]) -> String {
     Itertools::intersperse(artists.iter().map(|a| a.name.as_str()), ", ").collect()
 }
 
-fn compute_lowercached(title: &str, album: Option<&str>, artists: &[ListSongArtist]) -> (String, String, String) {
+fn compute_lowercached(
+    title: &str,
+    album: Option<&str>,
+    artists: &[ListSongArtist],
+) -> (String, String, String) {
     let title_lower = title.to_lowercase();
     let album_lower = album.unwrap_or_default().to_lowercase();
     let artists_lower = compute_artists_string(artists).to_lowercase();
@@ -269,11 +275,24 @@ impl ListSong {
     ) -> [Cow<'_, str>; N] {
         fields.map(|field| self.get_field(field))
     }
+    pub fn get_field_lower<'a>(&'a self, field: ListSongDisplayableField) -> Cow<'a, str> {
+        match field {
+            ListSongDisplayableField::Song => Cow::Borrowed(&self.title_lower),
+            ListSongDisplayableField::Artists => Cow::Borrowed(&self.artists_lower),
+            ListSongDisplayableField::Album => Cow::Borrowed(&self.album_lower),
+            // These fields are already ASCII (digits/formatted strings) — no lowering needed
+            ListSongDisplayableField::Year
+            | ListSongDisplayableField::Duration
+            | ListSongDisplayableField::TrackNo
+            | ListSongDisplayableField::Plays
+            | ListSongDisplayableField::DownloadStatus => self.get_field(field),
+        }
+    }
     pub fn get_field(&self, field: ListSongDisplayableField) -> Cow<'_, str> {
         match field {
             ListSongDisplayableField::DownloadStatus => {
                 Cow::Borrowed(self.download_status.list_icon_str())
-            },
+            }
             ListSongDisplayableField::TrackNo => Cow::Borrowed(self.track_no_string.as_str()),
             ListSongDisplayableField::Artists => Cow::Borrowed(self.artists_string.as_str()),
             ListSongDisplayableField::Album => self
@@ -316,13 +335,16 @@ impl ListSong {
                 id: None,
             })
             .collect();
-        let list_album = album.map(|name| MaybeRc::Owned(ListSongAlbum {
-            name,
-            id: AlbumOrUploadAlbumID::Album(AlbumID::from_raw("")),
-        }));
+        let list_album = album.map(|name| {
+            MaybeRc::Owned(ListSongAlbum {
+                name,
+                id: AlbumOrUploadAlbumID::Album(AlbumID::from_raw("")),
+            })
+        });
         let album_ref = list_album.as_ref().map(|a| a.as_ref().name.as_str());
         let artists_string = compute_artists_string(&list_artists);
-        let (title_lower, album_lower, artists_lower) = compute_lowercached(&title, album_ref, &list_artists);
+        let (title_lower, album_lower, artists_lower) =
+            compute_lowercached(&title, album_ref, &list_artists);
         ListSong {
             video_id,
             track_no: None,
@@ -400,7 +422,8 @@ impl BrowserSongsList {
                 song.music_video_type()
             );
         }
-        let mut best: std::collections::HashMap<&str, &AlbumSong> = std::collections::HashMap::new();
+        let mut best: std::collections::HashMap<&str, &AlbumSong> =
+            std::collections::HashMap::new();
         for song in &raw_list {
             match best.entry(song.title.as_str()) {
                 Entry::Occupied(mut e) => {
@@ -662,9 +685,12 @@ impl BrowserSongsList {
         // Filters both against existing list AND within the incoming batch
         // (keeps first occurrence of each video_id).
         let mut filtered = {
-            let mut existing: std::collections::HashSet<String> =
-                self.list.iter().map(|s| s.video_id.get_raw().to_owned()).collect();
-            let mut filtered = Vec::new();
+            let mut existing: std::collections::HashSet<String> = self
+                .list
+                .iter()
+                .map(|s| s.video_id.get_raw().to_owned())
+                .collect();
+            let mut filtered = Vec::with_capacity(song_list.len());
             for song in song_list {
                 let raw = song.video_id.get_raw().to_owned();
                 if existing.contains(&raw) {
@@ -710,7 +736,7 @@ impl BrowserSongsList {
         // O(n) shifts per removal (each remove is O(1) amortized from back).
         let (to_remove, _): (Vec<usize>, std::collections::HashSet<&str>) = {
             let mut seen = std::collections::HashSet::with_capacity(len_before);
-            let mut to_remove = Vec::new();
+            let mut to_remove = Vec::with_capacity(len_before);
             for (i, song) in self.list.iter().enumerate() {
                 let raw = song.video_id.get_raw();
                 if seen.contains(raw) {
@@ -729,7 +755,7 @@ impl BrowserSongsList {
         }
         let removed = len_before - self.list.len();
         if removed > 0 {
-            tracing::info!("Removed {removed} duplicates from playlist");
+            info!("Removed {removed} duplicates from playlist");
         }
         removed
     }
@@ -776,7 +802,9 @@ mod tests {
     }
 
     fn collect_ids(list: &BrowserSongsList) -> Vec<String> {
-        list.get_list_iter().map(|s| s.video_id.get_raw().to_string()).collect()
+        list.get_list_iter()
+            .map(|s| s.video_id.get_raw().to_string())
+            .collect()
     }
 
     // --- deduplicate tests ---
@@ -944,10 +972,7 @@ mod tests {
             "dedup(58000) took {}ms, expected <500ms for O(n)",
             elapsed.as_millis(),
         );
-        eprintln!(
-            "[PERF] dedup(58000 unique): {}ms",
-            elapsed.as_millis(),
-        );
+        eprintln!("[PERF] dedup(58000 unique): {}ms", elapsed.as_millis(),);
     }
 
     /// Verify push_song_list with 58k songs doesn't O(n²) on existing lookup
@@ -987,14 +1012,16 @@ mod bench {
 
     fn make_browser_songs(count: usize) -> Vec<ListSong> {
         (0..count)
-            .map(|i| ListSong::create_with_metadata(
-                VideoID::from_raw(format!("video_{i}")),
-                format!("Song {i}"),
-                vec!["Artist A".into(), "Artist B".into()],
-                Some("Album".into()),
-                "3:30".into(),
-                None,
-            ))
+            .map(|i| {
+                ListSong::create_with_metadata(
+                    VideoID::from_raw(format!("video_{i}")),
+                    format!("Song {i}"),
+                    vec!["Artist A".into(), "Artist B".into()],
+                    Some("Album".into()),
+                    "3:30".into(),
+                    None,
+                )
+            })
             .collect()
     }
 
@@ -1012,8 +1039,14 @@ mod bench {
         let total_ns = elapsed.as_nanos() as f64;
         let per_call = total_ns / (ITERATIONS as f64 * songs.len() as f64);
         let total_ms = elapsed.as_secs_f64() * 1000.0;
-        assert!(per_call < 100.0, "get_field(Artists) too slow: {per_call:.1}ns/call");
-        eprintln!("[BENCH] get_field(Artists) — {ITERATIONS}×{} songs: {total_ms:.3}ms total, ~{per_call:.1}ns/call", songs.len());
+        assert!(
+            per_call < 100.0,
+            "get_field(Artists) too slow: {per_call:.1}ns/call"
+        );
+        eprintln!(
+            "[BENCH] get_field(Artists) — {ITERATIONS}×{} songs: {total_ms:.3}ms total, ~{per_call:.1}ns/call",
+            songs.len()
+        );
     }
 
     #[test]
@@ -1030,8 +1063,14 @@ mod bench {
         let total_ns = elapsed.as_nanos() as f64;
         let per_call = total_ns / (ITERATIONS as f64 * songs.len() as f64);
         let total_ms = elapsed.as_secs_f64() * 1000.0;
-        assert!(per_call < 100.0, "get_field(TrackNo) too slow: {per_call:.1}ns/call");
-        eprintln!("[BENCH] get_field(TrackNo) — {ITERATIONS}×{} songs: {total_ms:.3}ms total, ~{per_call:.1}ns/call", songs.len());
+        assert!(
+            per_call < 100.0,
+            "get_field(TrackNo) too slow: {per_call:.1}ns/call"
+        );
+        eprintln!(
+            "[BENCH] get_field(TrackNo) — {ITERATIONS}×{} songs: {total_ms:.3}ms total, ~{per_call:.1}ns/call",
+            songs.len()
+        );
     }
 
     #[test]
@@ -1054,15 +1093,27 @@ mod bench {
         let total_ns = elapsed.as_nanos() as f64;
         let per_call = total_ns / (ITERATIONS as f64 * songs.len() as f64);
         let total_ms = elapsed.as_secs_f64() * 1000.0;
-        assert!(per_call < 1000.0, "get_fields(4col) too slow: {per_call:.1}ns/call");
-        eprintln!("[BENCH] get_fields(4col) — {ITERATIONS}×{} songs: {total_ms:.3}ms total, ~{per_call:.1}ns/call", songs.len());
+        assert!(
+            per_call < 1000.0,
+            "get_fields(4col) too slow: {per_call:.1}ns/call"
+        );
+        eprintln!(
+            "[BENCH] get_fields(4col) — {ITERATIONS}×{} songs: {total_ms:.3}ms total, ~{per_call:.1}ns/call",
+            songs.len()
+        );
     }
 
     #[test]
     fn bench_compute_lowercached() {
         let artists = vec![
-            ListSongArtist { name: "Artist A".into(), id: None },
-            ListSongArtist { name: "Artist B".into(), id: None },
+            ListSongArtist {
+                name: "Artist A".into(),
+                id: None,
+            },
+            ListSongArtist {
+                name: "Artist B".into(),
+                id: None,
+            },
         ];
         let start = std::time::Instant::now();
         for _ in 0..ITERATIONS {
@@ -1073,8 +1124,13 @@ mod bench {
         let total_ns = elapsed.as_nanos() as f64;
         let per_call = total_ns / ITERATIONS as f64;
         let total_ms = elapsed.as_secs_f64() * 1000.0;
-        assert!(per_call < 100_000.0, "compute_lowercached too slow: {per_call:.1}ns/call");
-        eprintln!("[BENCH] compute_lowercached — {ITERATIONS}×: {total_ms:.3}ms total, ~{per_call:.1}ns/call");
+        assert!(
+            per_call < 100_000.0,
+            "compute_lowercached too slow: {per_call:.1}ns/call"
+        );
+        eprintln!(
+            "[BENCH] compute_lowercached — {ITERATIONS}×: {total_ms:.3}ms total, ~{per_call:.1}ns/call"
+        );
     }
 
     #[test]
@@ -1095,8 +1151,13 @@ mod bench {
         let total_ns = elapsed.as_nanos() as f64;
         let per_call = total_ns / ITERATIONS as f64;
         let total_ms = elapsed.as_secs_f64() * 1000.0;
-        assert!(per_call < 1_000_000.0, "create_with_metadata too slow: {per_call:.1}ns/call");
-        eprintln!("[BENCH] create_with_metadata — {ITERATIONS}×: {total_ms:.3}ms total, ~{per_call:.1}ns/call");
+        assert!(
+            per_call < 1_000_000.0,
+            "create_with_metadata too slow: {per_call:.1}ns/call"
+        );
+        eprintln!(
+            "[BENCH] create_with_metadata — {ITERATIONS}×: {total_ms:.3}ms total, ~{per_call:.1}ns/call"
+        );
     }
 }
 
@@ -1108,14 +1169,16 @@ mod criterion_benches {
 
     fn make_songs(count: usize) -> Vec<ListSong> {
         (0..count)
-            .map(|i| ListSong::create_with_metadata(
-                VideoID::from_raw(format!("video_{i}")),
-                format!("Song {i}"),
-                vec!["Artist A".into(), "Artist B".into()],
-                Some("Album".into()),
-                "3:30".into(),
-                None,
-            ))
+            .map(|i| {
+                ListSong::create_with_metadata(
+                    VideoID::from_raw(format!("video_{i}")),
+                    format!("Song {i}"),
+                    vec!["Artist A".into(), "Artist B".into()],
+                    Some("Album".into()),
+                    "3:30".into(),
+                    None,
+                )
+            })
             .collect()
     }
 

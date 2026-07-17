@@ -1,13 +1,13 @@
 use super::{
     AdvancedTableView, TableSortCommand, TableView, basic_constraints_to_table_constraints,
 };
-use crate::app::ui::draw::draw_text_box;
 use crate::app::view::{BasicConstraint, HasTitle, ListView, Loadable};
+use crate::drawutils::centered_rect;
+use crate::drawutils::draw_text_box;
 use crate::drawutils::{
     DESELECTED_BORDER_COLOUR, ROW_HIGHLIGHT_COLOUR, SELECTED_BORDER_COLOUR, TABLE_HEADINGS_COLOUR,
     TEXT_COLOUR,
 };
-use crate::drawutils::centered_rect;
 use crate::widgets::{ScrollingList, ScrollingTable, ScrollingTableState};
 use ratatui::Frame;
 use ratatui::layout::Alignment;
@@ -82,7 +82,7 @@ pub fn draw_panel_mut_impl<T>(
     t: &mut T,
     chunk: Rect,
     is_selected: bool,
-    get_title: impl for<'a> FnOnce(&'a mut T) -> Cow<'a, str>,
+    get_title: impl for<'a> FnOnce(&'a mut T) -> Line<'static>,
     draw_call: impl for<'a> FnOnce(&'a mut T, &mut Frame, Rect) -> Option<PanelEffect<'static>>,
 ) {
     let border_colour = if is_selected {
@@ -184,7 +184,6 @@ where
     fn apply_and_render(self, widget: T, f: &mut Frame, chunk: Rect);
 }
 
-#[allow(clippy::too_many_arguments)]
 pub struct DrawTableConfig<'a> {
     pub cur: usize,
     pub secondary_highlighted_row: Option<usize>,
@@ -298,16 +297,16 @@ pub fn draw_advanced_table(
                     Cell::from(heading)
                 }
             });
-    let filter_str: String = itertools::intersperse(
-        table.get_filter_commands().iter().map(|f| f.as_readable()),
-        ", ".to_string(),
-    )
-    .collect();
-    // Naive implementation
-    let filter_string = if filter_str.len() > 1 {
-        ": ".to_string() + &filter_str
-    } else {
-        filter_str
+    let filter_string = {
+        let commands = table.get_filter_commands();
+        if commands.is_empty() {
+            String::new()
+        } else {
+            let filter_str: String =
+                itertools::intersperse(commands.iter().map(|f| f.as_readable()), ", ".to_string())
+                    .collect();
+            format!(": {filter_str}")
+        }
     };
     // Clone of TableState is cheap
     let new_table_state = table.get_state().clone();

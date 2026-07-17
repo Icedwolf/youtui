@@ -28,7 +28,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 pub fn hash_sapisid(sapisid: &str) -> String {
     let elapsed = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .expect("SystemTime::now() should always be ahead of UNIX_EPOCH")
+        .unwrap_or_default()
         .as_secs();
     let mut hasher = Sha1::new();
     hasher.update(format!("{elapsed} {sapisid} {YTM_URL}"));

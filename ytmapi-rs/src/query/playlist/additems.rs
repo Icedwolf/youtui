@@ -96,7 +96,7 @@ impl<T: SpecialisedQuery> PostQuery for AddPlaylistItemsQuery<'_, T> {
         let serde_json::Value::Object(mut map) = json!({
             "playlistId" : self.id,
         }) else {
-            unreachable!()
+            unreachable!("additems header is a JSON object from json! macro")
         };
         if let Some(additional_header) = self.query_type.additional_header() {
             map.insert(additional_header.0, additional_header.1);

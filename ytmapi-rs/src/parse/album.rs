@@ -92,8 +92,13 @@ fn parse_album_track(json: &mut JsonCrawlerBorrowed) -> Result<Option<AlbumSong>
         "/playNavigationEndpoint",
         WATCH_VIDEO_ID
     ))?;
-    let video_type_path = concatcp!(PLAY_BUTTON, "/playNavigationEndpoint", NAVIGATION_VIDEO_TYPE);
-    let music_video_type: Option<YoutubeMusicVideoType> = data.take_value_pointer(video_type_path).ok();
+    let video_type_path = concatcp!(
+        PLAY_BUTTON,
+        "/playNavigationEndpoint",
+        NAVIGATION_VIDEO_TYPE
+    );
+    let music_video_type: Option<YoutubeMusicVideoType> =
+        data.take_value_pointer(video_type_path).ok();
     let like_status = data.take_value_pointer(MENU_LIKE_STATUS)?;
     let duration = data
         .borrow_pointer(fixed_column_item_pointer(0))

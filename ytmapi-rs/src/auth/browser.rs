@@ -70,7 +70,9 @@ impl BrowserToken {
         // locales — the INNERTUBE_CLIENT_VERSION fallback works for all languages.
         let client_version = response_text
             .split_once("INNERTUBE_CLIENT_VERSION\":\"")
-            .ok_or(Error::header("missing INNERTUBE_CLIENT_VERSION in YouTube Music page"))?
+            .ok_or(Error::header(
+                "missing INNERTUBE_CLIENT_VERSION in YouTube Music page",
+            ))?
             .1
             .split_once('\"')
             .ok_or(Error::header("malformed INNERTUBE_CLIENT_VERSION value"))?

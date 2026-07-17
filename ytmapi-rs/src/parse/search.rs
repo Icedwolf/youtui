@@ -265,12 +265,12 @@ fn parse_basic_search_result_from_section_list_contents(
     let mut artists = Vec::new();
     let mut albums = Vec::new();
     let mut featured_playlists = Vec::new();
-    let mut community_playlists = Vec::new();
+    let community_playlists = Vec::new();
     let mut songs = Vec::new();
-    let mut videos = Vec::new();
-    let mut podcasts = Vec::new();
-    let mut episodes = Vec::new();
-    let mut profiles = Vec::new();
+    let videos = Vec::new();
+    let podcasts = Vec::new();
+    let episodes = Vec::new();
+    let profiles = Vec::new();
 
     let music_card_shelf = section_list_contents
         .0
@@ -316,15 +316,6 @@ fn parse_basic_search_result_from_section_list_contents(
                     .map(|r| parse_featured_playlist_search_result_from_music_shelf_contents(r))
                     .collect::<Result<Vec<SearchResultFeaturedPlaylist>>>()?
             }
-            SearchResultType::CommunityPlaylists => {
-                community_playlists = category
-                    .navigate_pointer("/contents")?
-                    .try_iter_mut()?
-                    .map(|r| {
-                        parse_community_playlist_basic_search_result_from_music_shelf_contents(r)
-                    })
-                    .collect::<Result<Vec<BasicSearchResultCommunityPlaylist>>>()?
-            }
             SearchResultType::Songs => {
                 songs = category
                     .navigate_pointer("/contents")?
@@ -332,36 +323,12 @@ fn parse_basic_search_result_from_section_list_contents(
                     .map(|r| parse_song_search_result_from_music_shelf_contents(r))
                     .collect::<Result<Vec<SearchResultSong>>>()?
             }
-            SearchResultType::Videos => {
-                videos = category
-                    .navigate_pointer("/contents")?
-                    .try_iter_mut()?
-                    .filter_map(|r| {
-                        parse_video_search_result_from_music_shelf_contents(r).transpose()
-                    })
-                    .collect::<Result<Vec<SearchResultVideo>>>()?
-            }
-            SearchResultType::Podcasts => {
-                podcasts = category
-                    .navigate_pointer("/contents")?
-                    .try_iter_mut()?
-                    .map(|r| parse_podcast_search_result_from_music_shelf_contents(r))
-                    .collect::<Result<Vec<SearchResultPodcast>>>()?
-            }
-            SearchResultType::Episodes => {
-                episodes = category
-                    .navigate_pointer("/contents")?
-                    .try_iter_mut()?
-                    .map(|r| parse_episode_search_result_from_music_shelf_contents(r))
-                    .collect::<Result<Vec<SearchResultEpisode>>>()?
-            }
-            SearchResultType::Profiles => {
-                profiles = category
-                    .navigate_pointer("/contents")?
-                    .try_iter_mut()?
-                    .map(|r| parse_profile_search_result_from_music_shelf_contents(r))
-                    .collect::<Result<Vec<SearchResultProfile>>>()?
-            }
+            // Non-music categories silently dropped — music-only client.
+            SearchResultType::CommunityPlaylists
+            | SearchResultType::Videos
+            | SearchResultType::Podcasts
+            | SearchResultType::Episodes
+            | SearchResultType::Profiles => {}
         }
     }
     Ok(SearchResults {
@@ -462,12 +429,12 @@ fn parse_top_result_from_music_shelf_contents(
     match result_type {
         // XXX: Perhaps also populate Artist field.
         Some(TopResultType::Artist) => {
-            subscribers = Some(parse_flex_column_item(&mut mrlir, 1, 2)?)
+            subscribers = parse_flex_column_item(&mut mrlir, 1, 2).ok();
         }
         Some(TopResultType::Album(_)) => {
             // XXX: Perhaps also populate Album field.
-            artist = Some(parse_flex_column_item(&mut mrlir, 1, 2)?);
-            year = Some(parse_flex_column_item(&mut mrlir, 1, 4)?);
+            artist = parse_flex_column_item(&mut mrlir, 1, 2).ok();
+            year = parse_flex_column_item(&mut mrlir, 1, 4).ok();
         }
         Some(TopResultType::Playlist) => {
             // Playlist, Video, and Station top result parsing not yet implemented.
@@ -475,11 +442,9 @@ fn parse_top_result_from_music_shelf_contents(
             return Ok(None);
         }
         Some(TopResultType::Song) => {
-            artist = Some(parse_flex_column_item(&mut mrlir, 1, 2)?);
-            album = Some(parse_flex_column_item(&mut mrlir, 1, 4)?);
-            duration = Some(parse_flex_column_item(&mut mrlir, 1, 6)?);
-            // This does not show up in all Card renderer results and so we'll define it as
-            // optional. TODO: Could make this more type safe in future.
+            artist = parse_flex_column_item(&mut mrlir, 1, 2).ok();
+            album = parse_flex_column_item(&mut mrlir, 1, 4).ok();
+            duration = parse_flex_column_item(&mut mrlir, 1, 6).ok();
             plays = parse_flex_column_item(&mut mrlir, 1, 8).ok();
         }
         Some(TopResultType::Video) => {
@@ -488,19 +453,17 @@ fn parse_top_result_from_music_shelf_contents(
         Some(TopResultType::Station) => {
             return Ok(None);
         }
-        Some(TopResultType::Podcast) => publisher = Some(parse_flex_column_item(&mut mrlir, 1, 2)?),
+        Some(TopResultType::Podcast) => publisher = parse_flex_column_item(&mut mrlir, 1, 2).ok(),
         None => {
             artist = Some(flex_1_0);
-            let flex_1_2 = parse_flex_column_item(&mut mrlir, 1, 2)?;
+            let flex_1_2 = parse_flex_column_item(&mut mrlir, 1, 2);
             // If this does not show up, album isn't included in the results.
             if let Ok(flex_1_4) = parse_flex_column_item(&mut mrlir, 1, 4) {
-                album = Some(flex_1_2);
+                album = flex_1_2.ok();
                 duration = Some(flex_1_4);
             } else {
-                duration = Some(flex_1_2);
+                duration = flex_1_2.ok();
             }
-            // This does not show up in all Card renderer results and so we'll define it as
-            // optional. TODO: Could make this more type safe in future.
             plays = parse_flex_column_item(&mut mrlir, 1, 6).ok();
         }
     }
@@ -654,7 +617,11 @@ fn parse_song_search_result_from_music_shelf_contents(
     };
     let video_id = mrlir.take_value_pointer(PLAYLIST_ITEM_VIDEO_ID)?;
     let thumbnails: Vec<Thumbnail> = mrlir.take_value_pointer(THUMBNAILS)?;
-    let video_type_path = concatcp!(PLAY_BUTTON, "/playNavigationEndpoint", NAVIGATION_VIDEO_TYPE);
+    let video_type_path = concatcp!(
+        PLAY_BUTTON,
+        "/playNavigationEndpoint",
+        NAVIGATION_VIDEO_TYPE
+    );
     let music_video_type: Option<YoutubeMusicVideoType> =
         mrlir.take_value_pointer(video_type_path).ok();
     Ok(SearchResultSong {
@@ -676,12 +643,12 @@ fn parse_video_search_result_from_music_shelf_contents(
 ) -> Result<Option<SearchResultVideo>> {
     let mut mrlir = music_shelf_contents.navigate_pointer("/musicResponsiveListItemRenderer")?;
     // Handle not available case
-        if let Ok("MUSIC_ITEM_RENDERER_DISPLAY_POLICY_GREY_OUT") = mrlir
-            .take_value_pointer::<String>(DISPLAY_POLICY)
-            .as_deref()
-        {
-            return Ok(None);
-        };
+    if let Ok("MUSIC_ITEM_RENDERER_DISPLAY_POLICY_GREY_OUT") = mrlir
+        .take_value_pointer::<String>(DISPLAY_POLICY)
+        .as_deref()
+    {
+        return Ok(None);
+    };
     let title = parse_flex_column_item(&mut mrlir, 0, 0)?;
     let first_field: String = parse_flex_column_item(&mut mrlir, 1, 0)?;
     let thumbnails: Vec<Thumbnail> = mrlir.take_value_pointer(THUMBNAILS)?;
@@ -772,12 +739,22 @@ fn parse_episode_search_result_from_music_shelf_contents(
     let second_run: Option<String> = parse_flex_column_item(&mut mrlir, 1, 2).ok();
     // Continuation items may have variable flex column layouts.
     // Check if a separator run exists at index 1 to detect 3-run layout.
-    let (date, channel_name) = if mrlir.path_exists("/flexColumns/1/musicResponsiveListItemFlexColumnRenderer/text/runs/1/text") {
+    let (date, channel_name) = if mrlir
+        .path_exists("/flexColumns/1/musicResponsiveListItemFlexColumnRenderer/text/runs/1/text")
+    {
         // 3+ runs: date, separator, channel
-        (EpisodeDate::Recorded { date: first_run }, second_run.unwrap_or_default())
+        (
+            EpisodeDate::Recorded { date: first_run },
+            second_run.unwrap_or_default(),
+        )
     } else {
         // 1-2 runs: date at run 0 (or could be channel name directly)
-        (EpisodeDate::Recorded { date: first_run.clone() }, first_run)
+        (
+            EpisodeDate::Recorded {
+                date: first_run.clone(),
+            },
+            first_run,
+        )
     };
     let video_id = mrlir.take_value_pointer(PLAYLIST_ITEM_VIDEO_ID)?;
     let thumbnails: Vec<Thumbnail> = mrlir.take_value_pointer(THUMBNAILS)?;
@@ -807,21 +784,6 @@ fn parse_featured_playlist_search_result_from_music_shelf_contents(
         songs,
         thumbnails,
     })
-}
-fn parse_community_playlist_basic_search_result_from_music_shelf_contents(
-    music_shelf_contents: JsonCrawlerBorrowed<'_>,
-) -> Result<BasicSearchResultCommunityPlaylist> {
-    let result_type: YoutubeMusicPageType = music_shelf_contents
-        .borrow_value_pointer(concatcp!(MRLIR, NAVIGATION_BROWSE, PAGE_TYPE))?;
-    let result = match result_type {
-        YoutubeMusicPageType::Podcast => BasicSearchResultCommunityPlaylist::Podcast(
-            parse_podcast_search_result_from_music_shelf_contents(music_shelf_contents)?,
-        ),
-        YoutubeMusicPageType::Playlist => BasicSearchResultCommunityPlaylist::Playlist(
-            parse_community_playlist_search_result_from_music_shelf_contents(music_shelf_contents)?,
-        ),
-    };
-    Ok(result)
 }
 fn parse_community_playlist_search_result_from_music_shelf_contents(
     music_shelf_contents: JsonCrawlerBorrowed<'_>,

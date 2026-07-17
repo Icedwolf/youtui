@@ -1,5 +1,6 @@
-use crate::core::blocking_send_or_error;
 use crate::app::structures::Percentage;
+use crate::core::blocking_send_or_error;
+use anyhow::Context;
 use async_callback_manager::PanickingReceiverStream;
 use futures::Stream;
 use rodio::Source;
@@ -8,7 +9,7 @@ use rodio::{ChannelCount, SampleRate};
 use std::fmt::Debug;
 use std::time::Duration;
 use tokio::sync::{mpsc, oneshot};
-use tracing::{debug, error, info, trace};
+use tracing::{debug, error, trace};
 
 pub mod rodio {
     pub use rodio::*;
@@ -57,7 +58,7 @@ impl<I: Debug + PartialEq + Copy> PlaybackState<I> {
             self.next_song_id
         );
         self.cur_song_duration = song.total_duration();
-        tracing::debug!(
+        debug!(
             "Received request to autoplay {song_id:?} of duration {:?}",
             self.cur_song_duration
         );
@@ -66,7 +67,7 @@ impl<I: Debug + PartialEq + Copy> PlaybackState<I> {
         }
         let txs = tx.0.clone();
         let song = ProgressSource::new(song, PROGRESS_UPDATE_DELAY, move |pos| {
-            blocking_send_or_error(&txs, AsyncRodioResponse::ProgressUpdate(pos));
+            let _ = txs.try_send(AsyncRodioResponse::ProgressUpdate(pos));
         });
         let on_done = on_done_cb(tx);
         sink.append(song);
@@ -75,10 +76,8 @@ impl<I: Debug + PartialEq + Copy> PlaybackState<I> {
             sink.play();
         }
         debug!("Now playing {:?}", song_id);
-        blocking_send_or_error(
-            tx.0.clone(),
-            AsyncRodioResponse::StartedPlaying(self.cur_song_duration),
-        );
+        let _ =
+            tx.0.try_send(AsyncRodioResponse::StartedPlaying(self.cur_song_duration));
         self.cur_song_id = Some(song_id);
         self.next_song_id = None;
         self.next_song_duration = None;
@@ -91,9 +90,9 @@ impl<I: Debug + PartialEq + Copy> PlaybackState<I> {
         song_id: I,
         tx: &RodioMpscSender<AsyncRodioResponse>,
     ) {
-        tracing::debug!("Inside PlaySong");
+        debug!("Inside PlaySong");
         self.cur_song_duration = song.total_duration();
-        tracing::debug!(
+        debug!(
             "Received request to play {song_id:?} of duration {:?}",
             self.cur_song_duration
         );
@@ -102,7 +101,7 @@ impl<I: Debug + PartialEq + Copy> PlaybackState<I> {
         }
         let txs = tx.0.clone();
         let song = ProgressSource::new(song, PROGRESS_UPDATE_DELAY, move |pos| {
-            blocking_send_or_error(&txs, AsyncRodioResponse::ProgressUpdate(pos));
+            let _ = txs.try_send(AsyncRodioResponse::ProgressUpdate(pos));
         });
         let on_done = on_done_cb(tx);
         sink.append(song);
@@ -111,10 +110,8 @@ impl<I: Debug + PartialEq + Copy> PlaybackState<I> {
             sink.play();
         }
         debug!("Now playing {:?}", song_id);
-        blocking_send_or_error(
-            tx.0.clone(),
-            AsyncRodioResponse::StartedPlaying(self.cur_song_duration),
-        );
+        let _ =
+            tx.0.try_send(AsyncRodioResponse::StartedPlaying(self.cur_song_duration));
         self.cur_song_id = Some(song_id);
         self.next_song_id = None;
     }
@@ -144,7 +141,12 @@ impl<I: Debug + PartialEq + Copy> PlaybackState<I> {
         oneshot_send_or_error(tx.0, ());
     }
 
-    fn handle_pause_play(&mut self, sink: &rodio::Player, song_id: I, tx: RodioOneshot<AsyncRodioPlayActionTaken>) {
+    fn handle_pause_play(
+        &mut self,
+        sink: &rodio::Player,
+        song_id: I,
+        tx: RodioOneshot<AsyncRodioPlayActionTaken>,
+    ) {
         debug!("Got message to pause / play {:?}", song_id);
         if self.cur_song_id != Some(song_id) {
             oneshot_send_or_error(tx.0, AsyncRodioPlayActionTaken::Played);
@@ -189,25 +191,35 @@ impl<I: Debug + PartialEq + Copy> PlaybackState<I> {
         oneshot_send_or_error(tx.0, ());
     }
 
-    fn handle_increase_volume(&self, sink: &rodio::Player, vol_inc: i8, tx: RodioOneshot<Percentage>) {
+    fn handle_increase_volume(
+        &self,
+        sink: &rodio::Player,
+        vol_inc: i8,
+        tx: RodioOneshot<Percentage>,
+    ) {
         sink.set_volume((sink.volume() + vol_inc as f32 / 100.0).clamp(0.0, 1.0));
-        oneshot_send_or_error(
-            tx.0,
-            Percentage((sink.volume() * 100.0).round() as u8),
-        );
+        oneshot_send_or_error(tx.0, Percentage((sink.volume() * 100.0).round() as u8));
         debug!("Rodio sent volume update");
     }
 
-    fn handle_set_volume(&self, sink: &rodio::Player, percentage: u8, tx: RodioOneshot<Percentage>) {
+    fn handle_set_volume(
+        &self,
+        sink: &rodio::Player,
+        percentage: u8,
+        tx: RodioOneshot<Percentage>,
+    ) {
         sink.set_volume((percentage as f32 / 100.0).clamp(0.0, 1.0));
-        oneshot_send_or_error(
-            tx.0,
-            Percentage((sink.volume() * 100.0).round() as u8),
-        );
+        oneshot_send_or_error(tx.0, Percentage((sink.volume() * 100.0).round() as u8));
         debug!("Rodio sent volume update");
     }
 
-    fn handle_seek(&mut self, sink: &rodio::Player, inc: Duration, direction: SeekDirection, tx: RodioOneshot<(Duration, I)>) {
+    fn handle_seek(
+        &mut self,
+        sink: &rodio::Player,
+        inc: Duration,
+        direction: SeekDirection,
+        tx: RodioOneshot<(Duration, I)>,
+    ) {
         debug!("Got request to seek {inc:?} in direction {direction:?}");
         let Some(cur_song_id) = self.cur_song_id else {
             debug!("Tried to seek, but no song loaded");
@@ -215,9 +227,10 @@ impl<I: Debug + PartialEq + Copy> PlaybackState<I> {
         };
         let cur_pos = sink.get_pos();
         let new_pos = match direction {
-            SeekDirection::Forward => cur_pos
-                .saturating_add(inc)
-                .min(self.cur_song_duration.unwrap_or(cur_pos.saturating_add(inc))),
+            SeekDirection::Forward => cur_pos.saturating_add(inc).min(
+                self.cur_song_duration
+                    .unwrap_or(cur_pos.saturating_add(inc)),
+            ),
             SeekDirection::Back => cur_pos
                 .saturating_sub(inc)
                 .min(self.cur_song_duration.unwrap_or(cur_pos)),
@@ -233,7 +246,13 @@ impl<I: Debug + PartialEq + Copy> PlaybackState<I> {
         oneshot_send_or_error(tx.0, (sink.get_pos(), cur_song_id));
     }
 
-    fn handle_seek_to(&mut self, sink: &rodio::Player, seek_to_pos: Duration, song_id: I, tx: RodioOneshot<(Duration, I)>) {
+    fn handle_seek_to(
+        &mut self,
+        sink: &rodio::Player,
+        seek_to_pos: Duration,
+        song_id: I,
+        tx: RodioOneshot<(Duration, I)>,
+    ) {
         debug!(
             "Got message to seek to {:?} in song {:?}",
             seek_to_pos, song_id
@@ -258,8 +277,16 @@ pub enum SeekDirection {
 }
 
 enum AsyncRodioRequest<I> {
-    PlaySong(Box<dyn Source<Item = f32> + Send + 'static>, I, RodioMpscSender<AsyncRodioResponse>),
-    AutoplaySong(Box<dyn Source<Item = f32> + Send + 'static>, I, RodioMpscSender<AsyncRodioResponse>),
+    PlaySong(
+        Box<dyn Source<Item = f32> + Send + 'static>,
+        I,
+        RodioMpscSender<AsyncRodioResponse>,
+    ),
+    AutoplaySong(
+        Box<dyn Source<Item = f32> + Send + 'static>,
+        I,
+        RodioMpscSender<AsyncRodioResponse>,
+    ),
     Stop(I, RodioOneshot<()>),
     StopAll(RodioOneshot<()>),
     PausePlay(I, RodioOneshot<AsyncRodioPlayActionTaken>),
@@ -295,7 +322,10 @@ where
     T: Debug,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let name = std::any::type_name::<T>().rsplit("::").next().unwrap_or("?");
+        let name = std::any::type_name::<T>()
+            .rsplit("::")
+            .next()
+            .unwrap_or("?");
         write!(f, "Oneshot channel - {name}")
     }
 }
@@ -311,7 +341,10 @@ where
     T: Debug,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let name = std::any::type_name::<T>().rsplit("::").next().unwrap_or("?");
+        let name = std::any::type_name::<T>()
+            .rsplit("::")
+            .next()
+            .unwrap_or("?");
         write!(f, "Mpsc channel - {name}")
     }
 }
@@ -350,7 +383,6 @@ where
     Playing(Option<Duration>, I),
     DonePlaying(I),
     AutoplayQueued(I),
-    #[allow(dead_code)]
     Error(String),
 }
 #[derive(PartialEq, Debug)]
@@ -378,34 +410,39 @@ pub struct AsyncRodio<I>
 where
     I: Debug,
 {
-    #[allow(dead_code)]
-    handle: tokio::task::JoinHandle<()>,
     tx: std::sync::mpsc::Sender<AsyncRodioRequest<I>>,
-}
-
-impl<I> Default for AsyncRodio<I>
-where
-    I: Debug + PartialEq + Copy + Send + 'static,
-{
-    fn default() -> Self {
-        Self::new()
-    }
 }
 
 impl<I> AsyncRodio<I>
 where
     I: Debug + PartialEq + Copy + Send + 'static,
 {
-    pub fn new() -> Self {
+    pub fn new() -> anyhow::Result<Self> {
         let (tx, rx) = std::sync::mpsc::channel::<AsyncRodioRequest<I>>();
-        let handle = tokio::task::spawn_blocking(move || {
-            let mut mixer_device_sink = rodio::DeviceSinkBuilder::from_default_device()
-                .expect("Expect default audio device")
-                .with_buffer_size(rodio::cpal::BufferSize::Fixed(4096))
-                .with_error_callback(|err| tracing::trace!("audio stream error: {err}"))
-                .open_sink_or_fallback()
-                .expect("Expect to get a handle to output stream");
-            mixer_device_sink.log_on_drop(false);
+        let (init_tx, init_rx) = std::sync::mpsc::channel::<anyhow::Result<()>>();
+
+        tokio::task::spawn_blocking(move || {
+            let mixer_device_sink = match (|| -> anyhow::Result<_> {
+                let builder = rodio::DeviceSinkBuilder::from_default_device()
+                    .map_err(|e| anyhow::anyhow!("Audio device unavailable: {e}"))?;
+                let mut sink = builder
+                    .with_buffer_size(rodio::cpal::BufferSize::Fixed(4096))
+                    .with_error_callback(|err| trace!("audio stream error: {err}"))
+                    .open_sink_or_fallback()
+                    .map_err(|e| anyhow::anyhow!("Failed to open audio sink: {e}"))?;
+                sink.log_on_drop(false);
+                Ok(sink)
+            })() {
+                Ok(sink) => {
+                    let _ = init_tx.send(Ok(()));
+                    sink
+                }
+                Err(e) => {
+                    let _ = init_tx.send(Err(e));
+                    return;
+                }
+            };
+
             let sink = rodio::Player::connect_new(mixer_device_sink.mixer());
             let mut state = PlaybackState {
                 cur_song_duration: None,
@@ -451,7 +488,12 @@ where
                 }
             }
         });
-        Self { handle, tx }
+
+        init_rx
+            .recv()
+            .context("Audio initialization thread panicked or failed to start")??;
+
+        Ok(Self { tx })
     }
     pub fn autoplay_song(
         &self,
@@ -481,7 +523,10 @@ where
                         return;
                     }
                     AsyncRodioResponse::StartedPlaying(duration) => {
-                        info!("audio_output_started: song_id={:?}, duration={:?}", identifier, duration);
+                        debug!(
+                            "audio_output_started: song_id={:?}, duration={:?}",
+                            identifier, duration
+                        );
                         send_or_error(&streamtx, AutoplayUpdate::Playing(duration, identifier))
                             .await;
                     }
@@ -525,7 +570,10 @@ where
                         .await;
                     }
                     AsyncRodioResponse::StartedPlaying(duration) => {
-                        info!("audio_output_started: song_id={:?}, duration={:?}", identifier, duration);
+                        debug!(
+                            "audio_output_started: song_id={:?}, duration={:?}",
+                            identifier, duration
+                        );
                         send_or_error(&streamtx, PlayUpdate::Playing(duration, identifier)).await;
                     }
                     AsyncRodioResponse::StoppedPlaying => {
@@ -719,7 +767,10 @@ pub async fn send_or_error<T, S: std::borrow::Borrow<mpsc::Sender<T>>>(tx: S, ms
         .await
         .unwrap_or_else(|e| debug!("Error {e} received when sending message"));
 }
-pub async fn std_send_or_error<T, S: std::borrow::Borrow<std::sync::mpsc::Sender<T>>>(tx: S, msg: T) {
+pub async fn std_send_or_error<T, S: std::borrow::Borrow<std::sync::mpsc::Sender<T>>>(
+    tx: S,
+    msg: T,
+) {
     tx.borrow()
         .send(msg)
         .unwrap_or_else(|e| debug!("Error {e} received when sending message"));
@@ -730,18 +781,26 @@ pub fn oneshot_send_or_error<T: Debug, S: Into<oneshot::Sender<T>>>(tx: S, msg: 
         .unwrap_or_else(|e| debug!("Error received when sending message {:?}", e));
 }
 
-#[allow(dead_code)]
-pub(crate) fn map_to_play_update<I: Debug + PartialEq + Copy>(msg: AsyncRodioResponse, id: I) -> PlayUpdate<I> {
+#[cfg(test)]
+pub(crate) fn map_to_play_update<I: Debug + PartialEq + Copy>(
+    msg: AsyncRodioResponse,
+    id: I,
+) -> PlayUpdate<I> {
     match msg {
         AsyncRodioResponse::ProgressUpdate(d) => PlayUpdate::PlayProgress(d, id),
-        AsyncRodioResponse::AutoplayingQueued => PlayUpdate::Error("Received AutoPlayingQueued message, but I asked to play...".into()),
+        AsyncRodioResponse::AutoplayingQueued => {
+            PlayUpdate::Error("Received AutoPlayingQueued message, but I asked to play...".into())
+        }
         AsyncRodioResponse::StartedPlaying(d) => PlayUpdate::Playing(d, id),
         AsyncRodioResponse::StoppedPlaying => PlayUpdate::DonePlaying(id),
     }
 }
 
-#[allow(dead_code)]
-pub(crate) fn map_to_autoplay_update<I: Debug + PartialEq + Copy>(msg: AsyncRodioResponse, id: I) -> AutoplayUpdate<I> {
+#[cfg(test)]
+pub(crate) fn map_to_autoplay_update<I: Debug + PartialEq + Copy>(
+    msg: AsyncRodioResponse,
+    id: I,
+) -> AutoplayUpdate<I> {
     match msg {
         AsyncRodioResponse::ProgressUpdate(d) => AutoplayUpdate::PlayProgress(d, id),
         AsyncRodioResponse::AutoplayingQueued => AutoplayUpdate::AutoplayQueued(id),
@@ -758,7 +817,10 @@ mod tests {
     #[test]
     fn map_play_update_progress() {
         let id = 42u64;
-        let result = map_to_play_update(AsyncRodioResponse::ProgressUpdate(Duration::from_secs(5)), id);
+        let result = map_to_play_update(
+            AsyncRodioResponse::ProgressUpdate(Duration::from_secs(5)),
+            id,
+        );
         assert_eq!(result, PlayUpdate::PlayProgress(Duration::from_secs(5), 42));
     }
 
@@ -770,8 +832,14 @@ mod tests {
 
     #[test]
     fn map_play_update_started_playing() {
-        let result = map_to_play_update(AsyncRodioResponse::StartedPlaying(Some(Duration::from_secs(30))), 2u64);
-        assert_eq!(result, PlayUpdate::Playing(Some(Duration::from_secs(30)), 2));
+        let result = map_to_play_update(
+            AsyncRodioResponse::StartedPlaying(Some(Duration::from_secs(30))),
+            2u64,
+        );
+        assert_eq!(
+            result,
+            PlayUpdate::Playing(Some(Duration::from_secs(30)), 2)
+        );
     }
 
     #[test]
@@ -788,8 +856,14 @@ mod tests {
 
     #[test]
     fn map_autoplay_update_progress() {
-        let result = map_to_autoplay_update(AsyncRodioResponse::ProgressUpdate(Duration::from_millis(500)), 1u64);
-        assert_eq!(result, AutoplayUpdate::PlayProgress(Duration::from_millis(500), 1));
+        let result = map_to_autoplay_update(
+            AsyncRodioResponse::ProgressUpdate(Duration::from_millis(500)),
+            1u64,
+        );
+        assert_eq!(
+            result,
+            AutoplayUpdate::PlayProgress(Duration::from_millis(500), 1)
+        );
     }
 
     #[test]
@@ -800,8 +874,14 @@ mod tests {
 
     #[test]
     fn map_autoplay_update_started_playing() {
-        let result = map_to_autoplay_update(AsyncRodioResponse::StartedPlaying(Some(Duration::from_secs(30))), 2u64);
-        assert_eq!(result, AutoplayUpdate::Playing(Some(Duration::from_secs(30)), 2));
+        let result = map_to_autoplay_update(
+            AsyncRodioResponse::StartedPlaying(Some(Duration::from_secs(30))),
+            2u64,
+        );
+        assert_eq!(
+            result,
+            AutoplayUpdate::Playing(Some(Duration::from_secs(30)), 2)
+        );
     }
 
     #[test]

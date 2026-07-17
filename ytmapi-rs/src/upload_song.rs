@@ -32,9 +32,8 @@ pub(crate) fn validate_upload_path(file_path: &Path) -> Result<(tokio::fs::File,
         ));
     }
     let max_bytes = MAX_UPLOAD_FILESIZE_MB * (1024 * 1024);
-    let metadata = std::fs::metadata(file_path).map_err(|e| {
-        Error::web(format!("Failed to read file metadata: {e}"))
-    })?;
+    let metadata = std::fs::metadata(file_path)
+        .map_err(|e| Error::web(format!("Failed to read file metadata: {e}")))?;
     let upload_filesize_bytes = metadata.len();
     if upload_filesize_bytes > max_bytes {
         return Err(Error::web(format!(
@@ -138,7 +137,10 @@ mod tests {
         fs::remove_file(&path).unwrap();
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
-        assert!(err.contains("Fileext"), "Expected extension error, got: {err}");
+        assert!(
+            err.contains("Fileext"),
+            "Expected extension error, got: {err}"
+        );
     }
 
     #[test]
@@ -152,7 +154,10 @@ mod tests {
         fs::remove_file(&path).unwrap();
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
-        assert!(err.contains("Unable to upload"), "Expected size error, got: {err}");
+        assert!(
+            err.contains("Unable to upload"),
+            "Expected size error, got: {err}"
+        );
     }
 
     #[test]

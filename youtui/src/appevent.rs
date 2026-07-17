@@ -142,15 +142,15 @@ impl EventSpawner<SignalWatcher> {
         let _handler = tokio::spawn(async move {
             loop {
                 tokio::select! {
-                   _ = ctrl_break.recv() => {}
-                   _ = ctrl_close.recv() => {}
-                   _ = ctrl_logoff.recv() => {}
-                   _ = ctrl_shutdown.recv() => {}
-                 }
-                 handler_tx
-                     .send(AppEvent::QuitSignal)
-                     .await
-                     .unwrap_or_else(|e| debug!("Error {:?} received when sending signal event", e));
+                  _ = ctrl_break.recv() => {}
+                  _ = ctrl_close.recv() => {}
+                  _ = ctrl_logoff.recv() => {}
+                  _ = ctrl_shutdown.recv() => {}
+                }
+                handler_tx
+                    .send(AppEvent::QuitSignal)
+                    .await
+                    .unwrap_or_else(|e| debug!("Error {:?} received when sending signal event", e));
             }
         });
         Ok(Self {

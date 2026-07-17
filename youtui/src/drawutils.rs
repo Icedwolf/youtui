@@ -1,5 +1,10 @@
+use rat_text::HasScreenCursor;
+use rat_text::text_input::TextInput;
+use rat_text::text_input::TextInputState;
+use ratatui::Frame;
 use ratatui::prelude::Rect;
-use ratatui::style::Color;
+use ratatui::style::{Color, Style};
+use ratatui::widgets::{Block, Borders};
 
 // Standard app colour scheme
 pub const SELECTED_BORDER_COLOUR: Color = Color::Cyan;
@@ -12,6 +17,32 @@ pub const PROGRESS_BG_COLOUR: Color = Color::DarkGray;
 pub const PROGRESS_FG_COLOUR: Color = Color::LightGreen;
 pub const TABLE_HEADINGS_COLOUR: Color = Color::LightGreen;
 pub const ROW_HIGHLIGHT_COLOUR: Color = Color::Blue;
+
+/// Draw a text input box
+pub fn draw_text_box(
+    f: &mut Frame,
+    title: impl AsRef<str>,
+    contents: &mut TextInputState,
+    chunk: Rect,
+) {
+    let block_widget = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(SELECTED_BORDER_COLOUR))
+        .title(title.as_ref());
+    let text_chunk = block_widget.inner(chunk);
+    let text_chunk = Rect {
+        x: text_chunk.x,
+        y: text_chunk.y,
+        width: text_chunk.width.saturating_sub(1),
+        height: text_chunk.height,
+    };
+    let text_widget = TextInput::new();
+    f.render_widget(block_widget, chunk);
+    f.render_stateful_widget(text_widget, text_chunk, contents);
+    if let Some(cursor_pos) = contents.screen_cursor() {
+        f.set_cursor_position(cursor_pos)
+    };
+}
 
 /// Helper function to create a popup at bottom corner of chunk.
 pub fn left_bottom_corner_rect(height: u16, width: u16, r: Rect) -> Rect {
@@ -57,17 +88,6 @@ pub fn bottom_of_rect(r: Rect) -> Rect {
         height: 1,
     }
 }
-/// Helper function to get `offset` of a list widget like `List` or `Table`
-/// after changing the size of the list.
-#[allow(dead_code)]
-pub fn middle_of_rect(r: Rect) -> Rect {
-    Rect {
-        x: r.x,
-        y: r.y + r.height.saturating_sub(1) / 2,
-        width: r.width,
-        height: 1,
-    }
-}
 pub fn get_offset_after_list_resize(
     prev_offset: usize,
     prev_cur: usize,
@@ -104,7 +124,7 @@ pub fn get_offset_after_list_resize(
 #[cfg(test)]
 mod tests {
     use super::{below_left_rect, bottom_of_rect, centered_rect, left_bottom_corner_rect};
-    use crate::drawutils::{get_offset_after_list_resize, middle_of_rect};
+    use crate::drawutils::get_offset_after_list_resize;
     use ratatui::layout::Rect;
 
     #[test]
@@ -202,21 +222,36 @@ mod tests {
     // These don't actually do anything as they don't try to draw...
     #[test]
     fn test_centered_rect_zero_height() {
-        let chunk = Rect { x: 0, y: 0, width: 10, height: 10 };
+        let chunk = Rect {
+            x: 0,
+            y: 0,
+            width: 10,
+            height: 10,
+        };
         let c = centered_rect(0, 5, chunk);
         assert_eq!(c.width, 5);
         assert_eq!(c.height, 0);
     }
     #[test]
     fn test_centered_rect_larger_than_chunk() {
-        let chunk = Rect { x: 0, y: 0, width: 10, height: 10 };
+        let chunk = Rect {
+            x: 0,
+            y: 0,
+            width: 10,
+            height: 10,
+        };
         let c = centered_rect(100, 100, chunk);
         assert_eq!(c.width, 10);
         assert_eq!(c.height, 10);
     }
     #[test]
     fn test_left_bottom_corner_rect_larger_than_chunk() {
-        let chunk = Rect { x: 0, y: 0, width: 10, height: 10 };
+        let chunk = Rect {
+            x: 0,
+            y: 0,
+            width: 10,
+            height: 10,
+        };
         let c = left_bottom_corner_rect(100, 100, chunk);
         assert_eq!(c.width, 10);
         assert_eq!(c.height, 10);
@@ -304,7 +339,12 @@ mod tests {
     }
     #[test]
     fn test_bottom_of_rect_normal() {
-        let r = Rect { x: 5, y: 10, width: 20, height: 5 };
+        let r = Rect {
+            x: 5,
+            y: 10,
+            width: 20,
+            height: 5,
+        };
         let b = bottom_of_rect(r);
         assert_eq!(b.x, 6);
         assert_eq!(b.y, 14);
@@ -313,7 +353,12 @@ mod tests {
     }
     #[test]
     fn test_bottom_of_rect_zero_height() {
-        let r = Rect { x: 0, y: 0, width: 10, height: 0 };
+        let r = Rect {
+            x: 0,
+            y: 0,
+            width: 10,
+            height: 0,
+        };
         let b = bottom_of_rect(r);
         assert_eq!(b.y, 0);
         assert_eq!(b.width, 8);
@@ -321,7 +366,12 @@ mod tests {
     }
     #[test]
     fn test_bottom_of_rect_zero_width() {
-        let r = Rect { x: 0, y: 0, width: 0, height: 10 };
+        let r = Rect {
+            x: 0,
+            y: 0,
+            width: 0,
+            height: 10,
+        };
         let b = bottom_of_rect(r);
         assert_eq!(b.x, 1);
         assert_eq!(b.y, 9);
@@ -329,64 +379,19 @@ mod tests {
         assert_eq!(b.height, 1);
     }
     #[test]
-    fn test_middle_of_rect_zero_height() {
-        let r = Rect { x: 0, y: 0, width: 10, height: 0 };
-        let m = middle_of_rect(r);
-        assert_eq!(m.y, 0);
-        assert_eq!(m.height, 1);
-    }
-    #[test]
-    fn test_middle_of_rect() {
-        let r1 = Rect {
-            x: 0,
-            y: 0,
-            width: 10,
-            height: 3,
-        };
-        assert_eq!(
-            middle_of_rect(r1),
-            Rect {
-                x: 0,
-                y: 1,
-                width: 10,
-                height: 1
-            }
-        );
-        let r2 = Rect {
-            x: 0,
-            y: 0,
-            width: 10,
-            height: 10,
-        };
-        assert_eq!(
-            middle_of_rect(r2),
-            Rect {
-                x: 0,
-                y: 4,
-                width: 10,
-                height: 1
-            }
-        );
-        let r3 = Rect {
-            x: 0,
-            y: 10,
-            width: 10,
-            height: 5,
-        };
-        assert_eq!(
-            middle_of_rect(r3),
-            Rect {
-                x: 0,
-                y: 12,
-                width: 10,
-                height: 1
-            }
-        );
-    }
-    #[test]
     fn test_below_left_rect_zero_height() {
-        let chunk = Rect { x: 0, y: 0, width: 10, height: 0 };
-        let max = Rect { x: 0, y: 0, width: 50, height: 50 };
+        let chunk = Rect {
+            x: 0,
+            y: 0,
+            width: 10,
+            height: 0,
+        };
+        let max = Rect {
+            x: 0,
+            y: 0,
+            width: 50,
+            height: 50,
+        };
         // height 0 chunk: y = 0 + 0 - 1 = 0 (saturated)
         let b = below_left_rect(5, 10, chunk, max);
         assert_eq!(b.x, 0);
@@ -397,8 +402,18 @@ mod tests {
     #[test]
     fn test_below_left_rect_normal() {
         // below_left_rect adds 1 to height internally
-        let chunk = Rect { x: 5, y: 10, width: 20, height: 5 };
-        let max = Rect { x: 0, y: 0, width: 100, height: 100 };
+        let chunk = Rect {
+            x: 5,
+            y: 10,
+            width: 20,
+            height: 5,
+        };
+        let max = Rect {
+            x: 0,
+            y: 0,
+            width: 100,
+            height: 100,
+        };
         let r = below_left_rect(10, 15, chunk, max);
         assert_eq!(r.x, 5);
         assert_eq!(r.y, 14);
@@ -409,8 +424,18 @@ mod tests {
 
     #[test]
     fn test_below_left_rect_clamped_to_max() {
-        let chunk = Rect { x: 50, y: 90, width: 20, height: 5 };
-        let max = Rect { x: 0, y: 0, width: 100, height: 100 };
+        let chunk = Rect {
+            x: 50,
+            y: 90,
+            width: 20,
+            height: 5,
+        };
+        let max = Rect {
+            x: 0,
+            y: 0,
+            width: 100,
+            height: 100,
+        };
         let r = below_left_rect(20, 30, chunk, max);
         assert_eq!(r.x, 50);
         assert_eq!(r.y, 94);
@@ -421,8 +446,18 @@ mod tests {
 
     #[test]
     fn test_below_left_rect_width_clamped_right() {
-        let chunk = Rect { x: 85, y: 10, width: 20, height: 5 };
-        let max = Rect { x: 0, y: 0, width: 100, height: 100 };
+        let chunk = Rect {
+            x: 85,
+            y: 10,
+            width: 20,
+            height: 5,
+        };
+        let max = Rect {
+            x: 0,
+            y: 0,
+            width: 100,
+            height: 100,
+        };
         let r = below_left_rect(10, 30, chunk, max);
         assert_eq!(r.x, 85);
         assert_eq!(r.y, 14);
@@ -433,8 +468,18 @@ mod tests {
 
     #[test]
     fn test_below_left_rect_zero_height_chunk() {
-        let chunk = Rect { x: 0, y: 0, width: 10, height: 0 };
-        let max = Rect { x: 0, y: 0, width: 100, height: 100 };
+        let chunk = Rect {
+            x: 0,
+            y: 0,
+            width: 10,
+            height: 0,
+        };
+        let max = Rect {
+            x: 0,
+            y: 0,
+            width: 100,
+            height: 100,
+        };
         let r = below_left_rect(5, 10, chunk, max);
         assert_eq!(r.y, 0);
         assert_eq!(r.height, 6);
@@ -445,10 +490,70 @@ mod tests {
     fn bounds_check_below_left_rect_no_panic() {
         // Verify no panics with extreme values
         let cases = [
-            (u16::MAX, u16::MAX, Rect { x: 0, y: 0, height: 50, width: 50 }, Rect { x: 100, y: 100, height: 1050, width: 1050 }),
-            (u16::MAX, u16::MAX, Rect { x: 0, y: 50, height: 50, width: 50 }, Rect { x: 100, y: 1050, height: 1050, width: 1050 }),
-            (u16::MAX, u16::MAX, Rect { x: 50, y: 0, height: 50, width: 50 }, Rect { x: 1050, y: 100, height: 1050, width: 1050 }),
-            (u16::MAX, u16::MAX, Rect { x: 50, y: 50, height: 50, width: 50 }, Rect { x: 1050, y: 1050, height: 1050, width: 1050 }),
+            (
+                u16::MAX,
+                u16::MAX,
+                Rect {
+                    x: 0,
+                    y: 0,
+                    height: 50,
+                    width: 50,
+                },
+                Rect {
+                    x: 100,
+                    y: 100,
+                    height: 1050,
+                    width: 1050,
+                },
+            ),
+            (
+                u16::MAX,
+                u16::MAX,
+                Rect {
+                    x: 0,
+                    y: 50,
+                    height: 50,
+                    width: 50,
+                },
+                Rect {
+                    x: 100,
+                    y: 1050,
+                    height: 1050,
+                    width: 1050,
+                },
+            ),
+            (
+                u16::MAX,
+                u16::MAX,
+                Rect {
+                    x: 50,
+                    y: 0,
+                    height: 50,
+                    width: 50,
+                },
+                Rect {
+                    x: 1050,
+                    y: 100,
+                    height: 1050,
+                    width: 1050,
+                },
+            ),
+            (
+                u16::MAX,
+                u16::MAX,
+                Rect {
+                    x: 50,
+                    y: 50,
+                    height: 50,
+                    width: 50,
+                },
+                Rect {
+                    x: 1050,
+                    y: 1050,
+                    height: 1050,
+                    width: 1050,
+                },
+            ),
         ];
         for (h, w, chunk, max) in &cases {
             let r = below_left_rect(*h, *w, *chunk, *max);

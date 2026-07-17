@@ -1,19 +1,17 @@
 use super::Browser;
-use super::artistsearch::search_panel::ArtistInputRouting;
-use super::artistsearch::songs_panel::AlbumSongsInputRouting;
-use super::artistsearch::{self, ArtistSearchBrowser};
+use super::artistsearch::ArtistSearchBrowser;
+use super::search_panel::SearchPanelInputRouting;
 use super::shared_components::SearchBlock;
+use super::shared_components::SearchBrowserSide;
+use super::songs_panel::SongsInputRouting;
 use super::songsearch::SongSearchBrowser;
 use crate::app::component::actionhandler::Suggestable;
-use crate::app::ui::browser::playlistsearch::search_panel::PlaylistInputRouting;
-use crate::app::ui::browser::playlistsearch::songs_panel::PlaylistSongsInputRouting;
-use crate::app::ui::browser::playlistsearch::{self, PlaylistSearchBrowser};
+use crate::app::ui::browser::playlistsearch::PlaylistSearchBrowser;
 use crate::app::view::draw::{draw_advanced_table, draw_list, draw_loadable, draw_panel_mut};
 use crate::drawutils::{
     ROW_HIGHLIGHT_COLOUR, SELECTED_BORDER_COLOUR, TEXT_COLOUR, below_left_rect, bottom_of_rect,
+    draw_text_box,
 };
-use rat_text::HasScreenCursor;
-use rat_text::text_input::{TextInput, TextInputState};
 use ratatui::Frame;
 use ratatui::prelude::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Modifier, Style};
@@ -66,17 +64,17 @@ pub fn draw_artist_search_browser(
     .areas(chunk);
     // Potentially could handle this better.
     let albumsongsselected = selected
-        && browser.input_routing == artistsearch::InputRouting::Song
-        && browser.album_songs_panel.route == AlbumSongsInputRouting::List;
+        && browser.side == SearchBrowserSide::Songs
+        && browser.songs_panel.route == SongsInputRouting::List;
     let artistselected = !albumsongsselected
         && selected
-        && browser.input_routing == artistsearch::InputRouting::Artist
-        && browser.artist_search_panel.route == ArtistInputRouting::List;
+        && browser.side == SearchBrowserSide::Search
+        && browser.search_panel.route == SearchPanelInputRouting::List;
 
-    if !browser.artist_search_panel.search_popped {
+    if !browser.search_panel.search_popped {
         draw_panel_mut(
             f,
-            &mut browser.artist_search_panel,
+            &mut browser.search_panel,
             artists_chunk,
             artistselected,
             |t, f, chunk| {
@@ -92,7 +90,7 @@ pub fn draw_artist_search_browser(
             .areas(artists_chunk);
         draw_panel_mut(
             f,
-            &mut browser.artist_search_panel,
+            &mut browser.search_panel,
             shrunk_artists_chunk,
             artistselected,
             |t, f, chunk| {
@@ -103,14 +101,14 @@ pub fn draw_artist_search_browser(
         draw_search_box(
             f,
             "Search Artists",
-            &mut browser.artist_search_panel.search,
+            &mut browser.search_panel.search,
             search_box_chunk,
         );
         // Should this be part of draw_search_box
-        if browser.artist_search_panel.has_search_suggestions() {
+        if browser.search_panel.has_search_suggestions() {
             draw_search_suggestions(
                 f,
-                &browser.artist_search_panel.search,
+                &browser.search_panel.search,
                 search_box_chunk,
                 artists_chunk,
             )
@@ -118,7 +116,7 @@ pub fn draw_artist_search_browser(
     }
     draw_panel_mut(
         f,
-        &mut browser.album_songs_panel,
+        &mut browser.songs_panel,
         songs_chunk,
         albumsongsselected,
         |t, f, chunk| {
@@ -142,17 +140,17 @@ pub fn draw_playlist_search_browser(
     .areas(chunk);
     // Potentially could handle this better.
     let songs_selected = selected
-        && browser.input_routing == playlistsearch::InputRouting::Song
-        && browser.playlist_songs_panel.route == PlaylistSongsInputRouting::List;
+        && browser.side == SearchBrowserSide::Songs
+        && browser.songs_panel.route == SongsInputRouting::List;
     let playlists_selected = !songs_selected
         && selected
-        && browser.input_routing == playlistsearch::InputRouting::Playlist
-        && browser.playlist_search_panel.route == PlaylistInputRouting::List;
+        && browser.side == SearchBrowserSide::Search
+        && browser.search_panel.route == SearchPanelInputRouting::List;
 
-    if !browser.playlist_search_panel.search_popped {
+    if !browser.search_panel.search_popped {
         draw_panel_mut(
             f,
-            &mut browser.playlist_search_panel,
+            &mut browser.search_panel,
             playlists_chunk,
             playlists_selected,
             |t, f, chunk| {
@@ -168,7 +166,7 @@ pub fn draw_playlist_search_browser(
             .areas(playlists_chunk);
         draw_panel_mut(
             f,
-            &mut browser.playlist_search_panel,
+            &mut browser.search_panel,
             shrunk_playlists_chunk,
             playlists_selected,
             |t, f, chunk| {
@@ -179,14 +177,14 @@ pub fn draw_playlist_search_browser(
         draw_search_box(
             f,
             "Search Playlists",
-            &mut browser.playlist_search_panel.search,
+            &mut browser.search_panel.search,
             search_box_chunk,
         );
         // Should this be part of draw_search_box
-        if browser.playlist_search_panel.has_search_suggestions() {
+        if browser.search_panel.has_search_suggestions() {
             draw_search_suggestions(
                 f,
-                &browser.playlist_search_panel.search,
+                &browser.search_panel.search,
                 search_box_chunk,
                 playlists_chunk,
             )
@@ -194,7 +192,7 @@ pub fn draw_playlist_search_browser(
     }
     draw_panel_mut(
         f,
-        &mut browser.playlist_songs_panel,
+        &mut browser.songs_panel,
         songs_chunk,
         songs_selected,
         |t, f, chunk| {
@@ -236,33 +234,6 @@ pub fn draw_song_search_browser(
     }
 }
 
-/// Draw a text input box
-// TODO: Shift to a more general module.
-pub fn draw_text_box(
-    f: &mut Frame,
-    title: impl AsRef<str>,
-    contents: &mut TextInputState,
-    chunk: Rect,
-) {
-    let block_widget = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(SELECTED_BORDER_COLOUR))
-        .title(title.as_ref());
-    let text_chunk = block_widget.inner(chunk);
-    let text_chunk = Rect {
-        x: text_chunk.x,
-        y: text_chunk.y,
-        width: text_chunk.width.saturating_sub(1),
-        height: text_chunk.height,
-    };
-    // TODO: Scrolling, if input larger than box.
-    let text_widget = TextInput::new();
-    f.render_widget(block_widget, chunk);
-    f.render_stateful_widget(text_widget, text_chunk, contents);
-    if let Some(cursor_pos) = contents.screen_cursor() {
-        f.set_cursor_position(cursor_pos)
-    };
-}
 fn draw_search_box(f: &mut Frame, title: impl AsRef<str>, search: &mut SearchBlock, chunk: Rect) {
     draw_text_box(f, title, &mut search.search_contents, chunk);
 }
@@ -317,9 +288,7 @@ fn draw_search_suggestions(f: &mut Frame, search: &SearchBlock, chunk: Rect, max
                 let mut t = truncated;
                 t.push('…');
                 spans.push(match run {
-                    TextRun::Bold(_) => {
-                        Span::styled(t, Style::new().add_modifier(Modifier::BOLD))
-                    }
+                    TextRun::Bold(_) => Span::styled(t, Style::new().add_modifier(Modifier::BOLD)),
                     TextRun::Normal(_) => Span::raw(t),
                 });
                 remaining = 0;

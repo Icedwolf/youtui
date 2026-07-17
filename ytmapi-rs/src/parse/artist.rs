@@ -448,7 +448,10 @@ fn parse_artist_album_item(mut r: impl JsonCrawler) -> crate::Result<GetArtistAl
 
 fn parse_artist_albums_from_grid(
     mut grid_renderer: JsonCrawlerOwned,
-) -> crate::Result<(Vec<GetArtistAlbumsAlbum>, Option<ContinuationParams<'static>>)> {
+) -> crate::Result<(
+    Vec<GetArtistAlbumsAlbum>,
+    Option<ContinuationParams<'static>>,
+)> {
     let continuation_params = grid_renderer.take_value_pointer(CONTINUATION_PARAMS).ok();
     let albums = grid_renderer
         .navigate_pointer("/items")?
@@ -464,11 +467,8 @@ impl<'a> ParseFromContinuable<GetArtistAlbumsQuery<'a>> for Vec<GetArtistAlbumsA
         p: ProcessedResult<GetArtistAlbumsQuery<'a>>,
     ) -> crate::Result<(Self, Option<ContinuationParams<'static>>)> {
         let json_crawler: JsonCrawlerOwned = p.into();
-        let grid_renderer = json_crawler.navigate_pointer(concatcp!(
-            SINGLE_COLUMN_TAB,
-            SECTION_LIST_ITEM,
-            GRID
-        ))?;
+        let grid_renderer =
+            json_crawler.navigate_pointer(concatcp!(SINGLE_COLUMN_TAB, SECTION_LIST_ITEM, GRID))?;
         parse_artist_albums_from_grid(grid_renderer)
     }
     fn parse_continuation(
@@ -491,6 +491,16 @@ mod tests {
             // Radiohead's albums.
             "./test_json/browse_artist_albums.json",
             "./test_json/browse_artist_albums_output.txt",
+            GetArtistAlbumsQuery::new(ArtistChannelID::from_raw(""), BrowseParams::from_raw("")),
+            BrowserToken
+        );
+    }
+
+    #[tokio::test]
+    async fn test_get_artist_albums_continuation() {
+        parse_continuations_test!(
+            "./test_json/browse_artist_albums_continuation_mock.json",
+            "./test_json/browse_artist_albums_continuation_output.txt",
             GetArtistAlbumsQuery::new(ArtistChannelID::from_raw(""), BrowseParams::from_raw("")),
             BrowserToken
         );

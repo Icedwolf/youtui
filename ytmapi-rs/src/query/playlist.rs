@@ -180,7 +180,7 @@ impl PostQuery for GetPlaylistTracksQuery<'_> {
         let serde_json::Value::Object(map) = json!({
             "browseId" : browse_id,
         }) else {
-            unreachable!()
+            unreachable!("playlist browse header is a JSON object from json! macro")
         };
         map
     }
@@ -209,7 +209,7 @@ impl PostQuery for GetPlaylistDetailsQuery<'_> {
         let serde_json::Value::Object(map) = json!({
             "browseId" : browse_id,
         }) else {
-            unreachable!()
+            unreachable!("playlist details header is a JSON object from json! macro")
         };
         map
     }
@@ -231,7 +231,7 @@ impl PostQuery for DeletePlaylistQuery<'_> {
         let serde_json::Value::Object(map) = json!({
             "playlistId" : self.id.get_raw(),
         }) else {
-            unreachable!()
+            unreachable!("delete playlist header is a JSON object from json! macro")
         };
         map
     }
@@ -252,7 +252,7 @@ impl PostQuery for RemovePlaylistItemsQuery<'_> {
         let serde_json::Value::Object(mut map) = json!({
             "playlistId": self.id,
         }) else {
-            unreachable!()
+            unreachable!("remove items header is a JSON object from json! macro")
         };
         let actions: Vec<serde_json::Value> = self
             .video_items
@@ -288,7 +288,7 @@ impl<T: GetWatchPlaylistQueryID> PostQuery for GetWatchPlaylistQuery<T> {
             "tunerSettingValue": "AUTOMIX_SETTING_NORMAL",
             "playlistId" : self.id.get_playlist_id(),
         }) else {
-            unreachable!()
+            unreachable!("watch playlist header is a JSON object from json! macro")
         };
         if let Some(video_id) = self.id.get_video_id() {
             map.insert("videoId".to_string(), json!(video_id));

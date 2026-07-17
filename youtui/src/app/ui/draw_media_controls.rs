@@ -11,7 +11,11 @@ pub fn draw_app_media_controls(w: &YoutuiWindow) -> MediaControlsUpdate<'_> {
             duration = w
                 .playlist
                 .get_song_from_id(*id)
-                .map(|s| s.actual_duration.map(|d| d.as_secs() as usize).unwrap_or(s.duration_secs))
+                .map(|s| {
+                    s.actual_duration
+                        .map(|d| d.as_secs() as usize)
+                        .unwrap_or(s.duration_secs)
+                })
                 .unwrap_or(0);
             progress = w.playlist.get_cur_played_dur().unwrap_or_default();
             (progress.as_secs_f64() / duration as f64).clamp(0.0, 1.0)
@@ -32,7 +36,7 @@ pub fn draw_app_media_controls(w: &YoutuiWindow) -> MediaControlsUpdate<'_> {
         .and_then(|s| s.album.as_ref())
         .map(|s| s.name.as_str())
         .unwrap_or_default();
-    
+
     let cover_url = cur_active_song.and_then(|s| {
         let thumb = s.thumbnails.iter().max_by_key(|t| t.height * t.width);
         thumb.map(|t| t.url.clone())

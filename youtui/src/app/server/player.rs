@@ -9,12 +9,10 @@ pub struct Player {
 }
 
 impl Player {
-    #[must_use]
-    pub fn new() -> Self {
-        let rodio_handle = AsyncRodio::new();
-        Self { rodio_handle }
+    pub fn new() -> anyhow::Result<Self> {
+        let rodio_handle = AsyncRodio::new()?;
+        Ok(Self { rodio_handle })
     }
-    #[must_use]
     pub fn autoplay_song(
         &self,
         song: Box<dyn Source<Item = f32> + Send + 'static>,
@@ -22,7 +20,6 @@ impl Player {
     ) -> impl Stream<Item = async_rodio_sink::AutoplayUpdate<ListSongID>> + 'static {
         self.rodio_handle.autoplay_song(song, song_id)
     }
-    #[must_use]
     pub fn play_song(
         &self,
         song: Box<dyn Source<Item = f32> + Send + 'static>,
@@ -30,7 +27,6 @@ impl Player {
     ) -> impl Stream<Item = async_rodio_sink::PlayUpdate<ListSongID>> + 'static {
         self.rodio_handle.play_song(song, song_id)
     }
-    #[must_use]
     pub async fn seek(
         &self,
         duration: Duration,

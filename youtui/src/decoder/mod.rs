@@ -4,23 +4,17 @@ use std::time::Duration;
 use rodio::{ChannelCount, SampleRate, Source};
 use std::num::NonZero;
 use symphonia::core::audio::{Layout, SampleBuffer, SignalSpec};
-use symphonia::core::codecs::{
-    CodecRegistry, CODEC_TYPE_NULL,
-    Decoder, DecoderOptions,
-};
+use symphonia::core::codecs::{CODEC_TYPE_NULL, CodecRegistry, Decoder, DecoderOptions};
 use symphonia::core::errors::Error;
-use symphonia::core::formats::{
-    FormatOptions, FormatReader, SeekMode, SeekTo, Track,
-};
+use symphonia::core::formats::{FormatOptions, FormatReader, SeekMode, SeekTo, Track};
 use symphonia::core::io::MediaSourceStream;
 use symphonia::core::meta::MetadataOptions;
 use symphonia::core::probe::Hint;
 use symphonia::core::units::Time;
-use tracing::{debug, info};
+use tracing::{debug, error};
 
 const DEFAULT_CHANNELS: NonZero<u16> = NonZero::<u16>::new(2).unwrap();
 const DEFAULT_SAMPLE_RATE: NonZero<u32> = NonZero::<u32>::new(44100).unwrap();
-
 
 pub mod read_seek_source;
 
@@ -56,15 +50,18 @@ pub struct SymphoniaDecoder {
 
 impl SymphoniaDecoder {
     pub fn new(mss: MediaSourceStream) -> Result<Self, SymphoniaError> {
-        let probe_result = symphonia::default::get_probe().format(
-            &Hint::default(),
-            mss,
-            &FormatOptions::default(),
-            &MetadataOptions::default(),
-        ).map_err(SymphoniaError::from)?;
+        let probe_result = symphonia::default::get_probe()
+            .format(
+                &Hint::default(),
+                mss,
+                &FormatOptions::default(),
+                &MetadataOptions::default(),
+            )
+            .map_err(SymphoniaError::from)?;
         let probed = SendFormatReader(probe_result.format);
 
-        let track = probed.0
+        let track = probed
+            .0
             .default_track()
             .and_then(|v| if is_codec_null(v) { None } else { Some(v) })
             .or_else(|| probed.0.tracks().iter().find(|v| !is_codec_null(v)))
@@ -72,18 +69,17 @@ impl SymphoniaDecoder {
 
         let codec_params = &track.codec_params;
 
-        let decoder = SendDecoder(CODEC_REGISTRY.make(
-            codec_params,
-            &DecoderOptions::default(),
-        )?);
+        let decoder = SendDecoder(CODEC_REGISTRY.make(codec_params, &DecoderOptions::default())?);
 
         let cp_dec = decoder.0.codec_params();
 
         let duration = codec_params.n_frames.and_then(|n_frames| {
-            codec_params.time_base.map(|tb: symphonia::core::units::TimeBase| {
-                let time: Time = tb.calc_time(n_frames);
-                Duration::new(time.seconds, (1_000_000_000.0 * time.frac) as u32)
-            })
+            codec_params
+                .time_base
+                .map(|tb: symphonia::core::units::TimeBase| {
+                    let time: Time = tb.calc_time(n_frames);
+                    Duration::new(time.seconds, (1_000_000_000.0 * time.frac) as u32)
+                })
         });
 
         let track_id = track.id;
@@ -95,7 +91,7 @@ impl SymphoniaDecoder {
 
         let buffer = SampleBuffer::new(0u64, spec);
 
-        info!(
+        debug!(
             codec_sample_rate = codec_params.sample_rate,
             decoder_sample_rate = spec.rate,
             decoder_channels = spec.channels.count(),
@@ -103,7 +99,7 @@ impl SymphoniaDecoder {
             "SymphoniaDecoder created"
         );
         // Log detailed codec tracking info for isomp4 debugging
-        tracing::info!(
+        debug!(
             n_frames = codec_params.n_frames.map(|f| f as i64),
             time_base_num = codec_params.time_base.map(|t| t.numer as i64),
             time_base_den = codec_params.time_base.map(|t| t.denom as i64),
@@ -124,14 +120,14 @@ impl SymphoniaDecoder {
     }
 
     pub fn try_seek_to(&mut self, pos: Duration) -> Result<(), SymphoniaError> {
-        let time = Time::new(
-            pos.as_secs(),
-            pos.subsec_nanos() as f64 / 1_000_000_000.0,
-        );
-        match self.probed.0.seek(SeekMode::Coarse, SeekTo::Time {
-            time,
-            track_id: Some(self.track_id),
-        }) {
+        let time = Time::new(pos.as_secs(), pos.subsec_nanos() as f64 / 1_000_000_000.0);
+        match self.probed.0.seek(
+            SeekMode::Coarse,
+            SeekTo::Time {
+                time,
+                track_id: Some(self.track_id),
+            },
+        ) {
             Ok(_) => {
                 self.current_frame_offset = 0;
                 self.buffer.clear();
@@ -156,7 +152,12 @@ impl Iterator for SymphoniaDecoder {
                 let packet = match self.probed.0.next_packet() {
                     Ok(packet) => packet,
                     Err(err) => {
-                        tracing::debug!("Error reading packet: {err:?}");
+                        if matches!(&err, symphonia::core::errors::Error::IoError(e) if e.kind() == std::io::ErrorKind::UnexpectedEof)
+                        {
+                            debug!("SymphoniaDecoder: stream ended (EOF)");
+                        } else {
+                            debug!("Error reading packet: {err:?}");
+                        }
                         self.eos = true;
                         return None;
                     }
@@ -168,13 +169,12 @@ impl Iterator for SymphoniaDecoder {
 
                 match self.decoder.0.decode(&packet) {
                     Ok(audio_buf) => {
-                            if audio_buf.frames() == 0 {
-                                continue;
-                            }
-                            self.spec = *audio_buf.spec();
-                            let num_frames = audio_buf.frames();
-                        self.buffer =
-                            SampleBuffer::new(num_frames as u64, self.spec);
+                        if audio_buf.frames() == 0 {
+                            continue;
+                        }
+                        self.spec = *audio_buf.spec();
+                        let num_frames = audio_buf.frames();
+                        self.buffer = SampleBuffer::new(num_frames as u64, self.spec);
                         self.buffer.copy_interleaved_ref(audio_buf);
                         self.current_frame_offset = 0;
                         break;
@@ -183,7 +183,7 @@ impl Iterator for SymphoniaDecoder {
                         continue;
                     }
                     Err(err) => {
-                        tracing::error!("Fatal decode error: {err:?}");
+                        error!("Fatal decode error: {err:?}");
                         self.eos = true;
                         return None;
                     }
@@ -222,11 +222,10 @@ impl Source for SymphoniaDecoder {
     }
 
     fn try_seek(&mut self, pos: Duration) -> Result<(), rodio::source::SeekError> {
-        self.try_seek_to(pos).map_err(|_| {
-            rodio::source::SeekError::NotSupported {
+        self.try_seek_to(pos)
+            .map_err(|_| rodio::source::SeekError::NotSupported {
                 underlying_source: "",
-            }
-        })
+            })
     }
 }
 
@@ -309,7 +308,10 @@ mod tests {
 
     #[test]
     fn error_into_trait_from_io_error() {
-        let io_err = Error::IoError(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "eof"));
+        let io_err = Error::IoError(std::io::Error::new(
+            std::io::ErrorKind::UnexpectedEof,
+            "eof",
+        ));
         let se: SymphoniaError = io_err.into();
         assert!(matches!(se, SymphoniaError::IoError(_)));
     }

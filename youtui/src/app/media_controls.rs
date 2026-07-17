@@ -163,7 +163,9 @@ impl MediaControlsVolume {
 }
 
 impl MediaController {
-    pub fn new(notifications_enabled: bool) -> anyhow::Result<(Self, impl Stream<Item = MediaControlEvent>)> {
+    pub fn new(
+        notifications_enabled: bool,
+    ) -> anyhow::Result<(Self, impl Stream<Item = MediaControlEvent>)> {
         let (tx, rx) = mpsc::channel(super::EVENT_CHANNEL_SIZE);
 
         // On windows, a hwnd window handle is required, so we create a non-visible
@@ -426,8 +428,7 @@ mod tests {
         // First call may fail if no daemon; if it succeeds, last_notification is set
         let result = rt.block_on(nc.notify_track_change("Song A", Some("Artist A"), None));
         if result.is_ok() {
-            let second = rt
-                .block_on(nc.notify_track_change("Song A", Some("Artist A"), None));
+            let second = rt.block_on(nc.notify_track_change("Song A", Some("Artist A"), None));
             assert!(second.is_ok(), "dedup should return Ok for duplicate");
         }
     }

@@ -15,7 +15,10 @@ const QUEUE_DIR: &str = "queues";
 const AUTO_SAVE: &str = "__autosave";
 
 fn get_largest_thumbnail_url(thumbs: &[Thumbnail]) -> Option<String> {
-    thumbs.iter().max_by_key(|t| t.height * t.width).map(|t| t.url.clone())
+    thumbs
+        .iter()
+        .max_by_key(|t| t.height * t.width)
+        .map(|t| t.url.clone())
 }
 
 impl From<&ListSong> for CompactSongRef {
@@ -102,10 +105,13 @@ pub fn save_queue(playlist: &Playlist, name: &str) -> Result<(), Box<dyn std::er
     Ok(())
 }
 
-pub fn load_queue(playlist: &mut Playlist, name: &str) -> Result<ComponentEffect<Playlist>, Box<dyn std::error::Error>> {
+pub fn load_queue(
+    playlist: &mut Playlist,
+    name: &str,
+) -> Result<ComponentEffect<Playlist>, Box<dyn std::error::Error>> {
     let path = get_queue_dir()?.join(format!("{}.json", name));
     debug!("Loading queue from path: {:?}", path);
-    
+
     let json = fs::read_to_string(&path)?;
     debug!("Read JSON: {}", json);
 
@@ -113,7 +119,10 @@ pub fn load_queue(playlist: &mut Playlist, name: &str) -> Result<ComponentEffect
         debug!("Parsed as CompactSavedQueue ({} songs)", saved.songs.len());
         load_compact_queue(playlist, saved)
     } else if let Ok(saved) = serde_json::from_str::<LegacySong>(&json) {
-        debug!("Parsed as LegacySong format ({} songs), will normalize", saved.songs.len());
+        debug!(
+            "Parsed as LegacySong format ({} songs), will normalize",
+            saved.songs.len()
+        );
         normalize_and_load(playlist, saved, name)
     } else {
         warn!("Queue file corrupted, starting fresh");
@@ -121,14 +130,18 @@ pub fn load_queue(playlist: &mut Playlist, name: &str) -> Result<ComponentEffect
     }
 }
 
-fn load_compact_queue(playlist: &mut Playlist, saved: CompactSavedQueue) -> Result<ComponentEffect<Playlist>, Box<dyn std::error::Error>> {
+fn load_compact_queue(
+    playlist: &mut Playlist,
+    saved: CompactSavedQueue,
+) -> Result<ComponentEffect<Playlist>, Box<dyn std::error::Error>> {
     debug!("Loaded compact queue with {} songs", saved.songs.len());
     debug!("Clearing playlist (reset)");
     let mut effect = playlist.reset();
-    
+
     if !saved.songs.is_empty() {
         playlist.set_loaded_from_autosave(true);
-        let songs: Vec<ListSong> = saved.songs
+        let songs: Vec<ListSong> = saved
+            .songs
             .iter()
             .map(|ref_| {
                 ListSong::create_with_metadata(
@@ -141,7 +154,7 @@ fn load_compact_queue(playlist: &mut Playlist, saved: CompactSavedQueue) -> Resu
                 )
             })
             .collect();
-        
+
         debug!("Created {} songs from compact metadata", songs.len());
         let (first_id, push_effect) = playlist.push_song_list(songs);
         effect = effect.push(push_effect);
@@ -152,7 +165,7 @@ fn load_compact_queue(playlist: &mut Playlist, saved: CompactSavedQueue) -> Resu
             playlist.enable_shuffle(saved.shuffle_seed);
             debug!("Restored shuffle (seed={})", saved.shuffle_seed);
         }
-        
+
         if let Some(idx) = saved.current_index {
             if let Some(song_id) = playlist.get_id_from_index(idx) {
                 effect = effect.push(playlist.play_song(song_id, PlayMode::UserInitiated));
@@ -169,7 +182,11 @@ fn load_compact_queue(playlist: &mut Playlist, saved: CompactSavedQueue) -> Resu
     Ok(effect)
 }
 
-fn normalize_and_load(playlist: &mut Playlist, saved: LegacySong, name: &str) -> Result<ComponentEffect<Playlist>, Box<dyn std::error::Error>> {
+fn normalize_and_load(
+    playlist: &mut Playlist,
+    saved: LegacySong,
+    name: &str,
+) -> Result<ComponentEffect<Playlist>, Box<dyn std::error::Error>> {
     debug!("Normalizing queue file to compact format");
     let songs: Vec<CompactSongRef> = saved.songs.iter().map(CompactSongRef::from).collect();
     let current_idx = saved.current_index;
@@ -199,7 +216,9 @@ pub fn auto_save(playlist: &Playlist) -> Result<(), Box<dyn std::error::Error>> 
     save_queue(playlist, AUTO_SAVE)
 }
 
-pub fn auto_load(playlist: &mut Playlist) -> Result<ComponentEffect<Playlist>, Box<dyn std::error::Error>> {
+pub fn auto_load(
+    playlist: &mut Playlist,
+) -> Result<ComponentEffect<Playlist>, Box<dyn std::error::Error>> {
     debug!("Auto-loading queue from __autosave.json");
     match load_queue(playlist, AUTO_SAVE) {
         Ok(effect) => {
@@ -250,7 +269,7 @@ mod tests {
             "duration_string": "5:00",
             "thumbnail_url": null
         }"#;
-        
+
         let song_ref: CompactSongRef = serde_json::from_str(json).unwrap();
         assert_eq!(song_ref.video_id.get_raw(), "test123");
         assert_eq!(song_ref.title, "Loaded Song");
@@ -271,17 +290,24 @@ mod tests {
             duration_string: "3:33".to_string(),
             thumbnail_url: Some("https://example.com/img.jpg".to_string()),
         };
-        
+
         let json = serde_json::to_string(&song_ref).unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
-        
+
         // Verify structure has only compact fields
         let keys: Vec<_> = parsed.as_object().unwrap().keys().collect();
-        let expected_keys = vec!["video_id", "title", "artists", "album", "duration_string", "thumbnail_url"];
+        let expected_keys = vec![
+            "video_id",
+            "title",
+            "artists",
+            "album",
+            "duration_string",
+            "thumbnail_url",
+        ];
         for key in expected_keys {
             assert!(keys.iter().any(|k| *k == key));
         }
-        
+
         // Verify no heavy fields
         let excluded_keys = vec!["thumbnails", "artists_string"];
         for key in excluded_keys {
@@ -294,12 +320,16 @@ mod tests {
         let song_ref = CompactSongRef {
             video_id: VideoID::from_raw("multi"),
             title: "Multi Artist Song".to_string(),
-            artists: vec!["First".to_string(), "Second".to_string(), "Third".to_string()],
+            artists: vec![
+                "First".to_string(),
+                "Second".to_string(),
+                "Third".to_string(),
+            ],
             album: None,
             duration_string: "4:00".to_string(),
             thumbnail_url: None,
         };
-        
+
         let json = serde_json::to_string(&song_ref).unwrap();
         // Artists should be a JSON array
         assert!(json.contains(r#""artists":["First","Second","Third"]"#));
@@ -342,10 +372,14 @@ mod tests {
         assert_eq!(songs[1].video_id.get_raw(), "v2");
         assert_eq!(songs[1].title, "Track Two");
         assert_eq!(songs[1].artists.len(), 2);
-        assert!(playlist.get_cur_playing_index().is_some(),
-            "current_index=1 should set a playing song");
-        assert!(!effect.is_no_op(),
-            "load with songs should produce a real effect");
+        assert!(
+            playlist.get_cur_playing_index().is_some(),
+            "current_index=1 should set a playing song"
+        );
+        assert!(
+            !effect.is_no_op(),
+            "load with songs should produce a real effect"
+        );
     }
 
     #[test]
@@ -360,8 +394,7 @@ mod tests {
         let effect = load_compact_queue(&mut playlist, saved).unwrap();
         assert_eq!(playlist.list.get_list_iter().count(), 0);
         assert!(playlist.get_cur_playing_index().is_none());
-        assert!(effect.is_no_op(),
-            "empty load should produce no-op");
+        assert!(effect.is_no_op(), "empty load should produce no-op");
     }
 
     #[test]
@@ -372,12 +405,20 @@ mod tests {
         // save + load with songs
         let songs = vec![
             ListSong::create_with_metadata(
-                VideoID::from_raw("a1"), "Alpha".to_string(), vec!["Art A".to_string()],
-                Some("Alb A".to_string()), "2:00".to_string(), None,
+                VideoID::from_raw("a1"),
+                "Alpha".to_string(),
+                vec!["Art A".to_string()],
+                Some("Alb A".to_string()),
+                "2:00".to_string(),
+                None,
             ),
             ListSong::create_with_metadata(
-                VideoID::from_raw("b2"), "Beta".to_string(), vec!["Art B".to_string()],
-                None, "3:15".to_string(), Some("https://ex.co/t.jpg".to_string()),
+                VideoID::from_raw("b2"),
+                "Beta".to_string(),
+                vec!["Art B".to_string()],
+                None,
+                "3:15".to_string(),
+                Some("https://ex.co/t.jpg".to_string()),
             ),
         ];
         let (mut playlist, _effect) = Playlist::new(Percentage(50), AudioQuality::Low);
@@ -397,8 +438,12 @@ mod tests {
         // autosave + autoload
         let (mut p2, _) = Playlist::new(Percentage(50), AudioQuality::Low);
         let xsongs = vec![ListSong::create_with_metadata(
-            VideoID::from_raw("x"), "X".to_string(), vec!["Y".to_string()],
-            None, "1:00".to_string(), None,
+            VideoID::from_raw("x"),
+            "X".to_string(),
+            vec!["Y".to_string()],
+            None,
+            "1:00".to_string(),
+            None,
         )];
         let (_first_id2, _) = p2.push_song_list(xsongs);
         auto_save(&p2).unwrap();
@@ -407,7 +452,16 @@ mod tests {
         let (mut loaded2, _) = Playlist::new(Percentage(50), AudioQuality::Low);
         let _ = auto_load(&mut loaded2).unwrap();
         assert_eq!(loaded2.list.get_list_iter().count(), 1);
-        assert_eq!(loaded2.list.get_list_iter().next().unwrap().video_id.get_raw(), "x");
+        assert_eq!(
+            loaded2
+                .list
+                .get_list_iter()
+                .next()
+                .unwrap()
+                .video_id
+                .get_raw(),
+            "x"
+        );
 
         // load nonexistent file errors
         let (mut p3, _) = Playlist::new(Percentage(50), AudioQuality::Low);

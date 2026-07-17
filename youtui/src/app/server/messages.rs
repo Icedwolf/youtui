@@ -1,11 +1,12 @@
-use super::api::{GetArtistSongsProgressUpdate, GetPlaylistSongsProgressUpdate, resolve_to_audio_track};
 use super::ArcServer;
+use super::api::{
+    GetArtistSongsProgressUpdate, GetPlaylistSongsProgressUpdate, resolve_to_audio_track,
+};
 use super::song_downloader;
-use tracing::info;
 use crate::app::structures::ListSongID;
 use crate::async_rodio_sink::{
-    AllStopped, AutoplayUpdate, PausePlayResponse, Paused, PlayUpdate, ProgressUpdate,
-    Resumed, SeekDirection, Stopped, VolumeUpdate,
+    AllStopped, AutoplayUpdate, PausePlayResponse, Paused, PlayUpdate, ProgressUpdate, Resumed,
+    SeekDirection, Stopped, VolumeUpdate,
 };
 use anyhow::{Error, Result};
 use async_callback_manager::{BackendStreamingTask, BackendTask};
@@ -13,6 +14,7 @@ use futures::{Future, Stream};
 use rodio::Source;
 use std::time::Duration;
 use tokio_stream::wrappers::ReceiverStream;
+use tracing::debug;
 
 use ytmapi_rs::common::{ArtistChannelID, PlaylistID, SearchSuggestion, VideoID, YoutubeID};
 use ytmapi_rs::parse::{SearchResultArtist, SearchResultPlaylist, SearchResultSong};
@@ -72,7 +74,11 @@ pub struct GetPlaylistSongs {
 }
 
 #[derive(Debug)]
-pub struct DownloadSong(pub VideoID<'static>, pub ListSongID);
+pub struct DownloadSong(
+    pub VideoID<'static>,
+    pub ListSongID,
+    pub tokio_util::sync::CancellationToken,
+);
 
 impl PartialEq for DownloadSong {
     fn eq(&self, other: &Self) -> bool {
@@ -146,7 +152,9 @@ pub struct AutoplaySong {
 }
 impl std::fmt::Debug for AutoplaySong {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("AutoplaySong").field("id", &self.id).finish()
+        f.debug_struct("AutoplaySong")
+            .field("id", &self.id)
+            .finish()
     }
 }
 impl BackendTask<ArcServer> for SearchArtists {
@@ -171,6 +179,10 @@ impl BackendTask<ArcServer> for SearchSongs {
         async move {
             let mut results = backend.api.search_songs(self.0).await?;
 
+            if results.is_empty() {
+                return Ok(results);
+            }
+
             // Pre-resolve stream URLs + resolve non-Atv to Atv for top 5.
             // #1 result resolves URL synchronously so URL_CACHE is populated
             // before the user can select it. Others are background tasks.
@@ -179,17 +191,19 @@ impl BackendTask<ArcServer> for SearchSongs {
             let mut atv_replaced: Vec<(usize, VideoID<'static>)> = Vec::new();
             for (idx, song) in results.iter().enumerate().take(top_count) {
                 // Resolve non-Atv to Atv first (may change video_id).
-                if !song.is_audio_track() {
-                    if let Ok(concurrent_api) = backend.api.get_api().await {
-                        let new_id = resolve_to_audio_track(
-                            &concurrent_api,
-                            &song.title,
-                            &song.artist,
-                            song.video_id.get_raw(),
-                        ).await.unwrap_or_else(|| song.video_id.clone());
-                        if new_id.get_raw() != song.video_id.get_raw() {
-                            atv_replaced.push((idx, new_id));
-                        }
+                if !song.is_audio_track()
+                    && let Ok(concurrent_api) = backend.api.get_api().await
+                {
+                    let new_id = resolve_to_audio_track(
+                        &concurrent_api,
+                        &song.title,
+                        &song.artist,
+                        song.video_id.get_raw(),
+                    )
+                    .await
+                    .unwrap_or_else(|| song.video_id.clone());
+                    if new_id.get_raw() != song.video_id.get_raw() {
+                        atv_replaced.push((idx, new_id));
                     }
                 }
             }
@@ -200,18 +214,17 @@ impl BackendTask<ArcServer> for SearchSongs {
             }
             let vid0 = results[0].video_id.get_raw().to_string();
             let yt0 = yt_dlp.clone();
-            let _0_r = song_downloader::resolve_url(&vid0, &yt0, backend.po_token.as_deref()).await;
-            info!(video_id = %vid0, resolved = _0_r, "Synchronous URL pre-resolve for top result");
+            let _0_r = song_downloader::resolve_url(&vid0, &yt0, backend.po_token.as_deref(), None).await;
+            debug!(video_id = %vid0, resolved = _0_r, "Synchronous URL pre-resolve for top result");
             for result in results.iter().skip(1).take(top_count.saturating_sub(1)) {
                 let vid = result.video_id.get_raw().to_string();
                 let yt = yt_dlp.clone();
                 let pt = backend.po_token.clone();
                 // fire-and-forget: best-effort URL cache warming for non-top results
                 tokio::spawn(async move {
-                    song_downloader::resolve_url(&vid, &yt, pt.as_deref()).await;
+                    song_downloader::resolve_url(&vid, &yt, pt.as_deref(), None).await;
                 });
             }
-
 
             Ok(results)
         }
@@ -238,12 +251,8 @@ impl BackendTask<ArcServer> for ResolveSongToAudio {
         let backend = backend.clone();
         async move {
             if let Ok(api) = backend.api.get_api().await {
-                resolve_to_audio_track(
-                    &api,
-                    &self.title,
-                    &self.artist,
-                    self.video_id.get_raw(),
-                ).await
+                resolve_to_audio_track(&api, &self.title, &self.artist, self.video_id.get_raw())
+                    .await
             } else {
                 None
             }
@@ -295,7 +304,7 @@ impl BackendStreamingTask<ArcServer> for DownloadSong {
         backend: &ArcServer,
     ) -> impl futures::Stream<Item = Self::Output> + Send + Unpin + 'static {
         let backend = backend.clone();
-        let (tx, rx) = tokio::sync::mpsc::channel(1);
+        let (tx, rx) = tokio::sync::mpsc::channel(3);
         // fire-and-forget: result sent via tx channel; panics surface as rx channel close
         tokio::spawn(async move {
             tx.try_send(DownloadProgressUpdate::Downloading).ok();
@@ -305,13 +314,24 @@ impl BackendStreamingTask<ArcServer> for DownloadSong {
                 backend.po_token.as_deref(),
                 None,
                 None,
-            ).await;
+                self.2,
+            )
+            .await;
             match result {
                 Ok(decoder) => {
-                    tx.send(DownloadProgressUpdate::Completed(Box::new(decoder))).await.ok();
+                    if let Err(e) = tx
+                        .send(DownloadProgressUpdate::Completed(Box::new(decoder)))
+                        .await
+                    {
+                        debug!("Failed to send download completion: {e}");
+                    }
                 }
                 Err(e) => {
-                    tx.send(DownloadProgressUpdate::Error(e.to_string())).await.ok();
+                    if let Err(send_err) =
+                        tx.send(DownloadProgressUpdate::Error(e.to_string())).await
+                    {
+                        debug!("Failed to send download error: {send_err}");
+                    }
                 }
             }
         });
@@ -500,10 +520,7 @@ mod tests {
     use ytmapi_rs::common::YoutubeID;
 
     fn make_download_song() -> DownloadSong {
-        DownloadSong(
-            VideoID::from_raw("test"),
-            ListSongID(1),
-        )
+        DownloadSong(VideoID::from_raw("test"), ListSongID(1), tokio_util::sync::CancellationToken::new())
     }
 
     #[test]
@@ -542,10 +559,7 @@ mod tests {
     #[test]
     fn download_song_partial_eq_differs_on_video_id() {
         let a = make_download_song();
-        let b = DownloadSong(
-            VideoID::from_raw("other"),
-            ListSongID(1),
-        );
+        let b = DownloadSong(VideoID::from_raw("other"), ListSongID(1), tokio_util::sync::CancellationToken::new());
         assert_ne!(a, b);
     }
 }

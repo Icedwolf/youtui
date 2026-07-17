@@ -8,7 +8,7 @@ use crate::async_rodio_sink::{
 };
 use async_callback_manager::{AsyncTask, FrontendEffect};
 use std::fmt::Debug;
-use tracing::info;
+use tracing::debug;
 use ytmapi_rs::common::{VideoID, YoutubeID};
 
 #[derive(Debug, PartialEq)]
@@ -66,9 +66,7 @@ impl_youtui_task_handler!(
     HandlePlayUpdateOk,
     PlayUpdate<ListSongID>,
     Playlist,
-    |_, input: PlayUpdate<ListSongID>| {
-        PlaylistEffect::HandleAutoplayUpdate(input.into())
-    }
+    |_, input: PlayUpdate<ListSongID>| { PlaylistEffect::HandleAutoplayUpdate(input.into()) }
 );
 impl_youtui_task_handler!(
     HandleAutoplayUpdateOk,
@@ -140,17 +138,16 @@ impl FrontendEffect<Playlist, ArcServer, TaskMetadata> for PlaylistEffect {
                 return target.handle_song_download_progress_update(update, id);
             }
             PlaylistEffect::HandleResolveAudioResult(resolved, id) => {
-                if let Some(new_video_id) = resolved {
-                    if let Some(idx) = target.get_index_from_id(id) {
-                        if let Some(song) = target.list.get_list_iter_mut().nth(idx) {
-                            info!(
-                                old = song.video_id.get_raw(),
-                                new = new_video_id.get_raw(),
-                                "Resolved queue song to Atv version"
-                            );
-                            song.video_id = new_video_id;
-                        }
-                    }
+                if let Some(new_video_id) = resolved
+                    && let Some(idx) = target.get_index_from_id(id)
+                    && let Some(song) = target.list.get_list_iter_mut().nth(idx)
+                {
+                    debug!(
+                        old = song.video_id.get_raw(),
+                        new = new_video_id.get_raw(),
+                        "Resolved queue song to Atv version"
+                    );
+                    song.video_id = new_video_id;
                 }
                 target.resolve_remaining = target.resolve_remaining.saturating_sub(1);
                 if target.resolve_remaining == 0 {

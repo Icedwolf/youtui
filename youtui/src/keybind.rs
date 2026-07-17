@@ -5,12 +5,7 @@ use std::char::ParseCharError;
 use std::fmt::Display;
 use std::str::FromStr;
 
-// Since KeyCode and KeyModifiers derive PartialOrd, it's safe to implement Ord
-// as I have done below.
-//
-// Upstream PR that would allow derive(Ord): https://github.com/crossterm-rs/crossterm/pull/951
-#[allow(clippy::derive_ord_xor_partial_ord)]
-#[derive(Hash, Eq, PartialEq, PartialOrd, Debug, Deserialize, Clone, Serialize)]
+#[derive(Hash, Eq, PartialEq, Debug, Deserialize, Clone, Serialize)]
 #[serde(try_from = "String")]
 /// A keybind - particularly, a KeyCode that may have 0 to many KeyModifiers.
 pub struct Keybind {
@@ -30,7 +25,20 @@ impl Keybind {
 }
 impl Ord for Keybind {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.partial_cmp(other).expect("Keybind should be able to provide ordering for any values. Has crossterm made a breaking change?")
+        self.code
+            .partial_cmp(&other.code)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| {
+                self.modifiers
+                    .partial_cmp(&other.modifiers)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+    }
+}
+
+impl PartialOrd for Keybind {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
     }
 }
 impl TryFrom<String> for Keybind {

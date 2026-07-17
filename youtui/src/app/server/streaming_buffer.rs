@@ -1,3 +1,4 @@
+use crate::core::PoisonRecovery;
 use std::io::{Read, Seek, SeekFrom};
 use std::sync::{Arc, Condvar, Mutex, RwLock};
 
@@ -7,29 +8,51 @@ struct SharedBufferMeta {
     total_len: Option<u64>,
 }
 
+enum BufferState {
+    Partial(Vec<u8>),
+    Complete(Arc<[u8]>),
+}
+
+/// Single-RwLock state avoids the TOCTOU race where a reader sees the empty
+/// Vec from a concurrent `finalize` before the Complete Arc is stored.
+/// The state atomically transitions from Partial(Vec) → Complete(Arc) within
+/// one write-lock acquisition — no reader can observe the inconsistent
+/// intermediate state.
 pub struct SharedBuffer {
     meta: Mutex<SharedBufferMeta>,
-    data: RwLock<Vec<u8>>,
+    state: RwLock<BufferState>,
     cvar: Condvar,
 }
 
 impl SharedBuffer {
     #[must_use]
     pub fn new() -> Arc<Self> {
+        Self::with_capacity(0)
+    }
+
+    #[must_use]
+    pub fn with_capacity(cap: usize) -> Arc<Self> {
         Arc::new(Self {
             meta: Mutex::new(SharedBufferMeta {
                 finished: false,
                 failed: false,
                 total_len: None,
             }),
-            data: RwLock::new(Vec::new()),
+            state: RwLock::new(BufferState::Partial(Vec::with_capacity(cap))),
             cvar: Condvar::new(),
         })
     }
 
     #[must_use]
     pub fn len(&self) -> usize {
-        self.data.read().unwrap_or_else(|e| e.into_inner()).len()
+        self.available_len()
+    }
+
+    fn available_len(&self) -> usize {
+        match *self.state.read().unwrap_or_warn() {
+            BufferState::Partial(ref v) => v.len(),
+            BufferState::Complete(ref a) => a.len(),
+        }
     }
 
     #[must_use]
@@ -41,32 +64,50 @@ impl SharedBuffer {
     }
 
     pub fn set_total_len(&self, len: u64) {
-        let mut meta = self.meta.lock().unwrap_or_else(|e| e.into_inner());
+        let mut meta = self.meta.lock().unwrap_or_warn();
         meta.total_len = Some(len);
+        if let BufferState::Partial(ref mut v) = *self.state.write().unwrap_or_warn() {
+            v.reserve(len as usize);
+        }
         self.cvar.notify_all();
     }
 
     #[must_use]
     pub fn total_len(&self) -> Option<u64> {
-        self.meta.lock().unwrap_or_else(|e| e.into_inner()).total_len
+        self.meta.lock().unwrap_or_warn().total_len
     }
 
     #[must_use]
-    pub fn data(&self) -> Vec<u8> {
-        self.data.read().unwrap_or_else(|e| e.into_inner()).clone()
+    pub fn finalize(&self) -> Arc<[u8]> {
+        let mut guard = self.state.write().unwrap_or_warn();
+        let old = std::mem::replace(&mut *guard, BufferState::Partial(Vec::new()));
+        match old {
+            BufferState::Complete(arc) => {
+                *guard = BufferState::Complete(arc.clone());
+                arc
+            }
+            BufferState::Partial(vec) => {
+                let arc: Arc<[u8]> = Arc::from(vec);
+                *guard = BufferState::Complete(arc.clone());
+                arc
+            }
+        }
     }
 
     #[must_use]
     pub fn is_failed(&self) -> bool {
-        self.meta.lock().unwrap_or_else(|e| e.into_inner()).failed
+        self.meta.lock().unwrap_or_warn().failed
     }
 
     pub fn fail(&self) {
-        let mut meta = self.meta.lock().unwrap_or_else(|e| e.into_inner());
+        let mut meta = self.meta.lock().unwrap_or_warn();
         meta.failed = true;
         meta.finished = true;
         if meta.total_len.is_none() {
-            meta.total_len = Some(self.data.read().unwrap_or_else(|e| e.into_inner()).len() as u64);
+            let guard = self.state.read().unwrap_or_warn();
+            if let BufferState::Partial(ref v) = *guard {
+                meta.total_len = Some(v.len() as u64);
+            }
         }
         self.cvar.notify_all();
     }
@@ -87,31 +128,44 @@ pub struct SharedBufferWriter {
 
 impl SharedBufferWriter {
     pub fn write(&mut self, data: &[u8]) {
-        self.buffer.data.write().unwrap_or_else(|e| e.into_inner()).extend_from_slice(data);
+        if let BufferState::Partial(ref mut v) = *self.buffer.state.write().unwrap_or_warn() {
+            v.extend_from_slice(data);
+        }
         self.buffer.cvar.notify_all();
     }
 
     pub fn finish(&mut self) {
-        let mut meta = self.buffer.meta.lock().unwrap_or_else(|e| e.into_inner());
+        let mut meta = self.buffer.meta.lock().unwrap_or_warn();
         meta.finished = true;
         if meta.total_len.is_none() {
-            meta.total_len = Some(self.buffer.data.read().unwrap_or_else(|e| e.into_inner()).len() as u64);
+            let guard = self.buffer.state.read().unwrap_or_warn();
+            if let BufferState::Partial(ref v) = *guard {
+                meta.total_len = Some(v.len() as u64);
+            }
+        }
+        if let BufferState::Partial(ref mut v) = *self.buffer.state.write().unwrap_or_warn() {
+            v.shrink_to_fit();
         }
         self.finished = true;
         self.buffer.cvar.notify_all();
     }
 
     pub fn fail(&mut self) {
-        let mut meta = self.buffer.meta.lock().unwrap_or_else(|e| e.into_inner());
+        let mut meta = self.buffer.meta.lock().unwrap_or_warn();
         meta.failed = true;
         meta.finished = true;
         if meta.total_len.is_none() {
-            meta.total_len = Some(self.buffer.data.read().unwrap_or_else(|e| e.into_inner()).len() as u64);
+            let guard = self.buffer.state.read().unwrap_or_warn();
+            if let BufferState::Partial(ref v) = *guard {
+                meta.total_len = Some(v.len() as u64);
+            }
+        }
+        if let BufferState::Partial(ref mut v) = *self.buffer.state.write().unwrap_or_warn() {
+            v.shrink_to_fit();
         }
         self.finished = true;
         self.buffer.cvar.notify_all();
     }
-
 }
 
 impl Drop for SharedBufferWriter {
@@ -129,52 +183,60 @@ pub struct SharedBufferReader {
 
 impl Read for SharedBufferReader {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        let mut meta = self.buffer.meta.lock().unwrap_or_else(|e| e.into_inner());
+        let mut meta = self.buffer.meta.lock().unwrap_or_warn();
         loop {
-            let data_len = self.buffer.data.read().unwrap_or_else(|e| e.into_inner()).len();
-            if self.pos < data_len || meta.finished || meta.failed {
+            let avail = self.buffer.available_len();
+            if self.pos < avail || meta.finished || meta.failed {
                 break;
             }
-            meta = self.buffer.cvar.wait(meta).unwrap_or_else(|e| e.into_inner());
+            meta = self.buffer.cvar.wait(meta).unwrap_or_warn();
         }
-        // Clamp position in case the buffer finished while we were waiting
-        // and total_len was slightly overestimated.
-        let data_len = self.buffer.data.read().unwrap_or_else(|e| e.into_inner()).len();
-        if meta.finished && self.pos >= data_len {
-            self.pos = data_len;
+        let avail = self.buffer.available_len();
+        if meta.finished && self.pos >= avail {
+            self.pos = avail;
         }
-        if self.pos >= data_len || meta.failed {
+        if self.pos >= avail {
             return Ok(0);
         }
-        let data = self.buffer.data.read().unwrap_or_else(|e| e.into_inner());
-        let available = data.len() - self.pos;
-        let to_read = buf.len().min(available);
-        buf[..to_read].copy_from_slice(&data[self.pos..self.pos + to_read]);
-        self.pos += to_read;
-        Ok(to_read)
+
+        let guard = self.buffer.state.read().unwrap_or_warn();
+        match *guard {
+            BufferState::Complete(ref arc) => {
+                let to_read = buf.len().min(arc.len() - self.pos);
+                buf[..to_read].copy_from_slice(&arc[self.pos..self.pos + to_read]);
+                self.pos += to_read;
+                Ok(to_read)
+            }
+            BufferState::Partial(ref v) => {
+                let to_read = buf.len().min(v.len() - self.pos);
+                buf[..to_read].copy_from_slice(&v[self.pos..self.pos + to_read]);
+                self.pos += to_read;
+                Ok(to_read)
+            }
+        }
     }
 }
 
 impl Seek for SharedBufferReader {
     fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
-        let mut meta = self.buffer.meta.lock().unwrap_or_else(|e| e.into_inner());
+        let mut meta = self.buffer.meta.lock().unwrap_or_warn();
         let new_pos = match pos {
             SeekFrom::Start(offset) => offset as i64,
             SeekFrom::Current(delta) => self.pos as i64 + delta,
             SeekFrom::End(offset) => {
                 if meta.finished {
-                    self.buffer.data.read().unwrap_or_else(|e| e.into_inner()).len() as i64 + offset
+                    self.buffer.available_len() as i64 + offset
                 } else if let Some(total_len) = meta.total_len {
                     total_len as i64 + offset
                 } else {
                     while !meta.finished && !meta.failed {
-                        meta = self.buffer.cvar.wait(meta).unwrap_or_else(|e| e.into_inner());
+                        meta = self.buffer.cvar.wait(meta).unwrap_or_warn();
                     }
-                    self.buffer.data.read().unwrap_or_else(|e| e.into_inner()).len() as i64 + offset
+                    self.buffer.available_len() as i64 + offset
                 }
             }
         };
-        let data_len = self.buffer.data.read().unwrap_or_else(|e| e.into_inner()).len() as u64;
+        let data_len = self.buffer.available_len() as u64;
         let upper = meta
             .total_len
             .filter(|_| !meta.finished)
@@ -249,7 +311,7 @@ mod tests {
             // Extend the buffer — just write padding to reach the needed size
             // then write the target bytes.
             {
-                let current = w.buffer.data.read().unwrap_or_else(|e| e.into_inner()).len();
+                let current = w.buffer.len();
                 let pad = vec![0u8; needed - current];
                 w.write(&pad);
             }
@@ -295,7 +357,9 @@ mod tests {
         let mut r = buf.reader();
         let mut out = [0u8; 10];
         let n = r.read(&mut out).unwrap();
-        assert_eq!(n, 0, "Read after fail should return 0");
+        assert_eq!(n, 5, "Read after fail should drain remaining data first");
+        let n2 = r.read(&mut out).unwrap();
+        assert_eq!(n2, 0, "Second read after drain should return 0");
     }
 
     #[test]
@@ -335,4 +399,107 @@ mod tests {
         assert_eq!(pos, 300);
     }
 
+    #[test]
+    fn writer_continues_after_handle_dropped() {
+        // Regression: the prefetch mechanism must NOT kill the previous
+        // song's data pipeline.  Dropping a JoinHandle / thread handle
+        // does NOT cancel the underlying work — the writer completes
+        // independently and fills the SharedBuffer.
+        let buf = Arc::new(SharedBuffer::new());
+        let total: u64 = 1_000_000;
+        buf.set_total_len(total);
+
+        // Spawn a writer that fills the buffer from a background thread.
+        let bg_buf = buf.clone();
+        let handle = thread::spawn(move || {
+            let mut w = bg_buf.writer();
+            let data = vec![0xCDu8; total as usize];
+            // Write in chunks to simulate streaming.
+            for chunk in data.chunks(100_000) {
+                w.write(chunk);
+                thread::sleep(Duration::from_millis(1));
+            }
+            w.finish();
+        });
+
+        // Drop the handle immediately — simulating what happens when
+        // store_bg_handle overwrites the previous handle without
+        // cancelling the task.  The writer MUST continue.
+        drop(handle);
+
+        // Reader must be able to read ALL data even after the handle
+        // was dropped (writer is still running independently).
+        let mut r = buf.reader();
+        let mut total_read = 0usize;
+        let mut out = vec![0u8; 4096];
+        loop {
+            let n = r.read(&mut out).unwrap();
+            if n == 0 {
+                break;
+            }
+            total_read += n;
+        }
+        assert_eq!(total_read, total as usize,
+            "Reader must read all data after writer handle is dropped");
+    }
+
+    #[test]
+    fn available_len_sees_complete_after_finalize() {
+        let buf = SharedBuffer::new();
+        let mut w = buf.writer();
+        w.write(b"hello world");
+        w.finish();
+        let arc = buf.finalize();
+        assert_eq!(arc.len(), 11);
+        assert_eq!(buf.len(), 11, "available_len must reflect finalize");
+        // Reader should also see it.
+        let mut r = buf.reader();
+        let mut out = [0u8; 11];
+        let n = r.read(&mut out).unwrap();
+        assert_eq!(n, 11);
+        assert_eq!(&out, b"hello world");
+    }
+
+    #[test]
+    fn reader_never_sees_empty_vec_after_concurrent_finalize() {
+        // Stress test: finalize is racing with reader.  The single-RwLock
+        // approach should make it impossible for the reader to observe the
+        // empty-Vec intermediate state.
+        let buf = Arc::new(SharedBuffer::new());
+        let total: u64 = 1_000_000;
+        buf.set_total_len(total);
+
+        // Fill the buffer completely, then finalize while reading.
+        {
+            let mut w = buf.writer();
+            let data = vec![0xABu8; total as usize];
+            w.write(&data);
+            w.finish();
+        }
+
+        let buf2 = buf.clone();
+        let jh = thread::spawn(move || {
+            let mut r = buf2.reader();
+            let mut out = vec![0u8; 4096];
+            let mut total_read = 0usize;
+            loop {
+                let n = r.read(&mut out).unwrap();
+                if n == 0 {
+                    break;
+                }
+                total_read += n;
+                // All bytes must be 0xAB — if reader ever sees the empty
+                // intermediate state, it would read stale/zero bytes.
+                assert!(out[..n].iter().all(|&b| b == 0xAB),
+                    "reader got corrupted data at offset {total_read}");
+            }
+            assert_eq!(total_read, total as usize);
+        });
+
+        // Finalize while reader is running.
+        let arc = buf.finalize();
+        assert_eq!(arc.len(), total as usize);
+
+        jh.join().unwrap();
+    }
 }

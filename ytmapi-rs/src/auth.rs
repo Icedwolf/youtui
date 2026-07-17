@@ -77,7 +77,7 @@ pub(crate) async fn raw_query_post<'a, A: AuthToken, Q: PostQuery>(
     if let Some(body) = body.as_object_mut() {
         body.append(&mut q.header());
     } else {
-        unreachable!("Body created in this function as an object")
+        unreachable!("Body is a JSON object created by json! macro")
     };
     let QueryResponse { text, .. } = c
         .post_json_query(url, tok.headers()?, &body, &q.params())

@@ -119,7 +119,7 @@ impl<C: CreatePlaylistType> PostQuery for CreatePlaylistQuery<'_, C> {
             "title" : self.title,
             "privacyStatus" : self.privacy_status.to_string(),
         }) else {
-            unreachable!()
+            unreachable!("create playlist header is a JSON object from json! macro")
         };
         if let Some(description) = &self.description {
             // TODO: Process description to ensure it doesn't contain html. Google doesn't

@@ -4,7 +4,6 @@ use anyhow::{Result, bail};
 use error::wrong_auth_token_error_message;
 pub use error::*;
 use futures::{StreamExt, TryStreamExt};
-use reqwest;
 use std::borrow::Borrow;
 use ytmapi_rs::auth::noauth::NoAuthToken;
 use ytmapi_rs::auth::{BrowserToken, OAuthToken};
@@ -71,7 +70,6 @@ impl DynamicYtMusic {
         })
     }
 
-    #[must_use]
     pub fn get_token_hash(&self) -> Result<Option<u64>> {
         Ok(match self {
             DynamicYtMusic::Browser(_) | DynamicYtMusic::NoAuth(_) => None,
@@ -104,7 +102,14 @@ impl DynamicYtMusic {
         O: ParseFromContinuable<Q>,
         Q: PostQuery,
     {
-        Ok(try_all!(self, yt, yt.stream(query.borrow()).take(max_pages).try_collect().await?))
+        Ok(try_all!(
+            self,
+            yt,
+            yt.stream(query.borrow())
+                .take(max_pages)
+                .try_collect()
+                .await?
+        ))
     }
 
     pub async fn stream_browser_or_oauth<Q, O>(
@@ -118,7 +123,15 @@ impl DynamicYtMusic {
         O: ParseFromContinuable<Q>,
         Q: PostQuery,
     {
-        Ok(try_auth!(self, Q, yt, yt.stream(query.borrow()).take(max_pages).try_collect().await?))
+        Ok(try_auth!(
+            self,
+            Q,
+            yt,
+            yt.stream(query.borrow())
+                .take(max_pages)
+                .try_collect()
+                .await?
+        ))
     }
 
     pub async fn query_source<Q, O>(&self, query: impl Borrow<Q>) -> Result<String>
@@ -149,7 +162,14 @@ impl DynamicYtMusic {
         if max_pages == 1 {
             return self.query_source::<Q, O>(query).await;
         }
-        Ok(try_all!(self, yt, yt.raw_json_stream(query.borrow()).take(max_pages).try_collect().await?))
+        Ok(try_all!(
+            self,
+            yt,
+            yt.raw_json_stream(query.borrow())
+                .take(max_pages)
+                .try_collect()
+                .await?
+        ))
     }
 
     pub async fn stream_source_browser_or_oauth<Q, O>(
@@ -167,6 +187,14 @@ impl DynamicYtMusic {
         if max_pages == 1 {
             return self.query_source_browser_or_oauth::<Q, O>(query).await;
         }
-        Ok(try_auth!(self, Q, yt, yt.raw_json_stream(query.borrow()).take(max_pages).try_collect().await?))
+        Ok(try_auth!(
+            self,
+            Q,
+            yt,
+            yt.raw_json_stream(query.borrow())
+                .take(max_pages)
+                .try_collect()
+                .await?
+        ))
     }
 }

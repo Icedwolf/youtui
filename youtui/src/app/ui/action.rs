@@ -4,7 +4,6 @@ use super::browser::artistsearch::search_panel::BrowserArtistsAction;
 use super::browser::artistsearch::songs_panel::BrowserArtistSongsAction;
 use super::browser::shared_components::{BrowserSearchAction, FilterAction, SortAction};
 use super::browser::songsearch::BrowserSongsAction;
-use super::logger::LoggerAction;
 use super::playlist::PlaylistAction;
 use crate::app::component::actionhandler::{Action, ActionHandler, YoutuiEffect};
 use crate::app::ui::browser::playlistsearch::search_panel::BrowserPlaylistsAction;
@@ -31,7 +30,6 @@ pub enum AppAction {
     SeekForward,
     SeekBack,
     ToggleHelp,
-    ViewLogs,
     PlayPause,
     NoOp,
     Browser(BrowserAction),
@@ -44,7 +42,6 @@ pub enum AppAction {
     BrowserArtistSongs(BrowserArtistSongsAction),
     BrowserPlaylistSongs(BrowserPlaylistSongsAction),
     BrowserSongs(BrowserSongsAction),
-    Log(LoggerAction),
     Playlist(PlaylistAction),
     TextEntry(TextEntryAction),
     List(ListAction),
@@ -118,10 +115,8 @@ impl Action for AppAction {
             | AppAction::SeekBack
             | AppAction::ToggleHelp
             | AppAction::Quit
-            | AppAction::ViewLogs
             | AppAction::NoOp
             | AppAction::PlayPause => "Global".into(),
-            AppAction::Log(a) => a.context(),
             AppAction::Playlist(a) => a.context(),
             AppAction::Browser(a) => a.context(),
             AppAction::Filter(a) => a.context(),
@@ -146,11 +141,9 @@ impl Action for AppAction {
             AppAction::VolUp => format!("Vol Up {VOL_TICK}").into(),
             AppAction::VolDown => format!("Vol Down {VOL_TICK}").into(),
             AppAction::ToggleHelp => "Toggle Help".into(),
-            AppAction::ViewLogs => "View Logs".into(),
             AppAction::SeekForward => format!("Seek Forward {}s", SEEK_AMOUNT.as_secs()).into(),
             AppAction::SeekBack => format!("Seek Back {}s", SEEK_AMOUNT.as_secs()).into(),
             AppAction::NoOp => "No Operation".into(),
-            AppAction::Log(a) => a.describe(),
             AppAction::Playlist(a) => a.describe(),
             AppAction::Browser(a) => a.describe(),
             AppAction::Filter(a) => a.describe(),

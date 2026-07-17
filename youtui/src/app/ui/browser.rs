@@ -27,7 +27,9 @@ use tracing::debug;
 pub mod artistsearch;
 mod draw;
 pub mod playlistsearch;
+pub mod search_panel;
 pub mod shared_components;
+pub mod songs_panel;
 pub mod songsearch;
 
 #[derive(Default, Copy, Clone)]
@@ -278,21 +280,34 @@ impl TextHandler for Browser {
         &mut self,
         event: &crossterm::event::Event,
     ) -> Option<ComponentEffect<Self>> {
+        // Let E (change search type) pass through to the keybind router
+        // instead of being typed into the search input.
+        if matches!(
+            event,
+            crossterm::event::Event::Key(crossterm::event::KeyEvent {
+                code: crossterm::event::KeyCode::Char('E'),
+                modifiers: crossterm::event::KeyModifiers::NONE,
+                ..
+            })
+        ) {
+            return None;
+        }
         match self.variant {
             BrowserVariant::Artist => self
                 .artist_search_browser
                 .handle_text_event_impl(event)
-                .map(|effect| {
+                .map(|effect: ComponentEffect<ArtistSearchBrowser>| {
                     effect.map_frontend(|this: &mut Self| &mut this.artist_search_browser)
                 }),
-            BrowserVariant::Song => self
-                .song_search_browser
-                .handle_text_event_impl(event)
-                .map(|effect| effect.map_frontend(|this: &mut Self| &mut this.song_search_browser)),
+            BrowserVariant::Song => self.song_search_browser.handle_text_event_impl(event).map(
+                |effect: ComponentEffect<SongSearchBrowser>| {
+                    effect.map_frontend(|this: &mut Self| &mut this.song_search_browser)
+                },
+            ),
             BrowserVariant::Playlist => self
                 .playlist_search_browser
                 .handle_text_event_impl(event)
-                .map(|effect| {
+                .map(|effect: ComponentEffect<PlaylistSearchBrowser>| {
                     effect.map_frontend(|this: &mut Self| &mut this.playlist_search_browser)
                 }),
         }
@@ -372,16 +387,12 @@ impl DominantKeyRouter<AppAction> for Browser {
                 self.song_search_browser.sort.shown || self.song_search_browser.filter.shown
             }
             BrowserVariant::Artist => {
-                self.artist_search_browser.album_songs_panel.sort.shown
-                    || self.artist_search_browser.album_songs_panel.filter.shown
+                self.artist_search_browser.songs_panel.sort.shown
+                    || self.artist_search_browser.songs_panel.filter.shown
             }
             BrowserVariant::Playlist => {
-                self.playlist_search_browser.playlist_songs_panel.sort.shown
-                    || self
-                        .playlist_search_browser
-                        .playlist_songs_panel
-                        .filter
-                        .shown
+                self.playlist_search_browser.songs_panel.sort.shown
+                    || self.playlist_search_browser.songs_panel.filter.shown
             }
         }
     }
@@ -390,30 +401,24 @@ impl DominantKeyRouter<AppAction> for Browser {
         config: &'a Config,
     ) -> impl Iterator<Item = &'a Keymap<AppAction>> + 'a {
         match self.variant {
-            BrowserVariant::Artist => match self.artist_search_browser.album_songs_panel.route {
-                artistsearch::songs_panel::AlbumSongsInputRouting::List => {
-                    Either::Left(std::iter::empty())
-                }
-                artistsearch::songs_panel::AlbumSongsInputRouting::Sort => {
+            BrowserVariant::Artist => match self.artist_search_browser.songs_panel.route {
+                songs_panel::SongsInputRouting::List => Either::Left(std::iter::empty()),
+                songs_panel::SongsInputRouting::Sort => {
                     Either::Right(std::iter::once(&config.keybinds.sort))
                 }
-                artistsearch::songs_panel::AlbumSongsInputRouting::Filter => {
+                songs_panel::SongsInputRouting::Filter => {
                     Either::Right(std::iter::once(&config.keybinds.filter))
                 }
             },
-            BrowserVariant::Playlist => {
-                match self.playlist_search_browser.playlist_songs_panel.route {
-                    playlistsearch::songs_panel::PlaylistSongsInputRouting::List => {
-                        Either::Left(std::iter::empty())
-                    }
-                    playlistsearch::songs_panel::PlaylistSongsInputRouting::Sort => {
-                        Either::Right(std::iter::once(&config.keybinds.sort))
-                    }
-                    playlistsearch::songs_panel::PlaylistSongsInputRouting::Filter => {
-                        Either::Right(std::iter::once(&config.keybinds.filter))
-                    }
+            BrowserVariant::Playlist => match self.playlist_search_browser.songs_panel.route {
+                songs_panel::SongsInputRouting::List => Either::Left(std::iter::empty()),
+                songs_panel::SongsInputRouting::Sort => {
+                    Either::Right(std::iter::once(&config.keybinds.sort))
                 }
-            }
+                songs_panel::SongsInputRouting::Filter => {
+                    Either::Right(std::iter::once(&config.keybinds.filter))
+                }
+            },
             BrowserVariant::Song => match self.song_search_browser.input_routing {
                 songsearch::InputRouting::List | songsearch::InputRouting::Search => {
                     Either::Left(std::iter::empty())
@@ -433,9 +438,15 @@ impl Browser {
     pub fn new() -> Self {
         Self {
             variant: Default::default(),
-            artist_search_browser: ArtistSearchBrowser::new(),
+            artist_search_browser: ArtistSearchBrowser::new(
+                artistsearch::search_panel::ArtistSearchPanel::new(),
+                artistsearch::songs_panel::AlbumSongsPanel::new(),
+            ),
             song_search_browser: SongSearchBrowser::new(),
-            playlist_search_browser: PlaylistSearchBrowser::new(),
+            playlist_search_browser: PlaylistSearchBrowser::new(
+                playlistsearch::search_panel::PlaylistSearchPanel::new(),
+                playlistsearch::songs_panel::PlaylistSongsPanel::new(),
+            ),
         }
     }
     pub fn left(&mut self) {
@@ -482,6 +493,17 @@ impl Browser {
             BrowserVariant::Playlist => self.variant = BrowserVariant::Artist,
         }
     }
+    pub fn close_search_all(&mut self) {
+        if self.artist_search_browser.search_panel.search_popped {
+            self.artist_search_browser.handle_toggle_search();
+        }
+        if self.song_search_browser.search_popped {
+            self.song_search_browser.handle_toggle_search();
+        }
+        if self.playlist_search_browser.search_panel.search_popped {
+            self.playlist_search_browser.handle_toggle_search();
+        }
+    }
     pub fn go_to_first(&mut self) {
         match self.variant {
             BrowserVariant::Artist => self.artist_search_browser.go_to_first(),
@@ -520,7 +542,7 @@ mod tests {
     async fn toggle_search_opens_popup() {
         let mut b = Browser::new();
         b.apply_action(BrowserArtistSongsAction::Filter);
-        assert!(b.artist_search_browser.album_songs_panel.filter.shown);
+        assert!(b.artist_search_browser.songs_panel.filter.shown);
     }
     #[tokio::test]
     async fn artist_search_panel_search_suggestions_has_correct_keybinds() {
@@ -562,7 +584,7 @@ mod tests {
         b.apply_action(BrowserAction::Right);
         let actual_kb = b.get_active_keybinds(&cfg);
         let expected_kb = (
-            &Keybind::new_unmodified(crossterm::event::KeyCode::F(3)),
+            &Keybind::new_unmodified(crossterm::event::KeyCode::Char('f')),
             &KeyActionTree::new_key_with_visibility(
                 AppAction::BrowserArtistSongs(BrowserArtistSongsAction::Filter),
                 KeyActionVisibility::Global,

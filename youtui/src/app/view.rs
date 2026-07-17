@@ -4,6 +4,7 @@ use crate::widgets::{ScrollingListState, ScrollingTableState};
 use rat_text::text_input::TextInputState;
 use ratatui::Frame;
 use ratatui::prelude::{Constraint, Rect};
+use ratatui::text::Line;
 use ratatui::widgets::ListState;
 use std::borrow::Cow;
 
@@ -32,7 +33,10 @@ pub enum Filter {
 }
 #[derive(Clone, Debug)]
 pub enum FilterString {
-    CaseInsensitive { original: String, lowercased: String },
+    CaseInsensitive {
+        original: String,
+        lowercased: String,
+    },
 }
 
 impl TableFilterCommand {
@@ -50,9 +54,9 @@ impl TableFilterCommand {
     ) -> bool {
         match self {
             TableFilterCommand::All(filter) => match filter {
-                Filter::Contains(filter_string) => filterable_colums
-                    .iter()
-                    .any(|col| filter_string.is_in(row.get_field(fields_in_table[*col]).as_ref())),
+                Filter::Contains(filter_string) => filterable_colums.iter().any(|col| {
+                    filter_string.is_in(row.get_field_lower(fields_in_table[*col]).as_ref())
+                }),
             },
         }
     }
@@ -83,10 +87,9 @@ impl FilterString {
     #[must_use]
     pub fn is_in<S: AsRef<str>>(&self, test_str: S) -> bool {
         match self {
-            FilterString::CaseInsensitive { lowercased, .. } => test_str
-                .as_ref()
-                .to_ascii_lowercase()
-                .contains(lowercased.as_str()),
+            FilterString::CaseInsensitive { lowercased, .. } => {
+                test_str.as_ref().contains(lowercased.as_str())
+            }
         }
     }
 }
@@ -114,9 +117,9 @@ pub fn basic_constraints_to_table_constraints(
         .iter()
         .map(|bc| match bc {
             BasicConstraint::Length(l) => Constraint::Length(*l),
-            BasicConstraint::Percentage(p) => {
-                Constraint::Length(p.0 as u16 * length.saturating_sub(sum_lengths) / 100)
-            }
+            BasicConstraint::Percentage(p) => Constraint::Length(
+                ((p.0 as u32) * (length.saturating_sub(sum_lengths) as u32) / 100) as u16,
+            ),
         })
         .collect()
 }
@@ -171,11 +174,6 @@ pub trait ListView {
         self.get_items().len()
     }
 }
-// A drawable part of the application.
-pub trait Drawable {
-    // Helper function to draw.
-    fn draw_chunk(&self, f: &mut Frame, chunk: Rect, selected: bool);
-}
 // A drawable part of the application that mutates its state on draw.
 pub trait DrawableMut {
     // Helper function to draw.
@@ -188,7 +186,7 @@ pub trait Loadable {
 }
 // A part of the application that has a title
 pub trait HasTitle {
-    fn get_title(&self) -> Cow<'_, str>;
+    fn get_title(&self) -> Line<'static>;
 }
 // A part of the application that has a tabbed interface.
 pub trait HasTabs {
@@ -217,7 +215,11 @@ mod tests {
 
     #[test]
     fn single_percentage_full() {
-        let result = basic_constraints_to_table_constraints(&[BasicConstraint::Percentage(Percentage(100))], 80, 0);
+        let result = basic_constraints_to_table_constraints(
+            &[BasicConstraint::Percentage(Percentage(100))],
+            80,
+            0,
+        );
         assert_eq!(result, vec![Constraint::Length(80)]);
     }
 
@@ -225,7 +227,8 @@ mod tests {
     fn all_lengths_no_margin() {
         let result = basic_constraints_to_table_constraints(
             &[BasicConstraint::Length(5), BasicConstraint::Length(5)],
-            20, 0,
+            20,
+            0,
         );
         assert_eq!(result, vec![Constraint::Length(5), Constraint::Length(5)]);
     }
@@ -233,8 +236,12 @@ mod tests {
     #[test]
     fn all_percentages() {
         let result = basic_constraints_to_table_constraints(
-            &[BasicConstraint::Percentage(Percentage(30)), BasicConstraint::Percentage(Percentage(70))],
-            100, 0,
+            &[
+                BasicConstraint::Percentage(Percentage(30)),
+                BasicConstraint::Percentage(Percentage(70)),
+            ],
+            100,
+            0,
         );
         assert_eq!(result, vec![Constraint::Length(30), Constraint::Length(70)]);
     }
@@ -242,8 +249,12 @@ mod tests {
     #[test]
     fn mixed_with_margin() {
         let result = basic_constraints_to_table_constraints(
-            &[BasicConstraint::Length(10), BasicConstraint::Percentage(Percentage(50))],
-            50, 2,
+            &[
+                BasicConstraint::Length(10),
+                BasicConstraint::Percentage(Percentage(50)),
+            ],
+            50,
+            2,
         );
         // sum_lengths = 10 + 2 (length) + 0 + 2 (percentage) = 14
         // percentage = 50 * (50 - 14) / 100 = 18
@@ -253,8 +264,12 @@ mod tests {
     #[test]
     fn total_smaller_than_length_sum() {
         let result = basic_constraints_to_table_constraints(
-            &[BasicConstraint::Length(20), BasicConstraint::Percentage(Percentage(50))],
-            10, 0,
+            &[
+                BasicConstraint::Length(20),
+                BasicConstraint::Percentage(Percentage(50)),
+            ],
+            10,
+            0,
         );
         // sum_lengths = 20
         // percentage = 50 * 10.saturating_sub(20) / 100 = 50 * 0 / 100 = 0
@@ -269,7 +284,8 @@ mod tests {
                 BasicConstraint::Percentage(Percentage(25)),
                 BasicConstraint::Percentage(Percentage(25)),
             ],
-            30, 0,
+            30,
+            0,
         );
         // sum_lengths = 5
         // remaining = 30 - 5 = 25
@@ -289,7 +305,8 @@ mod tests {
     fn zero_total_width() {
         let result = basic_constraints_to_table_constraints(
             &[BasicConstraint::Percentage(Percentage(50))],
-            0, 0,
+            0,
+            0,
         );
         assert_eq!(result, vec![Constraint::Length(0)]);
     }
@@ -297,8 +314,12 @@ mod tests {
     #[test]
     fn single_percentage_mixed_with_length() {
         let result = basic_constraints_to_table_constraints(
-            &[BasicConstraint::Length(3), BasicConstraint::Percentage(Percentage(100))],
-            20, 0,
+            &[
+                BasicConstraint::Length(3),
+                BasicConstraint::Percentage(Percentage(100)),
+            ],
+            20,
+            0,
         );
         assert_eq!(result, vec![Constraint::Length(3), Constraint::Length(17)]);
     }

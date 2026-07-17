@@ -1,6 +1,5 @@
 use crate::config::Config;
 pub use messages::*;
-use reqwest;
 use std::sync::Arc;
 use tracing::warn;
 
@@ -23,9 +22,13 @@ pub struct Server {
 }
 
 impl Server {
-    pub fn new(api_key: crate::config::ApiKey, po_token: Option<String>, config: &Config) -> Server {
+    pub fn new(
+        api_key: crate::config::ApiKey,
+        po_token: Option<String>,
+        config: &Config,
+    ) -> anyhow::Result<Server> {
         let downloader_client = {
-            use reqwest::header::{HeaderValue, HeaderMap, COOKIE};
+            use reqwest::header::{COOKIE, HeaderMap, HeaderValue};
             if let Some(cookie) = extract_cookie_header(&api_key) {
                 match HeaderValue::from_str(&cookie) {
                     Ok(cookie_val) => {
@@ -33,33 +36,28 @@ impl Server {
                         headers.insert(COOKIE, cookie_val);
                         new_reqwest_client_builder()
                             .default_headers(headers)
-                            .build()
-                            .expect("Expected reqwest client build to succeed")
+                            .build()?
                     }
                     Err(e) => {
                         warn!("Invalid cookie header, falling back to unauthenticated client: {e}");
-                        new_reqwest_client_builder()
-                            .build()
-                            .expect("Expected reqwest client build to succeed")
+                        new_reqwest_client_builder().build()?
                     }
                 }
             } else {
-                new_reqwest_client_builder()
-                    .build()
-                    .expect("Expected reqwest client build to succeed")
+                new_reqwest_client_builder().build()?
             }
         };
         let api_client = downloader_client.clone();
         let api = api::Api::new(api_key, api_client);
-        let player = player::Player::new();
+        let player = player::Player::new()?;
         let api_error_handler = api_error_handler::ApiErrorHandler::new();
-        Server {
+        Ok(Server {
             api,
             player,
             api_error_handler,
             config: config.clone(),
             po_token,
-        }
+        })
     }
 }
 
@@ -99,7 +97,11 @@ fn extract_cookie_header(api_key: &crate::config::ApiKey) -> Option<String> {
                     }
                 }
             }
-            if cookies.is_empty() { None } else { Some(cookies.join("; ")) }
+            if cookies.is_empty() {
+                None
+            } else {
+                Some(cookies.join("; "))
+            }
         }
         _ => None,
     }
@@ -118,7 +120,9 @@ mod tests {
 
     #[test]
     fn test_extract_cookie_header_comments_only() {
-        let api_key = ApiKey::BrowserToken("# Netscape HTTP Cookie File\n# https://curl.se/docs/http-cookies.html\n".into());
+        let api_key = ApiKey::BrowserToken(
+            "# Netscape HTTP Cookie File\n# https://curl.se/docs/http-cookies.html\n".into(),
+        );
         assert_eq!(extract_cookie_header(&api_key), None);
     }
 
@@ -156,7 +160,8 @@ music.youtube.com\tTRUE\t/\tTRUE\t1735689600\tVISITOR_INFO1_LIVE\txyz789\n";
 
     #[test]
     fn test_extract_cookie_header_cookie_format() {
-        let cookie_file = "Cookie: SAPISID=abc123; __Secure-3PSAPISID=def456; VISITOR_INFO1_LIVE=xyz789";
+        let cookie_file =
+            "Cookie: SAPISID=abc123; __Secure-3PSAPISID=def456; VISITOR_INFO1_LIVE=xyz789";
         let api_key = ApiKey::BrowserToken(cookie_file.into());
         let result = extract_cookie_header(&api_key);
         assert!(result.is_some());

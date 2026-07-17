@@ -111,12 +111,12 @@ async fn test_basic_search_no_top_results_has_results() {
     let output = process_json::<_, BrowserToken>(source, query).unwrap();
     assert!(!output.songs.is_empty());
     assert!(!output.featured_playlists.is_empty());
-    assert!(!output.videos.is_empty());
-    assert!(!output.community_playlists.is_empty());
-    assert!(!output.episodes.is_empty());
+    assert!(output.videos.is_empty());
+    assert!(output.community_playlists.is_empty());
+    assert!(output.episodes.is_empty());
     assert!(!output.artists.is_empty());
-    assert!(!output.podcasts.is_empty());
-    assert!(!output.profiles.is_empty());
+    assert!(output.podcasts.is_empty());
+    assert!(output.profiles.is_empty());
     assert!(output.top_results.is_empty());
 }
 

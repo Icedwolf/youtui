@@ -188,17 +188,6 @@ pub trait DominantKeyRouter<A: Action + 'static> {
     ) -> impl Iterator<Item = &'a Keymap<A>> + 'a;
 }
 
-/// Get the list of all keybinds that the KeyHandler and any child items can
-/// contain, regardless of context.
-#[allow(dead_code)]
-pub fn get_visible_keybinds_as_readable_iter<'a, A: Action + 'static>(
-    keybinds: impl Iterator<Item = &'a Keymap<A>> + 'a,
-) -> impl Iterator<Item = DisplayableKeyAction<'a>> + 'a {
-    keybinds
-        .flat_map(|keymap| keymap.iter())
-        .filter(|(_, kt)| (*kt).get_visibility() != KeyActionVisibility::Hidden)
-        .map(|(kb, kt)| DisplayableKeyAction::from_keybind_and_action_tree(kb, kt))
-}
 /// Get a context-specific list of all keybinds marked global.
 pub fn get_global_keybinds_as_readable_iter<'a, A: Action + 'static>(
     keybinds: impl Iterator<Item = &'a Keymap<A>> + 'a,

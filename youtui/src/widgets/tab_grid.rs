@@ -3,7 +3,7 @@ use ratatui::style::Style;
 use ratatui::text::Line;
 use ratatui::widgets::Widget;
 use std::borrow::Cow;
-use tracing::{debug, warn}; // Use proper logging
+use tracing::debug;
 
 /// Ratatui widgets used in application
 pub struct TabGrid<'a> {
@@ -21,7 +21,7 @@ enum TabGridConstraint {
 }
 
 impl<'a> TabGrid<'a> {
-    #[allow(dead_code)]
+    #[cfg(test)]
     #[must_use]
     pub fn new_with_max_cols(
         titles: impl IntoIterator<Item = impl Into<Cow<'a, str>>>,
@@ -127,7 +127,7 @@ impl<'a> Widget for TabGrid<'a> {
 
         // Check for invalid area
         if area.width < 2 || area.height < 1 {
-            warn!(
+            debug!(
                 "TabGrid: Area too small ({}x{}), skipping render",
                 area.width, area.height
             );

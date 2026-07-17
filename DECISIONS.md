@@ -40,6 +40,8 @@ Critical invariants and rationale. **Read before changing playback/download code
 
 15. **Single Mutex for cache.** `BYTE_CACHE` and `CACHE_ORDER` are merged into `AudioCache` behind one `Mutex` — no deadlock risk from nested lock acquisition.
 
+16. **NEVER implement offline/disk cache.** This is a streaming YouTube Music client, not an offline jukebox. Serializing ~42MB WAV buffers to disk on shutdown and reloading them on restart wastes I/O bandwidth and flash write endurance for zero user-facing benefit (the song will be re-downloaded faster than disk can read 42MB). Every prior session that explored this direction reached the same conclusion. This file exists to prevent re-proposing it. (Rejected: F4)
+
 ## Rendering / UI
 
 16. **Playlist title is cached.** `get_title()` uses `RefCell<Option<String>>`, invalidated on `push_song_list`, `toggle_shuffle`, `toggle_search`, `cycle_audio_quality`. Avoids `format!()` allocation every frame.

@@ -3,26 +3,27 @@ use crate::app::CALLBACK_CHANNEL_SIZE;
 use crate::async_rodio_sink::send_or_error;
 use crate::config::ApiKey;
 use crate::{OAUTH_FILENAME, get_config_dir};
-use anyhow::{Error, Result};
+use anyhow::{Context, Error, Result};
 use async_callback_manager::PanickingReceiverStream;
 use async_cell::sync::AsyncCell;
 use futures::stream::FuturesUnordered;
 use futures::{Stream, StreamExt};
 use reqwest;
 use std::borrow::Borrow;
-use std::collections::hash_map;
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::collections::hash_map;
 use std::sync::Arc;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::RwLock;
 use tracing::{debug, info, trace, warn};
 use ytmapi_rs::auth::{BrowserToken, OAuthToken};
-use ytmapi_rs::common::{AlbumID, ArtistChannelID, PlaylistID, SearchSuggestion, Thumbnail, VideoID, YoutubeID};
+use ytmapi_rs::common::{
+    AlbumID, ArtistChannelID, PlaylistID, SearchSuggestion, Thumbnail, VideoID, YoutubeID,
+};
 use ytmapi_rs::parse::{
-    AlbumSong, GetAlbum, GetArtistAlbums, GetArtistAlbumsAlbum, ParsedSongAlbum,
-    ParsedSongArtist, PlaylistItem, SearchResultArtist, SearchResultPlaylist, SearchResultSong,
-    SearchResults,
+    AlbumSong, GetAlbum, GetArtistAlbums, GetArtistAlbumsAlbum, ParsedSongAlbum, ParsedSongArtist,
+    PlaylistItem, SearchResultArtist, SearchResultPlaylist, SearchResultSong, SearchResults,
 };
 use ytmapi_rs::query::{GetAlbumQuery, GetArtistAlbumsQuery};
 
@@ -70,7 +71,6 @@ impl Api {
     pub async fn search_songs(&self, text: String) -> Result<Vec<SearchResultSong>> {
         search_songs(self.get_api().await?, text).await
     }
-    #[must_use]
     pub fn get_playlist_songs(
         &self,
         playlist_id: PlaylistID<'static>,
@@ -79,7 +79,6 @@ impl Api {
         let api = self.api.clone();
         get_playlist_songs(api, playlist_id, max_results)
     }
-    #[must_use]
     pub fn get_artist_songs(
         &self,
         browse_id: ArtistChannelID<'static>,
@@ -99,10 +98,19 @@ fn resolve_omv_crossref<'a>(
     for song in album_songs.iter_mut().filter(|s| !s.is_audio_track()) {
         searched += 1;
         if searched <= 3 {
-            debug!("{prefix}: checking title={:?} video_id={:?}", song.title, song.video_id.get_raw());
+            debug!(
+                "{prefix}: checking title={:?} video_id={:?}",
+                song.title,
+                song.video_id.get_raw()
+            );
         }
         if let Some(new_id) = lookup(&song.title) {
-            debug!("{prefix}: CORRECTED title={:?} old_id={:?} new_id={:?}", song.title, song.video_id.get_raw(), new_id);
+            debug!(
+                "{prefix}: CORRECTED title={:?} old_id={:?} new_id={:?}",
+                song.title,
+                song.video_id.get_raw(),
+                new_id
+            );
             song.video_id = VideoID::from_raw(new_id.to_string());
             corrected += 1;
         }
@@ -114,10 +122,7 @@ fn resolve_omv_crossref<'a>(
     }
 }
 
-fn resolve_omv_with_audio_playlist(
-    album_songs: &mut [AlbumSong],
-    playlist_items: &[PlaylistItem],
-) {
+fn resolve_omv_with_audio_playlist(album_songs: &mut [AlbumSong], playlist_items: &[PlaylistItem]) {
     let mut atv_map: HashMap<&str, &str> = HashMap::new();
     for item in playlist_items.iter().filter_map(|item| match item {
         PlaylistItem::Song(s) => Some((s.title.as_str(), s.video_id.get_raw())),
@@ -125,7 +130,7 @@ fn resolve_omv_with_audio_playlist(
     }) {
         match atv_map.entry(item.0) {
             hash_map::Entry::Occupied(e) => {
-                warn!(
+                debug!(
                     "Audio playlist duplicate title {:?}: first_video={:?} second_video={:?}",
                     e.key(),
                     e.get(),
@@ -137,14 +142,22 @@ fn resolve_omv_with_audio_playlist(
             }
         }
     }
-    resolve_omv_crossref(album_songs, |title| atv_map.get(title).copied(), "audio_playlist");
+    resolve_omv_crossref(
+        album_songs,
+        |title| atv_map.get(title).copied(),
+        "audio_playlist",
+    );
 }
 
 fn resolve_omv_album_songs_with_search(
     album_songs: &mut [AlbumSong],
     search_map: &HashMap<String, VideoID<'static>>,
 ) {
-    resolve_omv_crossref(album_songs, |title| search_map.get(title).map(|v| v.get_raw()), "resolve_omv");
+    resolve_omv_crossref(
+        album_songs,
+        |title| search_map.get(title).map(|v| v.get_raw()),
+        "resolve_omv",
+    );
 }
 
 /// Update the local oauth token file.
@@ -197,7 +210,8 @@ where
                         // during the long-running token refresh.
                         tokio::spawn(async {
                             info!("Refreshing oauth token");
-                            let tok = api_locked.refresh_token().await?.expect("Expected to be able to refresh token if I got an OAuthTokenExpired error");
+                            let tok = api_locked.refresh_token().await?
+                                .context("Expected to be able to refresh token after OAuthTokenExpired error")?;
                             info!("Oauth token refreshed");
                             if let Err(e) = update_oauth_token_file(tok).await {
                                 warn!("Error updating locally saved oauth token: <{e}>")
@@ -225,7 +239,7 @@ where
 }
 
 async fn search_playlists(api: ConcurrentApi, text: String) -> Result<Vec<SearchResultPlaylist>> {
-    tracing::info!("Searching playlists for {text}");
+    debug!("Searching playlists for {text}");
     let query = ytmapi_rs::query::SearchQuery::new_filtered(
         text,
         ytmapi_rs::query::search::PlaylistsFilter,
@@ -235,22 +249,18 @@ async fn search_playlists(api: ConcurrentApi, text: String) -> Result<Vec<Search
 }
 
 async fn search_artists(api: ConcurrentApi, text: String) -> Result<Vec<SearchResultArtist>> {
-    tracing::info!("Searching artists for {text}");
-    let query = ytmapi_rs::query::SearchQuery::new_filtered(
-        text,
-        ytmapi_rs::query::search::ArtistsFilter,
-    )
-    .with_spelling_mode(ytmapi_rs::query::search::SpellingMode::ExactMatch);
+    debug!("Searching artists for {text}");
+    let query =
+        ytmapi_rs::query::SearchQuery::new_filtered(text, ytmapi_rs::query::search::ArtistsFilter)
+            .with_spelling_mode(ytmapi_rs::query::search::SpellingMode::ExactMatch);
     query_api_with_retry(&api, query).await
 }
 
 async fn search_songs(api: ConcurrentApi, text: String) -> Result<Vec<SearchResultSong>> {
-    tracing::info!("Searching songs for {text}");
-    let query = ytmapi_rs::query::SearchQuery::new_filtered(
-        text,
-        ytmapi_rs::query::search::SongsFilter,
-    )
-    .with_spelling_mode(ytmapi_rs::query::search::SpellingMode::ExactMatch);
+    debug!("Searching songs for {text}");
+    let query =
+        ytmapi_rs::query::SearchQuery::new_filtered(text, ytmapi_rs::query::search::SongsFilter)
+            .with_spelling_mode(ytmapi_rs::query::search::SpellingMode::ExactMatch);
     query_api_with_retry(&api, query).await
 }
 
@@ -258,9 +268,10 @@ async fn search_songs(api: ConcurrentApi, text: String) -> Result<Vec<SearchResu
 /// May include multiple entries for the same (title, artist) pair that the
 /// SongsFilter deduplicates away.
 async fn search_broad(api: ConcurrentApi, text: String) -> Result<SearchResults> {
-    tracing::info!("Broad search for {text}");
-    let query = ytmapi_rs::query::SearchQuery::<ytmapi_rs::query::search::BasicSearch>::from(text.as_str())
-        .with_spelling_mode(ytmapi_rs::query::search::SpellingMode::ExactMatch);
+    debug!("Broad search for {text}");
+    let query =
+        ytmapi_rs::query::SearchQuery::<ytmapi_rs::query::search::BasicSearch>::from(text.as_str())
+            .with_spelling_mode(ytmapi_rs::query::search::SpellingMode::ExactMatch);
     query_api_with_retry(&api, query).await
 }
 
@@ -268,7 +279,7 @@ pub async fn get_search_suggestions(
     api: ConcurrentApi,
     text: String,
 ) -> Result<(Vec<SearchSuggestion>, String)> {
-    tracing::info!("Getting search suggestions for {text}");
+    debug!("Getting search suggestions for {text}");
     let query = ytmapi_rs::query::GetSearchSuggestionsQuery::new(&text);
     let results = query_api_with_retry(&api, query).await?;
     Ok((results, text))
@@ -285,7 +296,10 @@ pub struct AlbumSongsData {
 
 enum PerAlbumResult {
     Success(usize, AlbumSongsData),
-    Error { album_id: AlbumID<'static>, error: Error },
+    Error {
+        album_id: AlbumID<'static>,
+        error: Error,
+    },
 }
 
 async fn fetch_and_resolve_album(
@@ -298,7 +312,12 @@ async fn fetch_and_resolve_album(
     let album = query_api_with_retry(&api, query).await;
     let album = match album {
         Ok(a) => a,
-        Err(e) => return PerAlbumResult::Error { album_id: a_id, error: e },
+        Err(e) => {
+            return PerAlbumResult::Error {
+                album_id: a_id,
+                error: e,
+            };
+        }
     };
     let GetAlbum {
         title,
@@ -309,15 +328,15 @@ async fn fetch_and_resolve_album(
         audio_playlist_id,
         ..
     } = album;
-    if let Some(ref search_map) = search_map {
-        if !search_map.is_empty() {
-            debug!(
-                "artist_songs: cross-referencing {} tracks for album {:?}",
-                tracks.len(),
-                title
-            );
-            resolve_omv_album_songs_with_search(&mut tracks, search_map);
-        }
+    if let Some(ref search_map) = search_map
+        && !search_map.is_empty()
+    {
+        debug!(
+            "artist_songs: cross-referencing {} tracks for album {:?}",
+            tracks.len(),
+            title
+        );
+        resolve_omv_album_songs_with_search(&mut tracks, search_map);
     }
     if let Some(ref ap_id) = audio_playlist_id {
         let query = ytmapi_rs::query::GetPlaylistTracksQuery::new(ap_id.clone());
@@ -326,20 +345,26 @@ async fn fetch_and_resolve_album(
                 resolve_omv_with_audio_playlist(&mut tracks, &items);
             }
             Err(e) => {
-                warn!("artist_songs: audio_playlist fetch failed for {:?}: {e}", title);
+                warn!(
+                    "artist_songs: audio_playlist fetch failed for {:?}: {e}",
+                    title
+                );
             }
         }
     }
-    PerAlbumResult::Success(idx, AlbumSongsData {
-        song_list: tracks,
-        album: ParsedSongAlbum {
-            name: title,
-            id: a_id,
+    PerAlbumResult::Success(
+        idx,
+        AlbumSongsData {
+            song_list: tracks,
+            album: ParsedSongAlbum {
+                name: title,
+                id: a_id,
+            },
+            year,
+            artists,
+            thumbnails,
         },
-        year,
-        artists,
-        thumbnails,
-    })
+    )
 }
 
 pub enum GetArtistSongsProgressUpdate {
@@ -373,7 +398,7 @@ fn get_artist_songs(
 ) -> impl Stream<Item = GetArtistSongsProgressUpdate> + 'static {
     let (tx, rx) = tokio::sync::mpsc::channel(CALLBACK_CHANNEL_SIZE);
     let handle = tokio::spawn(async move {
-        tracing::debug!("Running songs query");
+        debug!("Running songs query");
         if tx.try_send(GetArtistSongsProgressUpdate::Loading).is_err() {
             debug!("artist_songs: Loading signal dropped (channel full or closed)");
         }
@@ -394,7 +419,7 @@ fn get_artist_songs(
         let artist = match artist {
             Ok(a) => a,
             Err(e) => {
-                warn!("Error with GetArtistQuery");
+                warn!(error = %e, "GetArtistQuery failed");
                 send_or_error(tx, GetArtistSongsProgressUpdate::GetArtistAlbumsError(e)).await;
                 return;
             }
@@ -440,7 +465,10 @@ fn get_artist_songs(
                     match album_pages_result {
                         Ok(r) => r.into_iter().flatten().map(|a| a.browse_id).collect(),
                         Err(e) => {
-                            warn!("get_artist_albums continuation failed (\"{}\"), falling back to first page only", e);
+                            warn!(
+                                "get_artist_albums continuation failed (\"{}\"), falling back to first page only",
+                                e
+                            );
                             send_or_error(
                                 &tx,
                                 GetArtistSongsProgressUpdate::GetArtistAlbumsError(e),
@@ -459,7 +487,7 @@ fn get_artist_songs(
         }
 
         if browse_id_list.is_empty() {
-            tracing::info!("No songs found for artist");
+            info!("No songs found for artist");
             send_or_error(&tx, GetArtistSongsProgressUpdate::NoSongsFound).await;
             return;
         }
@@ -484,8 +512,9 @@ fn get_artist_songs(
             }
         };
         // Build the Atv search map once before the album loop, not once per album.
-        let search_map: Option<Arc<HashMap<String, VideoID<'static>>>> =
-            search_results.as_ref().map(|r| Arc::new(build_search_map(r)));
+        let search_map: Option<Arc<HashMap<String, VideoID<'static>>>> = search_results
+            .as_ref()
+            .map(|r| Arc::new(build_search_map(r)));
         let total_albums = browse_id_list.len();
         // Request all albums concurrently, running each album's audio-playlist
         // fetch inside the same future so all N playlist fetches overlap.
@@ -493,7 +522,7 @@ fn get_artist_songs(
             .into_iter()
             .enumerate()
             .inspect(|(_, a_id)| {
-                tracing::debug!("Spawning request for caller tracks for album ID {:?}", a_id)
+                debug!("Spawning request for caller tracks for album ID {:?}", a_id)
             })
             .map(move |(idx, a_id)| {
                 let api = api.clone();
@@ -507,7 +536,9 @@ fn get_artist_songs(
         while let Some(result) = stream.next().await {
             match result {
                 PerAlbumResult::Success(idx, data) => album_results.push((idx, data)),
-                PerAlbumResult::Error { album_id, error, .. } => {
+                PerAlbumResult::Error {
+                    album_id, error, ..
+                } => {
                     warn!("Error with GetAlbumQuery, album {:?}", album_id);
                     send_or_error(
                         &tx,
@@ -527,7 +558,11 @@ fn get_artist_songs(
                 // Channel full or closed — progress hint is best-effort.
             }
         }
-        tracing::info!("Sending {} albums for artist {:?}", album_results.len(), browse_id);
+        debug!(
+            "Sending {} albums for artist {:?}",
+            album_results.len(),
+            browse_id
+        );
         // Reorder by original index so albums appear in the same order as
         // browse_id_list, regardless of completion order.
         album_results.sort_by_key(|(idx, _)| *idx);
@@ -569,8 +604,11 @@ fn get_playlist_songs(
 ) -> impl Stream<Item = GetPlaylistSongsProgressUpdate> + 'static {
     let (tx, rx) = tokio::sync::mpsc::channel(CALLBACK_CHANNEL_SIZE);
     let handle = tokio::spawn(async move {
-        tracing::debug!("Running songs query");
-        if tx.try_send(GetPlaylistSongsProgressUpdate::Loading).is_err() {
+        debug!("Running songs query");
+        if tx
+            .try_send(GetPlaylistSongsProgressUpdate::Loading)
+            .is_err()
+        {
             debug!("playlist_songs: Loading signal dropped (channel full or closed)");
         }
         let api = match api.get().await {
@@ -593,7 +631,7 @@ fn get_playlist_songs(
         let first_tracks = query_api_with_retry(&api, query).await;
         match first_tracks {
             Ok(t) => {
-                info!("Sending caller tracks for {:?}", playlist_id);
+                debug!("Sending caller tracks for {:?}", playlist_id);
                 send_or_error(&tx, GetPlaylistSongsProgressUpdate::Songs(t)).await;
             }
             Err(error) => {
@@ -630,7 +668,7 @@ pub async fn resolve_to_audio_track(
                 && result.artist == artist
                 && result.video_id.get_raw() != original_raw_id
             {
-                info!(
+                debug!(
                     original = original_raw_id,
                     resolved = result.video_id.get_raw(),
                     title,
@@ -649,7 +687,7 @@ pub async fn resolve_to_audio_track(
                 && result.artist == artist
                 && result.video_id.get_raw() != original_raw_id
             {
-                info!(
+                debug!(
                     original = original_raw_id,
                     resolved = result.video_id.get_raw(),
                     title,
@@ -663,21 +701,17 @@ pub async fn resolve_to_audio_track(
     None
 }
 
-
-
 /// Build a title → video_id map from audio-only search results.
 /// Used to cross-reference Omv album tracks with their Atv equivalents.
 /// Owned keys/values so the map can be `Arc`-shared across concurrent futures.
 /// Warns on duplicate titles — the first entry wins but we surface the
 /// collision for debugging.
-fn build_search_map(
-    search_results: &[SearchResultSong],
-) -> HashMap<String, VideoID<'static>> {
+fn build_search_map(search_results: &[SearchResultSong]) -> HashMap<String, VideoID<'static>> {
     let mut map: HashMap<String, VideoID<'static>> = HashMap::new();
     for s in search_results.iter().filter(|s| s.is_audio_track()) {
         match map.entry(s.title.clone()) {
             hash_map::Entry::Occupied(e) => {
-                warn!(
+                debug!(
                     "Atv search duplicate title {:?}: first={:?} second={:?}",
                     e.key(),
                     e.get().get_raw(),
@@ -695,12 +729,11 @@ fn build_search_map(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ytmapi_rs::auth::noauth::NoAuthToken;
     use ytmapi_rs::auth::BrowserToken;
+    use ytmapi_rs::auth::noauth::NoAuthToken;
     use ytmapi_rs::parse::GetAlbum;
-    use ytmapi_rs::query::search::{SearchQuery, SongsFilter};
     use ytmapi_rs::query::GetAlbumQuery;
-
+    use ytmapi_rs::query::search::{SearchQuery, SongsFilter};
 
     fn make_playlist_item(title: &str, video_id: &str) -> PlaylistItem {
         serde_json::from_value(serde_json::json!({
@@ -723,9 +756,8 @@ mod tests {
     }
 
     fn parse_album_fixture() -> Vec<AlbumSong> {
-        let json = include_str!(
-            "../../../../ytmapi-rs/test_json/get_album_not_signed_in_20250611.json"
-        );
+        let json =
+            include_str!("../../../../ytmapi-rs/test_json/get_album_not_signed_in_20250611.json");
         let GetAlbum { tracks, .. } = ytmapi_rs::process_json::<_, NoAuthToken>(
             json.to_owned(),
             GetAlbumQuery::new(AlbumID::from_raw("")),
@@ -735,9 +767,7 @@ mod tests {
     }
 
     fn parse_search_fixture() -> Vec<SearchResultSong> {
-        let json = include_str!(
-            "../../../../ytmapi-rs/test_json/search_songs_20231226.json"
-        );
+        let json = include_str!("../../../../ytmapi-rs/test_json/search_songs_20231226.json");
         ytmapi_rs::process_json::<_, BrowserToken>(
             json.to_owned(),
             SearchQuery::new_filtered("", SongsFilter),

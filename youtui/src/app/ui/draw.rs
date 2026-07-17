@@ -1,10 +1,8 @@
 use super::{WindowContext, YoutuiWindow, footer, header};
-use crate::app::view::draw::{draw_panel_mut_impl, draw_table_impl, DrawTableConfig};
-use crate::app::view::{BasicConstraint, Drawable, DrawableMut};
+use crate::app::view::draw::{DrawTableConfig, draw_panel_mut_impl, draw_table_impl};
+use crate::app::view::{BasicConstraint, DrawableMut};
 use crate::drawutils::{SELECTED_BORDER_COLOUR, TEXT_COLOUR, left_bottom_corner_rect};
 use crate::keyaction::{DisplayableKeyAction, DisplayableMode};
-use rat_text::HasScreenCursor;
-use rat_text::text_input::{TextInput, TextInputState};
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Direction, Layout};
 use ratatui::prelude::Rect;
@@ -27,7 +25,6 @@ pub fn draw_app(f: &mut Frame, w: &mut YoutuiWindow) {
             w.browser
                 .draw_mut_chunk(f, window_chunk, context_selected, w.tick);
         }
-        WindowContext::Logs => w.logger.draw_chunk(f, window_chunk, context_selected),
         WindowContext::Playlist => {
             w.playlist
                 .draw_mut_chunk(f, window_chunk, context_selected, w.tick);
@@ -114,7 +111,10 @@ fn draw_help(f: &mut Frame, w: &mut YoutuiWindow, chunk: Rect) {
     // Ensure the width of each column is at least as wide as header.
     (s_len, c_len, d_len) = (s_len.max(3), c_len.max(7), d_len.max(7));
     // Total block width required, including padding and borders.
-    let width = s_len.saturating_add(c_len).saturating_add(d_len).saturating_add(4);
+    let width = s_len
+        .saturating_add(c_len)
+        .saturating_add(d_len)
+        .saturating_add(4);
     // Total block height required, including header and borders.
     let height = items.saturating_add(3);
     let table_constraints = [
@@ -142,7 +142,7 @@ fn draw_help(f: &mut Frame, w: &mut YoutuiWindow, chunk: Rect) {
                      keybinds,
                      context,
                      description,
-                  }| { [keybinds, context, description].into_iter() },
+                 }| { [keybinds, context, description].into_iter() },
             );
             let (new_state, effect) = draw_table_impl(
                 f,
@@ -163,31 +163,4 @@ fn draw_help(f: &mut Frame, w: &mut YoutuiWindow, chunk: Rect) {
             Some(effect)
         },
     );
-}
-
-/// Draw a text input box
-pub fn draw_text_box(
-    f: &mut Frame,
-    title: impl AsRef<str>,
-    contents: &mut TextInputState,
-    chunk: Rect,
-) {
-    let block_widget = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(SELECTED_BORDER_COLOUR))
-        .title(title.as_ref());
-    let text_chunk = block_widget.inner(chunk);
-    let text_chunk = Rect {
-        x: text_chunk.x,
-        y: text_chunk.y,
-        width: text_chunk.width.saturating_sub(1),
-        height: text_chunk.height,
-    };
-    // TODO: Scrolling, if input larger than box.
-    let text_widget = TextInput::new();
-    f.render_widget(block_widget, chunk);
-    f.render_stateful_widget(text_widget, text_chunk, contents);
-    if let Some(cursor_pos) = contents.screen_cursor() {
-        f.set_cursor_position(cursor_pos)
-    };
 }

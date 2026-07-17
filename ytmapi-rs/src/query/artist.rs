@@ -70,7 +70,7 @@ impl PostQuery for GetArtistQuery<'_> {
         let serde_json::Value::Object(map) = json!({
             "browseId" : value,
         }) else {
-            unreachable!()
+            unreachable!("artist header is a JSON object from json! macro")
         };
         map
     }

@@ -138,10 +138,8 @@ impl YtMusic<NoAuthToken> {
     /// Create a new unauthenticated API handle.
     /// In unauthenticated mode, less queries are supported.
     /// Utilises the default TLS option for the enabled features.
-    /// # Panics
-    /// This will panic in some situations - see <https://docs.rs/reqwest/latest/reqwest/struct.Client.html#panics>
     pub async fn new_unauthenticated() -> Result<Self> {
-        let client = Client::new().expect("Expected Client build to succeed");
+        let client = Client::new()?;
         let token = NoAuthToken::new(&client).await?;
         Ok(YtMusic { client, token })
     }
@@ -149,30 +147,24 @@ impl YtMusic<NoAuthToken> {
 impl YtMusic<BrowserToken> {
     /// Create a new API handle using a BrowserToken.
     /// Utilises the default TLS option for the enabled features.
-    /// # Panics
-    /// This will panic in some situations - see <https://docs.rs/reqwest/latest/reqwest/struct.Client.html#panics>
     #[deprecated = "Use generic `from_auth_token` instead"]
-    pub fn from_browser_token(token: BrowserToken) -> YtMusic<BrowserToken> {
-        let client = Client::new().expect("Expected Client build to succeed");
-        YtMusic { client, token }
+    pub fn from_browser_token(token: BrowserToken) -> Result<YtMusic<BrowserToken>> {
+        let client = Client::new()?;
+        Ok(YtMusic { client, token })
     }
     /// Create a new API handle using a real browser authentication cookie saved
     /// to a file on disk.
     /// Utilises the default TLS option for the enabled features.
-    /// # Panics
-    /// This will panic in some situations - see <https://docs.rs/reqwest/latest/reqwest/struct.Client.html#panics>
     pub async fn from_cookie_file<P: AsRef<Path>>(path: P) -> Result<Self> {
-        let client = Client::new().expect("Expected Client build to succeed");
+        let client = Client::new()?;
         let token = BrowserToken::from_cookie_file(path, &client).await?;
         Ok(Self { client, token })
     }
     /// Create a new API handle using a real browser authentication cookie in a
     /// String.
     /// Utilises the default TLS option for the enabled features.
-    /// # Panics
-    /// This will panic in some situations - see <https://docs.rs/reqwest/latest/reqwest/struct.Client.html#panics>
     pub async fn from_cookie<S: AsRef<str>>(cookie: S) -> Result<Self> {
-        let client = Client::new().expect("Expected Client build to succeed");
+        let client = Client::new()?;
         let token = BrowserToken::from_str(cookie.as_ref(), &client).await?;
         Ok(Self { client, token })
     }
@@ -190,12 +182,10 @@ impl YtMusic<BrowserToken> {
 impl YtMusic<OAuthToken> {
     /// Create a new API handle using an OAuthToken.
     /// Utilises the default TLS option for the enabled features.
-    /// # Panics
-    /// This will panic in some situations - see <https://docs.rs/reqwest/latest/reqwest/struct.Client.html#panics>
     #[deprecated = "Use generic `from_auth_token` instead"]
-    pub fn from_oauth_token(token: OAuthToken) -> YtMusic<OAuthToken> {
-        let client = Client::new().expect("Expected Client build to succeed");
-        YtMusic { client, token }
+    pub fn from_oauth_token(token: OAuthToken) -> Result<YtMusic<OAuthToken>> {
+        let client = Client::new()?;
+        Ok(YtMusic { client, token })
     }
     /// Refresh the internal oauth token, and return a clone of it (for user to
     /// store locally, e.g).
@@ -215,11 +205,9 @@ impl YtMusic<OAuthToken> {
 impl<A: AuthToken> YtMusic<A> {
     /// Create a new API handle using a AuthToken.
     /// Utilises the default TLS option for the enabled features.
-    /// # Panics
-    /// This will panic in some situations - see <https://docs.rs/reqwest/latest/reqwest/struct.Client.html#panics>
-    pub fn from_auth_token(token: A) -> YtMusic<A> {
-        let client = Client::new().expect("Expected Client build to succeed");
-        YtMusic { client, token }
+    pub fn from_auth_token(token: A) -> Result<YtMusic<A>> {
+        let client = Client::new()?;
+        Ok(YtMusic { client, token })
     }
     /// Return the source JSON returned by YouTube music for the query, prior to
     /// deserialization and error processing.
@@ -397,7 +385,7 @@ pub async fn generate_oauth_token(
 /// let token = ytmapi_rs::generate_browser_token(&client, cookie).await;
 /// assert!(matches!(
 ///     token.unwrap_err().into_kind(),
-///     ytmapi_rs::error::ErrorKind::Header
+///     ytmapi_rs::error::ErrorKind::Header { .. }
 /// ));
 /// # };
 /// ```

@@ -1,14 +1,13 @@
 use self::browser::Browser;
-use self::logger::Logger;
 use self::playlist::{PlayMode, Playlist};
 use super::AppCallback;
 use super::component::actionhandler::{
     ActionHandler, ComponentEffect, DominantKeyRouter, KeyHandleAction, KeyRouter, Scrollable,
-    TextHandler, YoutuiEffect, apply_action_mapped,
-    handle_key_stack,
+    TextHandler, YoutuiEffect, apply_action_mapped, handle_key_stack,
 };
 use super::server::{IncreaseVolume, SetVolume};
 use super::structures::{ListSong, Percentage};
+use crate::app::ui::footer::FooterCache;
 use crate::async_rodio_sink::{SeekDirection, VolumeUpdate};
 use crate::config::Config;
 use crate::config::keymap::Keymap;
@@ -26,7 +25,6 @@ pub mod draw;
 pub mod draw_media_controls;
 mod footer;
 mod header;
-pub mod logger;
 pub mod playlist;
 
 // Which app level keyboard shortcuts function.
@@ -37,19 +35,17 @@ pub mod playlist;
 pub enum WindowContext {
     Browser,
     Playlist,
-    Logs,
 }
 
 pub struct YoutuiWindow {
     context: WindowContext,
-    prev_context: WindowContext,
     pub playlist: Playlist,
     browser: Browser,
-    logger: Logger,
     config: Config,
     key_stack: Vec<KeyEvent>,
     help: HelpMenu,
     tick: u64,
+    footer_cache: FooterCache,
 }
 impl_youtui_component!(YoutuiWindow);
 
@@ -90,29 +86,20 @@ impl DominantKeyRouter<AppAction> for YoutuiWindow {
             || match self.context {
                 WindowContext::Browser => self.browser.dominant_keybinds_active(),
                 WindowContext::Playlist => false,
-                WindowContext::Logs => false,
             }
     }
 
+    #[allow(refining_impl_trait_internal)]
     fn get_dominant_keybinds<'a>(
         &self,
         config: &'a Config,
-    ) -> impl Iterator<Item = &'a Keymap<AppAction>> + 'a {
+    ) -> Box<dyn Iterator<Item = &'a Keymap<AppAction>> + 'a> {
         if self.help.shown {
-            return Either::Right(Either::Right(
-                [&config.keybinds.help, &config.keybinds.list].into_iter(),
-            ));
+            return Box::new([&config.keybinds.help, &config.keybinds.list].into_iter());
         }
         match self.context {
-            WindowContext::Browser => {
-                Either::Left(Either::Left(self.browser.get_dominant_keybinds(config)))
-            }
-            WindowContext::Playlist => {
-                Either::Left(Either::Right(self.playlist.get_active_keybinds(config)))
-            }
-            WindowContext::Logs => {
-                Either::Right(Either::Left(self.logger.get_active_keybinds(config)))
-            }
+            WindowContext::Browser => Box::new(self.browser.get_dominant_keybinds(config)),
+            WindowContext::Playlist => Box::new(self.playlist.get_active_keybinds(config)),
         }
     }
 }
@@ -125,7 +112,6 @@ impl Scrollable for YoutuiWindow {
         match self.context {
             WindowContext::Browser => self.browser.increment_list(amount),
             WindowContext::Playlist => self.playlist.increment_list(amount),
-            WindowContext::Logs => (),
         }
     }
     fn is_scrollable(&self) -> bool {
@@ -133,23 +119,23 @@ impl Scrollable for YoutuiWindow {
             || match self.context {
                 WindowContext::Browser => self.browser.is_scrollable(),
                 WindowContext::Playlist => self.playlist.is_scrollable(),
-                WindowContext::Logs => false,
             }
     }
 }
 
 impl KeyRouter<AppAction> for YoutuiWindow {
+    #[allow(refining_impl_trait_internal)]
     fn get_active_keybinds<'a>(
         &self,
         config: &'a Config,
-    ) -> impl Iterator<Item = &'a Keymap<AppAction>> + 'a {
+    ) -> Box<dyn Iterator<Item = &'a Keymap<AppAction>> + 'a> {
         let kb = if self.is_scrollable() {
             Either::Left(std::iter::once(&config.keybinds.list))
         } else {
             Either::Right(std::iter::empty())
         };
         if self.dominant_keybinds_active() {
-            return Either::Right(Either::Right(self.get_dominant_keybinds(config).chain(kb)));
+            return Box::new(self.get_dominant_keybinds(config).chain(kb));
         }
         let kb = kb.chain(std::iter::once(&config.keybinds.global));
         let kb = if self.is_text_handling() {
@@ -158,25 +144,22 @@ impl KeyRouter<AppAction> for YoutuiWindow {
             Either::Right(kb)
         };
         match self.context {
-            WindowContext::Browser => Either::Left(Either::Left(
-                kb.chain(self.browser.get_active_keybinds(config)),
-            )),
-            WindowContext::Playlist => Either::Left(Either::Right(
-                kb.chain(self.playlist.get_active_keybinds(config)),
-            )),
-            WindowContext::Logs => Either::Right(Either::Left(
-                kb.chain(self.logger.get_active_keybinds(config)),
-            )),
+            WindowContext::Browser => Box::new(kb.chain(self.browser.get_active_keybinds(config))),
+            WindowContext::Playlist => {
+                Box::new(kb.chain(self.playlist.get_active_keybinds(config)))
+            }
         }
     }
+    #[allow(refining_impl_trait_internal)]
     fn get_all_keybinds<'a>(
         &self,
         config: &'a Config,
-    ) -> impl Iterator<Item = &'a Keymap<AppAction>> + 'a {
-        std::iter::once(&config.keybinds.global)
-            .chain(self.browser.get_all_keybinds(config))
-            .chain(self.playlist.get_all_keybinds(config))
-            .chain(self.logger.get_all_keybinds(config))
+    ) -> Box<dyn Iterator<Item = &'a Keymap<AppAction>> + 'a> {
+        Box::new(
+            std::iter::once(&config.keybinds.global)
+                .chain(self.browser.get_all_keybinds(config))
+                .chain(self.playlist.get_all_keybinds(config)),
+        )
     }
 }
 
@@ -188,28 +171,24 @@ impl TextHandler for YoutuiWindow {
         match self.context {
             WindowContext::Browser => self.browser.is_text_handling(),
             WindowContext::Playlist => self.playlist.is_text_handling(),
-            WindowContext::Logs => self.logger.is_text_handling(),
         }
     }
     fn get_text(&self) -> std::option::Option<&str> {
         match self.context {
             WindowContext::Browser => self.browser.get_text(),
             WindowContext::Playlist => self.playlist.get_text(),
-            WindowContext::Logs => self.logger.get_text(),
         }
     }
     fn replace_text(&mut self, text: impl Into<String>) {
         match self.context {
             WindowContext::Browser => self.browser.replace_text(text),
             WindowContext::Playlist => self.playlist.replace_text(text),
-            WindowContext::Logs => self.logger.replace_text(text),
         }
     }
     fn clear_text(&mut self) -> bool {
         match self.context {
             WindowContext::Browser => self.browser.clear_text(),
             WindowContext::Playlist => self.playlist.clear_text(),
-            WindowContext::Logs => self.logger.clear_text(),
         }
     }
     fn handle_text_event_impl(&mut self, event: &Event) -> Option<ComponentEffect<Self>> {
@@ -222,10 +201,6 @@ impl TextHandler for YoutuiWindow {
                 .playlist
                 .handle_text_event_impl(event)
                 .map(|effect| effect.map_frontend(|this: &mut YoutuiWindow| &mut this.playlist)),
-            WindowContext::Logs => self
-                .logger
-                .handle_text_event_impl(event)
-                .map(|effect| effect.map_frontend(|this: &mut YoutuiWindow| &mut this.logger)),
         }
     }
 }
@@ -251,11 +226,7 @@ impl ActionHandler<AppAction> for YoutuiWindow {
             }
             AppAction::ToggleHelp => self.toggle_help(),
             AppAction::Quit => return (AsyncTask::new_no_op(), Some(AppCallback::Quit)).into(),
-            AppAction::ViewLogs => self.handle_change_context(WindowContext::Logs),
             AppAction::PlayPause => return self.pauseplay().into(),
-            AppAction::Log(a) => {
-                return apply_action_mapped(self, a, |this: &mut Self| &mut this.logger);
-            }
             AppAction::Playlist(a) => {
                 return apply_action_mapped(self, a, |this: &mut Self| &mut this.playlist);
             }
@@ -299,20 +270,16 @@ impl ActionHandler<AppAction> for YoutuiWindow {
 
 impl YoutuiWindow {
     pub fn new(config: Config) -> (YoutuiWindow, ComponentEffect<YoutuiWindow>) {
-        let (playlist, task) = Playlist::new(
-            Percentage(config.volume),
-            config.audio_quality,
-        );
+        let (playlist, task) = Playlist::new(Percentage(config.volume), config.audio_quality);
         let this = YoutuiWindow {
             context: WindowContext::Browser,
-            prev_context: WindowContext::Browser,
             playlist,
             config,
             browser: Browser::new(),
-            logger: Logger::new(),
             key_stack: Vec::new(),
             help: HelpMenu::new(),
             tick: 0,
+            footer_cache: FooterCache::new(),
         };
         (
             this,
@@ -321,15 +288,12 @@ impl YoutuiWindow {
     }
     pub fn get_help_list_items(&self) -> impl Iterator<Item = DisplayableKeyAction<'_>> {
         let base: Vec<DisplayableKeyAction<'_>> = match self.context {
-            WindowContext::Browser => flatten_keybinds_as_readable(
-                self.browser.get_all_keybinds(&self.config),
-            ),
-            WindowContext::Playlist => flatten_keybinds_as_readable(
-                self.playlist.get_all_keybinds(&self.config),
-            ),
-            WindowContext::Logs => flatten_keybinds_as_readable(
-                self.logger.get_all_keybinds(&self.config),
-            ),
+            WindowContext::Browser => {
+                flatten_keybinds_as_readable(self.browser.get_all_keybinds(&self.config))
+            }
+            WindowContext::Playlist => {
+                flatten_keybinds_as_readable(self.playlist.get_all_keybinds(&self.config))
+            }
         };
         base.into_iter().chain(flatten_keybinds_as_readable(
             std::iter::once(&self.config.keybinds.global)
@@ -392,10 +356,10 @@ impl YoutuiWindow {
                 return (AsyncTask::new_no_op(), Some(AppCallback::Quit)).into();
             }
             souvlaki::MediaControlEvent::OpenUri(_) => {
-                tracing::info!("Received intentionally unhandled event {:?}", event)
+                tracing::debug!("Received intentionally unhandled event {:?}", event)
             }
             souvlaki::MediaControlEvent::Raise => {
-                tracing::info!("Received intentionally unhandled event {:?}", event)
+                tracing::debug!("Received intentionally unhandled event {:?}", event)
             }
         }
         AsyncTask::new_no_op().into()
@@ -429,7 +393,6 @@ impl YoutuiWindow {
                         match self.context {
                             WindowContext::Browser => self.browser.go_to_first(),
                             WindowContext::Playlist => self.playlist.go_to_first(),
-                            WindowContext::Logs => (),
                         }
                     }
                 }
@@ -440,7 +403,6 @@ impl YoutuiWindow {
                         match self.context {
                             WindowContext::Browser => self.browser.go_to_last(),
                             WindowContext::Playlist => self.playlist.go_to_last(),
-                            WindowContext::Logs => (),
                         }
                     }
                 }
@@ -458,7 +420,6 @@ impl YoutuiWindow {
                 .handle_text_entry_action(action)
                 .map_frontend(|this: &mut Self| &mut this.browser),
             WindowContext::Playlist => AsyncTask::new_no_op(),
-            WindowContext::Logs => AsyncTask::new_no_op(),
         }
     }
     pub fn pauseplay(&mut self) -> ComponentEffect<Self> {
@@ -583,11 +544,10 @@ impl YoutuiWindow {
         self.playlist.set_volume(new_vol);
     }
     pub fn handle_change_context(&mut self, new_context: WindowContext) {
-        std::mem::swap(&mut self.context, &mut self.prev_context);
+        if matches!(new_context, WindowContext::Browser) {
+            self.browser.close_search_all();
+        }
         self.context = new_context;
-    }
-    fn _revert_context(&mut self) {
-        std::mem::swap(&mut self.context, &mut self.prev_context);
     }
     // The downside of this approach is that if draw_popup is calling this function,
     // it is gettign called every tick.

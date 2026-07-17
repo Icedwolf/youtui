@@ -38,6 +38,15 @@ pub fn get_oauth_client_id_and_secret() -> std::result::Result<(String, String),
 // The cause of the web errors is that each tokio::test has its own runtime.
 // To resolve this, we'll need a shared runtime as well as a static containing
 // the API.
+/// Returns `None` if the oauth file and env var are both missing.
+pub async fn maybe_new_standard_oauth_api() -> Option<YtMusic<OAuthToken>> {
+    if env::var("youtui_test_oauth").is_ok() || Path::new(EXPIRED_OAUTH_PATH).exists() {
+        Some(new_standard_oauth_api().await.unwrap())
+    } else {
+        None
+    }
+}
+
 pub async fn new_standard_oauth_api() -> Result<YtMusic<OAuthToken>> {
     let oauth_token = OAUTH_TOKEN
         .get_or_init(|| async {
@@ -52,7 +61,8 @@ pub async fn new_standard_oauth_api() -> Result<YtMusic<OAuthToken>> {
             tok
         })
         .await;
-    let mut api = YtMusic::from_auth_token(oauth_token.clone());
+    let mut api =
+        YtMusic::from_auth_token(oauth_token.clone()).expect("Expected Client build to succeed");
     api.refresh_token().await.unwrap();
     Ok(api)
 }
@@ -61,6 +71,16 @@ pub async fn new_standard_oauth_api() -> Result<YtMusic<OAuthToken>> {
 // The cause of the web errors is that each tokio::test has its own runtime.
 // To resolve this, we'll need a shared runtime as well as a static containing
 // the API.
+/// Returns `None` if neither the cookie file nor env var exist — tests
+/// skip gracefully instead of panicking with "No such file or directory".
+pub async fn maybe_new_standard_api() -> Option<YtMusic<BrowserToken>> {
+    if env::var("youtui_test_cookie").is_ok() || Path::new(COOKIE_PATH).exists() {
+        Some(new_standard_api().await.unwrap())
+    } else {
+        None
+    }
+}
+
 pub async fn new_standard_api() -> Result<YtMusic<BrowserToken>> {
     if let Ok(cookie) = env::var("youtui_test_cookie") {
         YtMusic::from_cookie(cookie).await
@@ -81,7 +101,10 @@ macro_rules! generate_query_test_logged_in {
             $(#[$m])*
             #[tokio::test]
             async fn [<$fname _browser>]() {
-                let api = crate::utils::new_standard_api().await.unwrap();
+                let Some(api) = crate::utils::maybe_new_standard_api().await else {
+                    eprintln!("SKIP: browser auth not configured (set youtui_test_cookie or create cookie.txt)");
+                    return;
+                };
                 api.query($query)
                     .await
                     .expect("Expected query to run succesfully under browser auth");
@@ -111,7 +134,10 @@ macro_rules! generate_query_test {
             $(#[$m])*
             #[tokio::test]
             async fn [<$fname _browser>]() {
-                let api = crate::utils::new_standard_api().await.unwrap();
+                let Some(api) = crate::utils::maybe_new_standard_api().await else {
+                    eprintln!("SKIP: browser auth not configured (set youtui_test_cookie or create cookie.txt)");
+                    return;
+                };
                 api.query($query)
                     .await
                     .expect("Expected query to run succesfully under browser auth");
@@ -150,7 +176,10 @@ macro_rules! generate_stream_test {
             #[tokio::test]
             async fn [<$fname _browser>]() {
                 use futures::stream::{StreamExt, TryStreamExt};
-                let api = crate::utils::new_standard_api().await.unwrap();
+                let Some(api) = crate::utils::maybe_new_standard_api().await else {
+                    eprintln!("SKIP: browser auth not configured (set youtui_test_cookie or create cookie.txt)");
+                    return;
+                };
                 let query = $query;
                 let stream = api.stream(&query);
                 tokio::pin!(stream);
@@ -209,7 +238,10 @@ macro_rules! generate_stream_test_logged_in {
             #[tokio::test]
             async fn [<$fname _browser>]() {
                 use futures::stream::{StreamExt, TryStreamExt};
-                let api = crate::utils::new_standard_api().await.unwrap();
+                let Some(api) = crate::utils::maybe_new_standard_api().await else {
+                    eprintln!("SKIP: browser auth not configured (set youtui_test_cookie or create cookie.txt)");
+                    return;
+                };
                 let query = $query;
                 let stream = api.stream(&query);
                 tokio::pin!(stream);

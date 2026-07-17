@@ -59,7 +59,7 @@ impl PostQuery for GetLyricsIDQuery<'_> {
             "playlistId" : format!("RDAMVM{}", self.video_id.get_raw()),
             "videoId" : self.video_id.get_raw(),
         }) else {
-            unreachable!()
+            unreachable!("song watch header is a JSON object from json! macro")
         };
         map
     }
@@ -80,7 +80,7 @@ impl PostQuery for GetLyricsQuery<'_> {
         let serde_json::Value::Object(map) = json!({
             "browseId": self.id.get_raw(),
         }) else {
-            unreachable!()
+            unreachable!("lyrics header is a JSON object from json! macro")
         };
         map
     }

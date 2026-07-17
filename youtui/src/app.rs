@@ -3,7 +3,6 @@ use crate::config::ApiKey;
 use crate::core::get_limited_sequential_file;
 use crate::{RuntimeInfo, get_data_dir};
 use anyhow::{Context, Result, bail};
-use queue_persistence::auto_save;
 use async_callback_manager::{AsyncCallbackManager, TaskOutcome};
 use component::actionhandler::YoutuiEffect;
 use crossterm::event::{DisableMouseCapture, EnableMouseCapture};
@@ -12,6 +11,7 @@ use crossterm::terminal::{
     EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
 };
 use media_controls::MediaController;
+use queue_persistence::auto_save;
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
 use server::{ArcServer, Server, TaskMetadata};
@@ -104,14 +104,14 @@ impl Youtui {
         IS_MAIN_THREAD.with(|flag| flag.set(true));
         std::panic::set_hook(Box::new(|panic_info| {
             if IS_MAIN_THREAD.with(|flag| flag.get()) {
-                tracing::error!(
+                error!(
                     "Panic detected on main thread. \
                      Message: {panic_info}"
                 );
                 // If we fail to exit cleanly, ignore the error as panicking anyway.
                 let _ = cleanup_tui_and_print_panic_message(&panic_info);
             } else {
-                tracing::warn!(
+                warn!(
                     "Panic detected outside main thread - \
                      this is not necessarily an error but may indicate one. \
                      Message: {panic_info}"
@@ -127,7 +127,7 @@ impl Youtui {
                 )
             });
         let t_server = std::time::Instant::now();
-        let server = Arc::new(server::Server::new(api_key, po_token, &config));
+        let server = Arc::new(server::Server::new(api_key, po_token, &config)?);
         debug!(
             "startup_timing: Server::new() = {}ms",
             t_server.elapsed().as_millis()
@@ -137,9 +137,10 @@ impl Youtui {
         let (media_controls, media_control_event_stream) = if disable_media_controls {
             (None, None)
         } else {
-            let (media_controls, media_control_event_stream) = MediaController::new(config.notifications_enabled).context(
-                "Unable to initialise media controls - is the application already running?",
-            )?;
+            let (media_controls, media_control_event_stream) = MediaController::new(
+                config.notifications_enabled,
+            )
+            .context("Unable to initialise media controls - is the application already running?")?;
             (Some(media_controls), Some(media_control_event_stream))
         };
         let event_handler = EventHandler::new(EVENT_CHANNEL_SIZE, media_control_event_stream)?;
@@ -193,7 +194,7 @@ impl Youtui {
         {
             let elapsed = _render_start.elapsed();
             if elapsed.as_millis() > 8 {
-                tracing::warn!(
+                warn!(
                     "profile-render: draw took {}ms (>8ms threshold)",
                     elapsed.as_millis()
                 );
@@ -333,11 +334,10 @@ fn destruct_terminal() -> Result<()> {
 /// # Panics
 /// If tracing fails to initialise, function will panic
 async fn init_tracing(debug: bool, logging: bool) -> Result<()> {
-    let tui_logger_layer = tui_logger::TuiTracingSubscriberLayer;
-    let (tracing_log_level, tui_logger_log_level) = if debug {
-        (tracing::Level::DEBUG, tui_logger::LevelFilter::Debug)
+    let tracing_log_level = if debug {
+        tracing::Level::DEBUG
     } else {
-        (tracing::Level::WARN, tui_logger::LevelFilter::Warn)
+        tracing::Level::WARN
     };
     if logging {
         let context_layer =
@@ -349,25 +349,21 @@ async fn init_tracing(debug: bool, logging: bool) -> Result<()> {
             MAX_LOG_FILES,
         )
         .await?;
-        let log_file_layer = tracing_subscriber::fmt::layer().with_writer(Arc::new(
-            log_file
-                .try_into_std()
-                .expect("No file operation should be in-flight yet"),
-        ));
+        let log_file = log_file
+            .try_into_std()
+            .map_err(|_| anyhow::anyhow!("log file busy, cannot convert to std handle"))?;
+        let log_file_layer = tracing_subscriber::fmt::layer().with_writer(Arc::new(log_file));
         tracing_subscriber::registry()
-            .with(tui_logger_layer.and_then(log_file_layer))
+            .with(log_file_layer)
             .with(context_layer)
             .init();
         info!("Logging to {:?}.", log_file_name);
     } else {
         tracing_subscriber::registry()
-            .with(tui_logger_layer)
             .with(
                 tracing_subscriber::filter::Targets::new().with_target("youtui", tracing_log_level),
             )
             .init();
     }
-    tui_logger::init_logger(tui_logger_log_level)
-        .expect("Expected logger to initialise succesfully");
     Ok(())
 }

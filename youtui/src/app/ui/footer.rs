@@ -1,4 +1,4 @@
-use crate::app::structures::PlayState;
+use crate::app::structures::{ListSongID, PlayState};
 use crate::drawutils::{
     BUTTON_BG_COLOUR, BUTTON_FG_COLOUR, PROGRESS_BG_COLOUR, PROGRESS_FG_COLOUR,
 };
@@ -8,7 +8,32 @@ use ratatui::prelude::Alignment;
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Gauge, Paragraph};
+use std::borrow::Cow;
 use std::time::Duration;
+
+pub struct FooterCache {
+    pub song_and_artists: String,
+    pub album_title: String,
+    pub progress_str: String,
+    pub duration_str: String,
+    pub last_song_id: Option<ListSongID>,
+    pub last_progress_secs: usize,
+    pub last_vol: u8,
+}
+
+impl FooterCache {
+    pub fn new() -> Self {
+        Self {
+            song_and_artists: String::new(),
+            album_title: String::new(),
+            progress_str: String::new(),
+            duration_str: String::new(),
+            last_song_id: None,
+            last_progress_secs: usize::MAX,
+            last_vol: u8::MAX,
+        }
+    }
+}
 
 pub fn secs_to_time_string(secs: usize) -> String {
     // Naive implementation
@@ -22,46 +47,86 @@ pub fn secs_to_time_string(secs: usize) -> String {
     }
 }
 
-pub fn draw_footer(
-    f: &mut Frame,
-    w: &mut super::YoutuiWindow,
-    chunk: Rect,
-) {
-    let mut duration = 0;
-    let mut progress = Duration::default();
-    let play_ratio = match &w.playlist.play_status {
-        PlayState::Playing(id) | PlayState::Paused(id) => {
-            duration = w
-                .playlist
-                .get_song_from_id(*id)
-                .map(|s| {
-                    s.actual_duration
-                        .map(|d| d.as_secs() as usize)
-                        .filter(|&secs| {
-                            // Streaming WAV decoder may report bogus duration
-                            // (sentinel from unknown chunk size). Fall back to
-                            // API metadata if decoder report is unreasonable.
-                            secs < 7200 || secs <= s.duration_secs * 2
-                        })
-                        .unwrap_or(s.duration_secs)
-                })
-                .unwrap_or(0);
-            progress = w.playlist.get_cur_played_dur().unwrap_or_default();
-            (progress.as_secs_f64() / duration as f64).clamp(0.0, 1.0)
-        }
-        _ => 0.0,
-    };
-    let progress_str = secs_to_time_string(progress.as_secs() as usize);
-    let duration_str = secs_to_time_string(duration);
-    let bar_str = format!("{progress_str}/{duration_str}");
+fn truncate(s: &str, max_len: usize) -> Cow<'_, str> {
+    if s.len() <= max_len {
+        Cow::Borrowed(s)
+    } else {
+        let mut t: String = s.chars().take(max_len.saturating_sub(1)).collect();
+        t.push('…');
+        Cow::Owned(t)
+    }
+}
 
-    let cur_active_song = match w.playlist.play_status {
+pub fn draw_footer(f: &mut Frame, w: &mut super::YoutuiWindow, chunk: Rect) {
+    let cur_active_id = match w.playlist.play_status {
         PlayState::Error(id)
         | PlayState::Playing(id)
         | PlayState::Paused(id)
-        | PlayState::Buffering(id) => w.playlist.get_song_from_id(id),
+        | PlayState::Buffering(id) => Some(id),
         PlayState::NotPlaying | PlayState::Stopped => None,
     };
+
+    let mut duration = 0;
+    let mut progress = Duration::default();
+    let play_ratio = if let Some(id) = cur_active_id
+        && matches!(
+            w.playlist.play_status,
+            PlayState::Playing(_) | PlayState::Paused(_)
+        ) {
+        let song = w.playlist.get_song_from_id(id);
+        if let Some(song) = song {
+            duration = song
+                .actual_duration
+                .map(|d| d.as_secs() as usize)
+                .filter(|&secs| secs < 7200 || secs <= song.duration_secs * 2)
+                .unwrap_or(song.duration_secs);
+            progress = w.playlist.get_cur_played_dur().unwrap_or_default();
+            (progress.as_secs_f64() / duration as f64).clamp(0.0, 1.0)
+        } else {
+            0.0
+        }
+    } else {
+        0.0
+    };
+
+    let progress_secs = progress.as_secs() as usize;
+    if w.footer_cache.last_song_id != cur_active_id {
+        w.footer_cache.last_song_id = cur_active_id;
+        if let Some(id) = cur_active_id {
+            if let Some(song) = w.playlist.get_song_from_id(id) {
+                w.footer_cache.song_and_artists = format!(
+                    "{} {} - {}",
+                    w.playlist.status_bar_icon(),
+                    song.title,
+                    song.artists_string,
+                );
+                w.footer_cache.album_title = song
+                    .album
+                    .as_ref()
+                    .map(|a| a.name.clone())
+                    .unwrap_or_default();
+            } else {
+                w.footer_cache.song_and_artists.clear();
+                w.footer_cache.album_title.clear();
+            }
+            w.footer_cache.duration_str = secs_to_time_string(duration);
+        } else {
+            w.footer_cache.song_and_artists.clear();
+            w.footer_cache.album_title.clear();
+            w.footer_cache.duration_str.clear();
+        }
+        w.footer_cache.progress_str.clear();
+        w.footer_cache.last_progress_secs = usize::MAX;
+    }
+    if w.footer_cache.last_progress_secs != progress_secs {
+        w.footer_cache.last_progress_secs = progress_secs;
+        w.footer_cache.progress_str = secs_to_time_string(progress_secs);
+    }
+    let bar_str = format!(
+        "{}/{}",
+        w.footer_cache.progress_str, w.footer_cache.duration_str
+    );
+
     let block = Block::default()
         .title("Status")
         .title(Line::from("Youtui").right_aligned())
@@ -76,43 +141,11 @@ pub fn draw_footer(
         .constraints([Constraint::Min(2), Constraint::Max(1)])
         .areas(progress_bar_section);
 
-    let song_and_artists_string = cur_active_song
-        .map(|song| {
-            let mut s = format!(
-                "{} {} - ",
-                w.playlist.status_bar_icon(),
-                song.title,
-            );
-            for (i, artist) in song.artists.iter().enumerate() {
-                if i > 0 {
-                    s.push_str(", ");
-                }
-                s.push_str(&artist.name);
-            }
-            s
-        })
-        .unwrap_or_default();
-    let album_title = cur_active_song
-        .and_then(|s| s.album.as_ref())
-        .map(|s| s.name.as_str())
-        .unwrap_or_default();
     // Truncate text to available width to avoid visual overflow.
     let max_text_width = song_text_chunk.width.saturating_sub(2) as usize;
-    let truncate = |s: &str| -> String {
-        if s.len() <= max_text_width {
-            s.to_string()
-        } else {
-            let mut t: String = s.chars().take(max_text_width.saturating_sub(1)).collect();
-            t.push('…');
-            t
-        }
-    };
-    let song_line = truncate(&song_and_artists_string);
-    let album_line = truncate(album_title);
-    let footer = Paragraph::new(vec![
-        Line::from(song_line),
-        Line::from(album_line),
-    ]);
+    let song_line = truncate(&w.footer_cache.song_and_artists, max_text_width);
+    let album_line = truncate(&w.footer_cache.album_title, max_text_width);
+    let footer = Paragraph::new(vec![Line::from(song_line), Line::from(album_line)]);
     let bar = Gauge::default()
         .label(bar_str)
         .gauge_style(
@@ -142,6 +175,9 @@ pub fn draw_footer(
         ),
     ]));
     let vol = w.playlist.volume().0;
+    if w.footer_cache.last_vol != vol {
+        w.footer_cache.last_vol = vol;
+    }
     let vol_bar_spans = vec![
         Line::from(Span::styled(
             " + ",

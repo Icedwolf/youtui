@@ -1,9 +1,9 @@
 use super::get_sort_keybinds;
 use super::shared_components::{
     BrowserSearchAction, FilterAction, FilterManager, SearchBlock, SortAction, SortManager,
-    get_adjusted_list_column,
+    add_song_to_playlist_impl, add_songs_to_playlist_impl, get_adjusted_list_column,
+    play_song_impl, play_songs_impl,
 };
-use crate::app::AppCallback;
 use crate::app::component::actionhandler::{
     Action, ActionHandler, ComponentEffect, KeyRouter, Scrollable, Suggestable, TextHandler,
     YoutuiEffect,
@@ -24,9 +24,10 @@ use crate::widgets::ScrollingTableState;
 use anyhow::{Result, bail};
 use async_callback_manager::{AsyncTask, Constraint, NoOpHandler};
 use itertools::Either;
+use ratatui::text::Line;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
-use tracing::warn;
+use tracing::debug;
 use ytmapi_rs::common::SearchSuggestion;
 use ytmapi_rs::parse::SearchResultSong;
 
@@ -42,33 +43,9 @@ pub struct SongSearchBrowser {
 }
 impl_youtui_component!(SongSearchBrowser);
 
-#[derive(PartialEq, Clone, Copy, Debug, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum BrowserSongsAction {
-    Filter,
-    Sort,
-    PlaySong,
-    PlaySongs,
-    AddSongToPlaylist,
-    AddSongsToPlaylist,
-}
+use crate::define_browser_songs_action;
 
-impl Action for BrowserSongsAction {
-    fn context(&self) -> std::borrow::Cow<'_, str> {
-        "Song Search Browser".into()
-    }
-    fn describe(&self) -> std::borrow::Cow<'_, str> {
-        match self {
-            BrowserSongsAction::Filter => "Filter",
-            BrowserSongsAction::Sort => "Sort",
-            BrowserSongsAction::PlaySong => "Play song",
-            BrowserSongsAction::PlaySongs => "Play songs",
-            BrowserSongsAction::AddSongToPlaylist => "Add song to playlist",
-            BrowserSongsAction::AddSongsToPlaylist => "Add songs to playlist",
-        }
-        .into()
-    }
-}
+define_browser_songs_action!(BrowserSongsAction, "Song Search Browser");
 
 #[derive(Default)]
 pub enum InputRouting {
@@ -105,8 +82,8 @@ impl Scrollable for SongSearchBrowser {
                     .saturating_add_signed(amount)
                     .min(self.get_sortable_columns().len().saturating_sub(1));
             }
-            InputRouting::Search => warn!("Tried to increment list when in search box"),
-            InputRouting::Filter => warn!("Tried to increment list when filter popup shown"),
+            InputRouting::Search => debug!("Tried to increment list when in search box"),
+            InputRouting::Filter => debug!("Tried to increment list when filter popup shown"),
         }
     }
     fn is_scrollable(&self) -> bool {
@@ -339,24 +316,23 @@ impl AdvancedTableView for SongSearchBrowser {
     }
 }
 impl HasTitle for SongSearchBrowser {
-    fn get_title(&self) -> std::borrow::Cow<'_, str> {
+    fn get_title(&self) -> Line<'static> {
         match self.song_list.state {
-            ListStatus::New => "Songs".into(),
-            ListStatus::Loading => "Songs - loading".into(),
-            ListStatus::InProgress => format!(
+            ListStatus::New => Line::from("Songs"),
+            ListStatus::Loading => Line::from("Songs - loading"),
+            ListStatus::InProgress => Line::from(format!(
                 "Songs - {} results - loading",
                 self.song_list.get_list_iter().len()
-            )
-            .into(),
+            )),
             ListStatus::Loaded => {
                 let len = self.song_list.get_list_iter().len();
                 if len == 0 {
-                    "Songs - no songs found".into()
+                    Line::from("Songs - no songs found")
                 } else {
-                    format!("Songs - {len} results").into()
+                    Line::from(format!("Songs - {len} results"))
                 }
             }
-            ListStatus::Error => "Songs - Error received".into(),
+            ListStatus::Error => Line::from("Songs - Error received"),
         }
     }
 }
@@ -389,8 +365,12 @@ impl SongSearchBrowser {
                 bail!(format!("Unable to sort column {}", c.column,));
             }
             self.song_list.sort(
-                get_adjusted_list_column(c.column, Self::subcolumns_of_vec())
-                    .ok_or_else(|| anyhow::anyhow!("Unable to sort column, doesn't match up with underlying list. {}", c.column))?,
+                get_adjusted_list_column(c.column, Self::subcolumns_of_vec()).ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "Unable to sort column, doesn't match up with underlying list. {}",
+                        c.column
+                    )
+                })?,
                 c.direction,
             );
         }
@@ -475,27 +455,27 @@ impl SongSearchBrowser {
     }
     pub fn handle_sort_cur_asc(&mut self) {
         let Some(column) = self.get_sortable_columns().get(self.sort.cur).copied() else {
-            warn!("Tried to index sortable columns but was out of range");
+            debug!("Tried to index sortable columns but was out of range");
             return;
         };
         if let Err(e) = self.push_sort_command(TableSortCommand {
             column,
             direction: SortDirection::Asc,
         }) {
-            warn!("Tried to sort a column that is not sortable - error {e}")
+            debug!("Tried to sort a column that is not sortable - error {e}")
         };
         self.close_sort();
     }
     pub fn handle_sort_cur_desc(&mut self) {
         let Some(column) = self.get_sortable_columns().get(self.sort.cur).copied() else {
-            warn!("Tried to index sortable columns but was out of range");
+            debug!("Tried to index sortable columns but was out of range");
             return;
         };
         if let Err(e) = self.push_sort_command(TableSortCommand {
             column,
             direction: SortDirection::Desc,
         }) {
-            warn!("Tried to sort a column that is not sortable - error {e}")
+            debug!("Tried to sort a column that is not sortable - error {e}")
         };
         self.close_sort();
     }
@@ -549,17 +529,9 @@ impl SongSearchBrowser {
         )
     }
     pub fn play_song(&mut self) -> impl Into<YoutuiEffect<Self>> + use<> {
-        // Consider how resource intensive this is as it runs in the main thread.
-        let cur_song_idx = self.get_selected_item();
-        if let Some(cur_song) = self.get_song_from_idx(cur_song_idx) {
-            return (
-                AsyncTask::new_no_op(),
-                Some(AppCallback::AddSongsToPlaylistAndPlay(vec![
-                    cur_song.clone(),
-                ])),
-            );
-        }
-        (AsyncTask::new_no_op(), None)
+        play_song_impl::<Self>(self.get_selected_item(), |idx| {
+            self.get_song_from_idx(idx).cloned()
+        })
     }
     pub fn play_songs(&mut self) -> impl Into<YoutuiEffect<Self>> + use<> {
         let cur_idx = self.get_selected_item();
@@ -568,11 +540,12 @@ impl SongSearchBrowser {
             .skip(cur_idx)
             .cloned()
             .collect();
-        (
-            AsyncTask::new_no_op(),
-            Some(AppCallback::AddSongsToPlaylistAndPlay(song_list)),
-        )
-
+        play_songs_impl::<Self>(song_list)
+    }
+    pub fn add_song_to_playlist(&mut self) -> impl Into<YoutuiEffect<Self>> + use<> {
+        add_song_to_playlist_impl::<Self>(self.get_selected_item(), |idx| {
+            self.get_song_from_idx(idx).cloned()
+        })
     }
     pub fn add_songs_to_playlist(&mut self) -> impl Into<YoutuiEffect<Self>> + use<> {
         let cur_idx = self.get_selected_item();
@@ -581,27 +554,13 @@ impl SongSearchBrowser {
             .skip(cur_idx)
             .cloned()
             .collect();
-        (
-            AsyncTask::new_no_op(),
-            Some(AppCallback::AddSongsToPlaylist(song_list)),
-        )
-    }
-    pub fn add_song_to_playlist(&mut self) -> impl Into<YoutuiEffect<Self>> + use<> {
-        // Consider how resource intensive this is as it runs in the main thread.
-        let cur_idx = self.get_selected_item();
-        if let Some(cur_song) = self.get_song_from_idx(cur_idx) {
-            return (
-                AsyncTask::new_no_op(),
-                Some(AppCallback::AddSongsToPlaylist(vec![cur_song.clone()])),
-            );
-        }
-        (AsyncTask::new_no_op(), None)
+        add_songs_to_playlist_impl::<Self>(song_list)
     }
     pub fn replace_song_list(&mut self, song_list: Vec<SearchResultSong>) {
         self.song_list.clear();
         self.song_list.append_raw_search_result_songs(song_list);
         if let Err(e) = self.apply_all_sort_commands() {
-            warn!("Tried to sort a column that is not sortable - error {e}")
+            debug!("Tried to sort a column that is not sortable - error {e}")
         };
     }
     pub fn get_song_from_idx(&self, idx: usize) -> Option<&ListSong> {
@@ -613,7 +572,7 @@ impl SongSearchBrowser {
             InputRouting::List => self.cur_selected = 0,
             InputRouting::Sort => self.sort.cur = 0,
             InputRouting::Search | InputRouting::Filter => {
-                warn!("go_to_first called while in search/filter mode");
+                debug!("go_to_first called while in search/filter mode");
             }
         }
     }
@@ -631,7 +590,7 @@ impl SongSearchBrowser {
                 self.sort.cur = self.get_sortable_columns().len().saturating_sub(1);
             }
             InputRouting::Search | InputRouting::Filter => {
-                warn!("go_to_last called while in search/filter mode");
+                debug!("go_to_last called while in search/filter mode");
             }
         }
     }

@@ -38,13 +38,12 @@ pub fn draw_header(f: &mut Frame, w: &super::YoutuiWindow, chunk: Rect) {
             };
             vec![
                 Span::styled(
-                    keybinds, // The keybind itself
+                    keybinds,
                     Style::default().bg(BUTTON_BG_COLOUR).fg(BUTTON_FG_COLOUR),
                 ),
-                Span::raw(" ("), // Separator
-                Span::raw(label), // The context/label
-                Span::raw(")"),  // Closing parenthesis
-                Span::raw(" "),  // Space after the entry
+                Span::raw(" "),
+                Span::raw(label),
+                Span::raw("  "),
             ]
         },
     ));
@@ -74,11 +73,8 @@ pub fn draw_header(f: &mut Frame, w: &super::YoutuiWindow, chunk: Rect) {
         .unwrap_or(u16::MAX)
         .saturating_add(2)
         .min(chunk.width.saturating_div(2));
-    let [commands_chunk, tabs_chunk] = Layout::horizontal([
-        Constraint::Min(0),
-        Constraint::Max(tabs_width),
-    ])
-    .areas(chunk);
+    let [commands_chunk, tabs_chunk] =
+        Layout::horizontal([Constraint::Min(0), Constraint::Max(tabs_width)]).areas(chunk);
     f.render_widget(commands_widget, commands_block.inner(commands_chunk));
     f.render_widget(commands_block, commands_chunk);
     f.render_widget(tabs_widget, tabs_block.inner(tabs_chunk));

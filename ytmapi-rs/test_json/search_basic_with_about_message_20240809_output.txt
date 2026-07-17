@@ -386,89 +386,7 @@ SearchResults {
             ],
         },
     ],
-    community_playlists: [
-        Playlist(
-            SearchResultCommunityPlaylist {
-                title: "The Beatles greatest hits",
-                author: "Danny boi",
-                views: "30M views",
-                playlist_id: PlaylistID(
-                    "VLPLxI9rM7N2E01D8pIt0sYF-k5JY4OfAJDe",
-                ),
-                thumbnails: [
-                    Thumbnail {
-                        height: 192,
-                        width: 192,
-                        url: "https://yt3.ggpht.com/Pg02uzbMPmxUzCNxPU19ZsjcEgl5Q5BF_bAsU0biTF8-VNOPJLe74ONVbdSNHzo9rt6ZI3x_LQ=s192",
-                    },
-                    Thumbnail {
-                        height: 576,
-                        width: 576,
-                        url: "https://yt3.ggpht.com/Pg02uzbMPmxUzCNxPU19ZsjcEgl5Q5BF_bAsU0biTF8-VNOPJLe74ONVbdSNHzo9rt6ZI3x_LQ=s576",
-                    },
-                    Thumbnail {
-                        height: 1200,
-                        width: 1200,
-                        url: "https://yt3.ggpht.com/Pg02uzbMPmxUzCNxPU19ZsjcEgl5Q5BF_bAsU0biTF8-VNOPJLe74ONVbdSNHzo9rt6ZI3x_LQ=s1200",
-                    },
-                ],
-            },
-        ),
-        Playlist(
-            SearchResultCommunityPlaylist {
-                title: "The Beatles - Beatles 100 (Official Playlist)",
-                author: "The Beatles",
-                views: "25M views",
-                playlist_id: PlaylistID(
-                    "VLPL0jp-uZ7a4g9FQWW5R_u0pz4yzV4RiOXu",
-                ),
-                thumbnails: [
-                    Thumbnail {
-                        height: 192,
-                        width: 192,
-                        url: "https://yt3.ggpht.com/YBt8Xst5N_I35MAUzdZwh_5ltgdlU7uxsojLYVqUIYUV8GTuKSDZ0K5O1AaFIuH3BZ20b4KbM5U=s192",
-                    },
-                    Thumbnail {
-                        height: 576,
-                        width: 576,
-                        url: "https://yt3.ggpht.com/YBt8Xst5N_I35MAUzdZwh_5ltgdlU7uxsojLYVqUIYUV8GTuKSDZ0K5O1AaFIuH3BZ20b4KbM5U=s576",
-                    },
-                    Thumbnail {
-                        height: 1200,
-                        width: 1200,
-                        url: "https://yt3.ggpht.com/YBt8Xst5N_I35MAUzdZwh_5ltgdlU7uxsojLYVqUIYUV8GTuKSDZ0K5O1AaFIuH3BZ20b4KbM5U=s1200",
-                    },
-                ],
-            },
-        ),
-        Playlist(
-            SearchResultCommunityPlaylist {
-                title: "The Beatles - 30 Greatest Hits, Grandes Éxitos",
-                author: "Play List Music",
-                views: "6.6M views",
-                playlist_id: PlaylistID(
-                    "VLPL4iSbgi3WlCohRy6WQyQU09ihS9V1P7TR",
-                ),
-                thumbnails: [
-                    Thumbnail {
-                        height: 192,
-                        width: 192,
-                        url: "https://yt3.googleusercontent.com/tdKuGKJkmWXUokaEZfz2YRNMxP-4DvdKRdXCLqIkKEAc4P5f4NJxVmL0PcrDxzUqXNkZPLVUkQU=s192",
-                    },
-                    Thumbnail {
-                        height: 576,
-                        width: 576,
-                        url: "https://yt3.googleusercontent.com/tdKuGKJkmWXUokaEZfz2YRNMxP-4DvdKRdXCLqIkKEAc4P5f4NJxVmL0PcrDxzUqXNkZPLVUkQU=s576",
-                    },
-                    Thumbnail {
-                        height: 1200,
-                        width: 1200,
-                        url: "https://yt3.googleusercontent.com/tdKuGKJkmWXUokaEZfz2YRNMxP-4DvdKRdXCLqIkKEAc4P5f4NJxVmL0PcrDxzUqXNkZPLVUkQU=s1200",
-                    },
-                ],
-            },
-        ),
-    ],
+    community_playlists: [],
     songs: [
         SearchResultSong {
             title: "While My Guitar Gently Weeps",
@@ -570,57 +488,7 @@ SearchResults {
             ),
         },
     ],
-    videos: [
-        Video {
-            title: "The Beatles Greatest Hits Full Album - Best Beatles Songs Collection",
-            channel_name: "Music Collection",
-            video_id: VideoID(
-                "l9ZhYl11TpM",
-            ),
-            views: "3.4M views",
-            length: "59:55",
-            thumbnails: [
-                Thumbnail {
-                    height: 225,
-                    width: 400,
-                    url: "https://i.ytimg.com/vi/l9ZhYl11TpM/sddefault.jpg?sqp=-oaymwEWCJADEOEBIAQqCghqEJQEGHgg6AJIWg&rs=AMzJL3nxfODqmYmLj0cDI5sN-EWn_VCI2g",
-                },
-            ],
-        },
-        VideoEpisode {
-            title: "The Beatles - The Beatles Greatest Hits - Most Famous Songs Of The Beatles - The Beatles Full Album",
-            date: Recorded {
-                date: "Jun 23",
-            },
-            channel_name: "Wonderfull Melodies",
-            episode_id: EpisodeID(
-                "_O84AAMhXr0",
-            ),
-            thumbnails: [
-                Thumbnail {
-                    height: 225,
-                    width: 400,
-                    url: "https://i.ytimg.com/vi/_O84AAMhXr0/sddefault.jpg?sqp=-oaymwEWCJADEOEBIAQqCghqEJQEGHgg6AJIWg&rs=AMzJL3mNkYqgo9WasfY5PC7PCgwOJU4qrg",
-                },
-            ],
-        },
-        Video {
-            title: "The Beatles - The Beatles Greatest Hits Of All Time - Best Romantic Love Songs By The Beatles",
-            channel_name: "Soft Rock Music",
-            video_id: VideoID(
-                "5NmYrDNv5lA",
-            ),
-            views: "200K views",
-            length: "1:32:48",
-            thumbnails: [
-                Thumbnail {
-                    height: 225,
-                    width: 400,
-                    url: "https://i.ytimg.com/vi/5NmYrDNv5lA/sddefault.jpg?sqp=-oaymwEWCJADEOEBIAQqCghqEJQEGHgg6AJIWg&rs=AMzJL3nJbSFyjG3WcV_VdcoiOVjbT-Q1GA",
-                },
-            ],
-        },
-    ],
+    videos: [],
     podcasts: [],
     episodes: [],
     profiles: [],

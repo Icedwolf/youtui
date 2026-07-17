@@ -1,0 +1,52 @@
+[
+    GetArtistAlbumsAlbum {
+        title: "Com Lag: 2+2=5",
+        playlist_id: Some(
+            "OLAK5uy_khBf-OqzahfJhFkLozz7cYunqEudm3UdQ",
+        ),
+        browse_id: AlbumID(
+            "MPREb_6Or5FbpBteh",
+        ),
+        category: Some(
+            "Album",
+        ),
+        thumbnails: [
+            Thumbnail {
+                height: 226,
+                width: 226,
+                url: "https://lh3.googleusercontent.com/SRUoXfyB2jcGe_34JAKCIf3Eq2Zk_xpkJN5Z6VhvNlf-3ugVrOHUSm5fAAcBRSDOppl9ndzEHBMNikszIQ=w226-h226-l90-rj",
+            },
+            Thumbnail {
+                height: 544,
+                width: 544,
+                url: "https://lh3.googleusercontent.com/SRUoXfyB2jcGe_34JAKCIf3Eq2Zk_xpkJN5Z6VhvNlf-3ugVrOHUSm5fAAcBRSDOppl9ndzEHBMNikszIQ=w544-h544-l90-rj",
+            },
+        ],
+        year: None,
+    },
+    GetArtistAlbumsAlbum {
+        title: "I Might Be Wrong",
+        playlist_id: Some(
+            "OLAK5uy_kV91KZNvcYmEwK2heGhxZjwfmpGeF1r0s",
+        ),
+        browse_id: AlbumID(
+            "MPREb_WHT29n5quUP",
+        ),
+        category: Some(
+            "Album",
+        ),
+        thumbnails: [
+            Thumbnail {
+                height: 226,
+                width: 226,
+                url: "https://lh3.googleusercontent.com/kiB3ZQeeE2s93YBkk9CTC4Pf1GTv8exEnn5qhdmUuhh7jLsAYT7_m81ejrx6IzaEHBrRj6qG56Y_tfE=w226-h226-l90-rj",
+            },
+            Thumbnail {
+                height: 544,
+                width: 544,
+                url: "https://lh3.googleusercontent.com/kiB3ZQeeE2s93YBkk9CTC4Pf1GTv8exEnn5qhdmUuhh7jLsAYT7_m81ejrx6IzaEHBrRj6qG56Y_tfE=w544-h544-l90-rj",
+            },
+        ],
+        year: None,
+    },
+]
