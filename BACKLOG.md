@@ -1,8 +1,8 @@
 # Youtui Backlog
 
 **Build:** 0 errors, 0 warnings, 0 clippy
-**Tests:** 282 youtui unit + 98 ytmapi-rs unit + 75 ytmapi-rs doctest passed
-**Last updated:** 2026-07-16
+**Tests:** 286 youtui unit + 98 ytmapi-rs unit + 75 ytmapi-rs doctest passed
+**Last updated:** 2026-07-17
 
 ## Completed
 
@@ -166,6 +166,33 @@ Net: 19 `info!` → `debug!` demotions, 3 `info` imports removed. Remaining 10 `
 - **C1** — Already done: no dead `handle` field in `AsyncRodio` struct.
 - **C2** — Already done: `exit_code_string()` helper exists at line 24-26.
 - **R1** — Already done: both sites already use `debug!` not `warn!`.
+
+## Session 2026-07-17 — Cancellation Fixes, Latency, RAM, Log Noise
+
+### P0 Fix
+
+- **P0** — Cancel scope excludes current song: `download_upcoming_from_id`→`cancel_out_of_scope_downloads` was killing the current song's download token when `handle_playing` fired. Added current ID to cancel scope.
+
+### Playback Latency
+
+- **Semaphore contention** — Moved `resolve_url()` outside `DOWNLOAD_SEMAPHORE`. Previously a cancelled prebuffer holding the semaphore during 2-4s URL resolution blocked the user's song from starting. Now resolution runs in parallel.
+- **Cancellation-aware resolve** — `resolve_url()` accepts `CancellationToken`; aborts mid-resolution via `tokio::select!` when cancelled, instead of running yt-dlp to completion.
+
+### RAM
+
+- **Removed N-1 from download scope** — Prebuffer no longer downloads the previous song for seek-back. Saves ~42MB per preloaded song. Seek-back requires re-download (was already mostly broken — cache evicts prev song).
+
+### Log Noise
+
+- **Cancellation vs real errors** — `is_cancellation_error()` helper distinguishes expected scope-change cancellations from genuine download failures. Cancellation = `debug!`, real = `warn!`.
+- **UI guard warns demoted** — ~20 sites across songs_panel, songsearch, playlistsearch, artistsearch, tab_grid, messages: expected state transitions (wrong-mode keypress, send-failure on dropped receiver, notification failure) → `debug!`.
+
+### Code Quality
+
+- **`is_cancellation_error()` helper** — Consolidates fragile string match in one place.
+- **Block cleanup** — Removed unnecessary block expression in `cancel_scope` construction.
+- **Stale comment** — Updated scope comment (N-1 removed).
+- **Unused `warn` imports** — Removed from 4 files.
 
 ### Open
 
