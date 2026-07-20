@@ -242,11 +242,8 @@ pub async fn download_and_decode(
     // Once cached, resolve_url returns instantly.
     // Multiple songs can resolve in parallel — no semaphore contention.
     let ffmpeg_avail = check_ffmpeg();
-    let cached_url = if ffmpeg_avail {
-        resolve_url(video_id, yt_dlp_command, po_token, Some(&cancel_token)).await
-    } else {
-        None
-    };
+    let cached_url =
+        resolve_url(video_id, yt_dlp_command, po_token, Some(&cancel_token)).await;
 
     if cancel_token.is_cancelled() {
         anyhow::bail!("download cancelled before semaphore");
@@ -727,10 +724,10 @@ pub async fn download_and_decode(
                 (decoder, false)
             }
             Err(stream_err) => {
-                // Streaming failed — wait for full stream.
+                // Streaming failed — release semaphore, wait for full stream.
+                drop(_permit);
                 debug!(%video_id, error = %stream_err,
                     "Streaming decoder init failed, waiting for ffmpeg stream to complete");
-
                 match tokio::time::timeout(
                     std::time::Duration::from_secs(DOWNLOAD_TIMEOUT_S),
                     stdout_handle,
@@ -760,7 +757,6 @@ pub async fn download_and_decode(
                 let source = ReadSeekSource::new(reader, None);
                 let mss = MediaSourceStream::new(Box::new(source), Default::default());
                 let d = SymphoniaDecoder::new(mss).context("decoder (fallback)")?;
-                drop(_permit);
                 (d, true)
             }
         }
@@ -850,11 +846,11 @@ pub async fn download_and_decode(
                 (decoder, false)
             }
             Err(stream_err) => {
-                // Streaming failed — wait for full stream.
+                // Streaming failed — release semaphore, wait for full stream.
+                drop(_permit);
                 let pipe_name = if is_relay { "ffmpeg" } else { "yt-dlp" };
                 debug!(%video_id, error = %stream_err,
                 "Streaming decoder init failed, waiting for {pipe_name} stream to complete");
-
                 match tokio::time::timeout(
                     std::time::Duration::from_secs(DOWNLOAD_TIMEOUT_S),
                     stdout_handle,
@@ -888,7 +884,6 @@ pub async fn download_and_decode(
                 let source = ReadSeekSource::new(reader, Some(_total_len));
                 let mss = MediaSourceStream::new(Box::new(source), Default::default());
                 let d = SymphoniaDecoder::new(mss).context("decoder (fallback)")?;
-                drop(_permit);
                 (d, true)
             }
         }
