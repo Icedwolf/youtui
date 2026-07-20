@@ -19,8 +19,10 @@ use std::borrow::Cow;
 use std::fmt::Display;
 use std::io;
 use std::sync::Arc;
+use server::song_downloader;
 use structures::ListSong;
 use tracing::{debug, error, info, trace, warn};
+use ytmapi_rs::common::YoutubeID;
 use tracing_subscriber::prelude::*;
 use ui::{WindowContext, YoutuiWindow};
 
@@ -172,6 +174,16 @@ impl Youtui {
             Err(e) => {
                 debug!("Auto-load failed ({}). Starting with empty playlist.", e);
             }
+        }
+
+        // Pre-resolve the first song's URL to avoid cold 2-4s latency on first play.
+        if let Some(first_song) = window_state.playlist.list.get_list_iter().next() {
+            let vid = first_song.video_id.get_raw().to_string();
+            let yt_cmd = server.config.yt_dlp_command.clone();
+            let pt = server.po_token.clone();
+            tokio::spawn(async move {
+                song_downloader::resolve_url(&vid, &yt_cmd, pt.as_deref(), None).await;
+            });
         }
 
         Ok(Youtui {
