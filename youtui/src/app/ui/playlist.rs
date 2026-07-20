@@ -1453,6 +1453,7 @@ impl Playlist {
         self.play_status = PlayState::Stopped;
         self.preloaded_sources.clear();
         cache_clear();
+        self.cancel_all_downloads();
         AsyncTask::new_future_option(
             StopAll,
             HandleAllStopped,
