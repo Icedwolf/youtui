@@ -1956,14 +1956,11 @@ impl Playlist {
     ) -> ComponentEffect<Self> {
         match update {
             AutoplayUpdate::PlayProgress(duration, id) => {
-                return self.handle_set_song_play_progress(duration, id);
+                self.handle_set_song_play_progress(duration, id)
             }
-            AutoplayUpdate::Playing(duration, id) => return self.handle_playing(duration, id),
-            AutoplayUpdate::DonePlaying(id) => return self.handle_done_playing(id),
-            AutoplayUpdate::AutoplayQueued(id) => self.handle_autoplay_queued(id),
-            AutoplayUpdate::Error(e) => warn!("{e}"),
+            AutoplayUpdate::Playing(duration, id) => self.handle_playing(duration, id),
+            AutoplayUpdate::DonePlaying(id) => self.handle_done_playing(id),
         }
-        AsyncTask::new_no_op()
     }
 
     pub fn handle_set_song_play_progress(
@@ -2019,14 +2016,6 @@ impl Playlist {
         }
 
         self.autoplay_next_or_stop(id)
-    }
-
-    pub fn handle_autoplay_queued(&mut self, id: ListSongID) {
-        if let QueueState::Queued(q_id) = self.queue_status
-            && id == q_id
-        {
-            self.queue_status = QueueState::NotQueued
-        }
     }
 
     pub fn handle_playing(

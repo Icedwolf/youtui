@@ -261,9 +261,9 @@ Net: 19 `info!` → `debug!` demotions, 3 `info` imports removed. Remaining 10 `
 | F2 | Gapless playback | Blocked on symphonia AAC gapless support (upstream). Not actionable. |
 | F3 | Mouse support | Needs ratatui MouseEvent impl across key stack. Pure scope. |
 | F4 | Offline disk cache | ❌ **REJECTED** — streaming client, not offline jukebox. Serializing 42MB WAV buffers to disk on every shutdown wastes I/O and flash endurance. Song re-downloads faster than disk read. See DECISIONS.md:16. |
-| F5 | Display lyrics | Requires GetLyrics integration + new UI component. Pure scope. |
-| F6 | Theming | Color scheme config. Pure scope. Low demand. |
-| F7 | Stats Tab | CPU/memory/cache metrics in TUI. Pure scope. |
+| F5 | Display lyrics | ❌ **REJECTED** — no new features. Suckless music player. See AGENTS.md. |
+| F6 | Theming | ❌ **REJECTED** — no new features. Suckless music player. See AGENTS.md. |
+| F7 | Stats Tab | ❌ **REJECTED** — no new features. Suckless music player. See AGENTS.md. |
 
 ## Legend
 
