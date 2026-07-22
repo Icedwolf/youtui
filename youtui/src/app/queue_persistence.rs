@@ -1,6 +1,5 @@
 use crate::app::component::actionhandler::ComponentEffect;
 use crate::app::structures::ListSong;
-use crate::app::structures::Thumbnail;
 use crate::app::ui::playlist::{PlayMode, Playlist};
 use crate::get_data_dir;
 use async_callback_manager::AsyncTask;
@@ -14,13 +13,6 @@ use ytmapi_rs::common::VideoID;
 const QUEUE_DIR: &str = "queues";
 const AUTO_SAVE: &str = "__autosave";
 
-fn get_largest_thumbnail_url(thumbs: &[Thumbnail]) -> Option<String> {
-    thumbs
-        .iter()
-        .max_by_key(|t| t.height * t.width)
-        .map(|t| t.url.clone())
-}
-
 impl From<&ListSong> for CompactSongRef {
     fn from(song: &ListSong) -> Self {
         CompactSongRef {
@@ -29,7 +21,6 @@ impl From<&ListSong> for CompactSongRef {
             artists: song.artists.iter().map(|a| a.name.clone()).collect(),
             album: song.album.as_ref().map(|a| a.name.clone()),
             duration_string: song.duration_string.clone(),
-            thumbnail_url: get_largest_thumbnail_url(song.thumbnails.as_ref()),
         }
     }
 }
@@ -47,7 +38,6 @@ pub struct CompactSongRef {
     pub artists: Vec<String>,
     pub album: Option<String>,
     pub duration_string: String,
-    pub thumbnail_url: Option<String>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -150,7 +140,6 @@ fn load_compact_queue(
                     ref_.artists.clone(),
                     ref_.album.clone(),
                     ref_.duration_string.clone(),
-                    ref_.thumbnail_url.clone(),
                 )
             })
             .collect();
@@ -235,7 +224,7 @@ pub fn auto_load(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::app::structures::{AudioQuality, Percentage};
+    use crate::app::structures::Percentage;
     use ytmapi_rs::common::YoutubeID;
 
     #[test]
@@ -247,7 +236,6 @@ mod tests {
             artists: vec!["Artist 1".to_string(), "Artist 2".to_string()],
             album: Some("Test Album".to_string()),
             duration_string: "3:45".to_string(),
-            thumbnail_url: Some("https://example.com/thumb.jpg".to_string()),
         };
         let json = serde_json::to_string_pretty(&song_ref).unwrap();
         assert!(json.contains("abc123"));
@@ -266,8 +254,7 @@ mod tests {
             "title": "Loaded Song",
             "artists": ["Artist X", "Artist Y"],
             "album": "Album Name",
-            "duration_string": "5:00",
-            "thumbnail_url": null
+            "duration_string": "5:00"
         }"#;
 
         let song_ref: CompactSongRef = serde_json::from_str(json).unwrap();
@@ -277,7 +264,6 @@ mod tests {
         assert_eq!(song_ref.artists[0], "Artist X");
         assert_eq!(song_ref.album, Some("Album Name".to_string()));
         assert_eq!(song_ref.duration_string, "5:00");
-        assert!(song_ref.thumbnail_url.is_none());
     }
 
     #[test]
@@ -288,7 +274,6 @@ mod tests {
             artists: vec!["Solo Artist".to_string()],
             album: Some("Album Title".to_string()),
             duration_string: "3:33".to_string(),
-            thumbnail_url: Some("https://example.com/img.jpg".to_string()),
         };
 
         let json = serde_json::to_string(&song_ref).unwrap();
@@ -302,16 +287,9 @@ mod tests {
             "artists",
             "album",
             "duration_string",
-            "thumbnail_url",
         ];
         for key in expected_keys {
             assert!(keys.iter().any(|k| *k == key));
-        }
-
-        // Verify no heavy fields
-        let excluded_keys = vec!["thumbnails", "artists_string"];
-        for key in excluded_keys {
-            assert!(!keys.iter().any(|k| *k == key));
         }
     }
 
@@ -327,7 +305,6 @@ mod tests {
             ],
             album: None,
             duration_string: "4:00".to_string(),
-            thumbnail_url: None,
         };
 
         let json = serde_json::to_string(&song_ref).unwrap();
@@ -348,7 +325,6 @@ mod tests {
                     artists: vec!["Alice".to_string()],
                     album: Some("Album X".to_string()),
                     duration_string: "3:00".to_string(),
-                    thumbnail_url: None,
                 },
                 CompactSongRef {
                     video_id: VideoID::from_raw("v2"),
@@ -356,11 +332,10 @@ mod tests {
                     artists: vec!["Bob".to_string(), "Carol".to_string()],
                     album: None,
                     duration_string: "4:30".to_string(),
-                    thumbnail_url: Some("https://example.com/t.jpg".to_string()),
                 },
             ],
         };
-        let (mut playlist, _effect) = Playlist::new(Percentage(50), AudioQuality::Low);
+        let (mut playlist, _effect) = Playlist::new(Percentage(50));
         let effect = load_compact_queue(&mut playlist, saved).unwrap();
 
         let songs: Vec<_> = playlist.list.get_list_iter().collect();
@@ -390,7 +365,7 @@ mod tests {
             shuffle_seed: 0,
             songs: vec![],
         };
-        let (mut playlist, _effect) = Playlist::new(Percentage(50), AudioQuality::Low);
+        let (mut playlist, _effect) = Playlist::new(Percentage(50));
         let effect = load_compact_queue(&mut playlist, saved).unwrap();
         assert_eq!(playlist.list.get_list_iter().count(), 0);
         assert!(playlist.get_cur_playing_index().is_none());
@@ -410,7 +385,6 @@ mod tests {
                 vec!["Art A".to_string()],
                 Some("Alb A".to_string()),
                 "2:00".to_string(),
-                None,
             ),
             ListSong::create_with_metadata(
                 VideoID::from_raw("b2"),
@@ -418,15 +392,14 @@ mod tests {
                 vec!["Art B".to_string()],
                 None,
                 "3:15".to_string(),
-                Some("https://ex.co/t.jpg".to_string()),
             ),
         ];
-        let (mut playlist, _effect) = Playlist::new(Percentage(50), AudioQuality::Low);
+        let (mut playlist, _effect) = Playlist::new(Percentage(50));
         let (_first_id, _) = playlist.push_song_list(songs);
         save_queue(&playlist, "fs_test").unwrap();
         assert!(tmp.path().join("queues/fs_test.json").exists());
 
-        let (mut loaded, _effect) = Playlist::new(Percentage(50), AudioQuality::Low);
+        let (mut loaded, _effect) = Playlist::new(Percentage(50));
         let _ = load_queue(&mut loaded, "fs_test").unwrap();
         let loaded_songs: Vec<_> = loaded.list.get_list_iter().collect();
         assert_eq!(loaded_songs.len(), 2);
@@ -436,20 +409,19 @@ mod tests {
         assert_eq!(loaded_songs[1].title, "Beta");
 
         // autosave + autoload
-        let (mut p2, _) = Playlist::new(Percentage(50), AudioQuality::Low);
+        let (mut p2, _) = Playlist::new(Percentage(50));
         let xsongs = vec![ListSong::create_with_metadata(
             VideoID::from_raw("x"),
             "X".to_string(),
             vec!["Y".to_string()],
             None,
             "1:00".to_string(),
-            None,
         )];
         let (_first_id2, _) = p2.push_song_list(xsongs);
         auto_save(&p2).unwrap();
         assert!(tmp.path().join("queues/__autosave.json").exists());
 
-        let (mut loaded2, _) = Playlist::new(Percentage(50), AudioQuality::Low);
+        let (mut loaded2, _) = Playlist::new(Percentage(50));
         let _ = auto_load(&mut loaded2).unwrap();
         assert_eq!(loaded2.list.get_list_iter().count(), 1);
         assert_eq!(
@@ -464,7 +436,7 @@ mod tests {
         );
 
         // load nonexistent file errors
-        let (mut p3, _) = Playlist::new(Percentage(50), AudioQuality::Low);
+        let (mut p3, _) = Playlist::new(Percentage(50));
         let result = load_queue(&mut p3, "no_such_queue");
         assert!(result.is_err(), "loading nonexistent queue should error");
     }

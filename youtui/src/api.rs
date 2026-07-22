@@ -6,7 +6,7 @@ pub use error::*;
 use futures::{StreamExt, TryStreamExt};
 use std::borrow::Borrow;
 use ytmapi_rs::auth::noauth::NoAuthToken;
-use ytmapi_rs::auth::{BrowserToken, OAuthToken};
+use ytmapi_rs::auth::BrowserToken;
 use ytmapi_rs::continuations::ParseFromContinuable;
 use ytmapi_rs::parse::ParseFrom;
 use ytmapi_rs::query::{PostQuery, Query};
@@ -17,7 +17,6 @@ macro_rules! try_all {
     ($self:expr, $yt:ident, $($body:tt)*) => {
         match $self {
             DynamicYtMusic::Browser($yt) => $($body)*,
-            DynamicYtMusic::OAuth($yt) => $($body)*,
             DynamicYtMusic::NoAuth($yt) => $($body)*,
         }
     };
@@ -27,10 +26,9 @@ macro_rules! try_auth {
     ($self:expr, $q:ty, $yt:ident, $($body:tt)*) => {
         match $self {
             DynamicYtMusic::Browser($yt) => $($body)*,
-            DynamicYtMusic::OAuth($yt) => $($body)*,
             DynamicYtMusic::NoAuth(_) => bail!(wrong_auth_token_error_message::<$q>(
                 AuthType::Unauthenticated,
-                &[AuthType::Browser, AuthType::OAuth]
+                &[AuthType::Browser]
             )),
         }
     };
@@ -39,7 +37,6 @@ macro_rules! try_auth {
 #[derive(Debug, Clone)]
 pub enum DynamicYtMusic {
     Browser(YtMusic<BrowserToken>),
-    OAuth(YtMusic<OAuthToken>),
     NoAuth(YtMusic<NoAuthToken>),
 }
 
@@ -52,35 +49,15 @@ impl DynamicYtMusic {
                     .build()
                     .await?,
             )),
-            ApiKey::OAuthToken(token) => Ok(DynamicYtMusic::OAuth(
-                YtMusicBuilder::new_rustls_tls()
-                    .with_auth_token(token)
-                    .build()?,
-            )),
             ApiKey::None => Ok(DynamicYtMusic::NoAuth(
                 YtMusicBuilder::new_rustls_tls().build().await?,
             )),
         }
     }
 
-    pub async fn refresh_token(&mut self) -> Result<Option<OAuthToken>> {
-        Ok(match self {
-            DynamicYtMusic::Browser(_) | DynamicYtMusic::NoAuth(_) => None,
-            DynamicYtMusic::OAuth(yt) => Some(yt.refresh_token().await?),
-        })
-    }
-
-    pub fn get_token_hash(&self) -> Result<Option<u64>> {
-        Ok(match self {
-            DynamicYtMusic::Browser(_) | DynamicYtMusic::NoAuth(_) => None,
-            DynamicYtMusic::OAuth(yt) => Some(yt.get_token_hash()),
-        })
-    }
-
     pub async fn query<Q, O>(&self, query: impl Borrow<Q>) -> Result<O>
     where
         Q: Query<BrowserToken, Output = O>,
-        Q: Query<OAuthToken, Output = O>,
         Q: Query<NoAuthToken, Output = O>,
     {
         Ok(try_all!(self, yt, yt.query(query).await?))
@@ -89,7 +66,6 @@ impl DynamicYtMusic {
     pub async fn query_browser_or_oauth<Q, O>(&self, query: impl Borrow<Q>) -> Result<O>
     where
         Q: Query<BrowserToken, Output = O>,
-        Q: Query<OAuthToken, Output = O>,
     {
         Ok(try_auth!(self, Q, yt, yt.query(query).await?))
     }
@@ -97,7 +73,6 @@ impl DynamicYtMusic {
     pub async fn _stream<Q, O>(&self, query: impl Borrow<Q>, max_pages: usize) -> Result<Vec<O>>
     where
         Q: Query<BrowserToken, Output = O>,
-        Q: Query<OAuthToken, Output = O>,
         Q: Query<NoAuthToken, Output = O>,
         O: ParseFromContinuable<Q>,
         Q: PostQuery,
@@ -119,7 +94,6 @@ impl DynamicYtMusic {
     ) -> Result<Vec<O>>
     where
         Q: Query<BrowserToken, Output = O>,
-        Q: Query<OAuthToken, Output = O>,
         O: ParseFromContinuable<Q>,
         Q: PostQuery,
     {
@@ -137,7 +111,6 @@ impl DynamicYtMusic {
     pub async fn query_source<Q, O>(&self, query: impl Borrow<Q>) -> Result<String>
     where
         Q: Query<BrowserToken, Output = O>,
-        Q: Query<OAuthToken, Output = O>,
         Q: Query<NoAuthToken, Output = O>,
     {
         Ok(try_all!(self, yt, yt.raw_json_query(query).await?))
@@ -146,7 +119,6 @@ impl DynamicYtMusic {
     pub async fn query_source_browser_or_oauth<Q, O>(&self, query: impl Borrow<Q>) -> Result<String>
     where
         Q: Query<BrowserToken, Output = O>,
-        Q: Query<OAuthToken, Output = O>,
     {
         Ok(try_auth!(self, Q, yt, yt.raw_json_query(query).await?))
     }
@@ -154,7 +126,6 @@ impl DynamicYtMusic {
     pub async fn _stream_source<Q, O>(&self, query: &Q, max_pages: usize) -> Result<String>
     where
         Q: Query<BrowserToken, Output = O>,
-        Q: Query<OAuthToken, Output = O>,
         Q: Query<NoAuthToken, Output = O>,
         Q: PostQuery,
         O: ParseFromContinuable<Q>,
@@ -179,7 +150,6 @@ impl DynamicYtMusic {
     ) -> Result<String>
     where
         Q: Query<BrowserToken, Output = O>,
-        Q: Query<OAuthToken, Output = O>,
         Q: PostQuery,
         O: ParseFromContinuable<Q>,
         O: ParseFrom<Q>,

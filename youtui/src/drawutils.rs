@@ -2,7 +2,7 @@ use rat_text::HasScreenCursor;
 use rat_text::text_input::TextInput;
 use rat_text::text_input::TextInputState;
 use ratatui::Frame;
-use ratatui::prelude::Rect;
+use ratatui::layout::Rect;
 use ratatui::style::{Color, Style};
 use ratatui::widgets::{Block, Borders};
 
@@ -30,12 +30,6 @@ pub fn draw_text_box(
         .border_style(Style::default().fg(SELECTED_BORDER_COLOUR))
         .title(title.as_ref());
     let text_chunk = block_widget.inner(chunk);
-    let text_chunk = Rect {
-        x: text_chunk.x,
-        y: text_chunk.y,
-        width: text_chunk.width.saturating_sub(1),
-        height: text_chunk.height,
-    };
     let text_widget = TextInput::new();
     f.render_widget(block_widget, chunk);
     f.render_stateful_widget(text_widget, text_chunk, contents);

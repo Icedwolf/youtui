@@ -1,7 +1,6 @@
 //! Module to contain code related to errors that could be produced by the API.
 use core::fmt::{Debug, Display};
 pub use json_crawler::CrawlerError as JsonError;
-use std::hash::{Hash, Hasher};
 use std::io;
 use std::time::SystemTimeError;
 
@@ -38,21 +37,12 @@ pub enum ErrorKind {
     Header {
         message: String,
     },
-    UnableToSerializeGoogleOAuthToken {
-        response: String,
-        err: serde_json::Error,
-    },
     /// ytcfg not in expected format.
     UnableToParseYtCfg {
         ytcfg: String,
     },
     /// ytcfg didn't include visitor data.
     NoVisitorData,
-    /// OAuthToken has expired.
-    /// Returns a hash of the expired token generated using the default hasher.
-    OAuthTokenExpired {
-        token_hash: u64,
-    },
     // This is a u64 not a usize as that is what serde_json will deserialize to.
     // TODO: Could use a library to handle these.
     /// Recieved an error code in the Json reply from InnerTube.
@@ -84,14 +74,6 @@ impl Error {
     pub fn into_kind(self) -> ErrorKind {
         *self.inner
     }
-    pub(crate) fn oauth_token_expired(token: &crate::auth::OAuthToken) -> Self {
-        let mut h = std::hash::DefaultHasher::new();
-        token.hash(&mut h);
-        let token_hash = h.finish();
-        Self {
-            inner: Box::new(ErrorKind::OAuthTokenExpired { token_hash }),
-        }
-    }
     pub(crate) fn header(message: impl Into<String>) -> Self {
         Self {
             inner: Box::new(ErrorKind::Header {
@@ -115,15 +97,6 @@ impl Error {
         let response = response.into();
         Self {
             inner: Box::new(ErrorKind::InvalidResponse { response }),
-        }
-    }
-    pub(crate) fn unable_to_serialize_oauth<S: Into<String>>(
-        response: S,
-        err: serde_json::Error,
-    ) -> Self {
-        let response = response.into();
-        Self {
-            inner: Box::new(ErrorKind::UnableToSerializeGoogleOAuthToken { response, err }),
         }
     }
     pub(crate) fn other_code(code: u64, message: String) -> Self {
@@ -177,11 +150,6 @@ impl Display for ErrorKind {
                 )
             }
             ErrorKind::ApiStatusFailed => write!(f, "Api returned STATUS_FAILED for the query"),
-            ErrorKind::OAuthTokenExpired { token_hash: _ } => write!(f, "OAuth token has expired"),
-            ErrorKind::UnableToSerializeGoogleOAuthToken { response, err } => write!(
-                f,
-                "Unable to serialize Google auth token {response}, received error {err}"
-            ),
             ErrorKind::SystemTimeError { message } => write!(
                 f,
                 "Error obtaining system time to use in API query. <{message}>"

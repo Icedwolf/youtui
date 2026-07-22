@@ -29,32 +29,6 @@
 //!     Ok(())
 //! }
 //! ```
-//! ### OAuth authenticated usage, using the workflow, and builder method to re-use the `Client`.
-//! ```no_run
-//! #[tokio::main]
-//! pub async fn main() -> Result<(), ytmapi_rs::Error> {
-//!     let client = ytmapi_rs::Client::new().unwrap();
-//!     // A Client ID and Client Secret must be provided - see `youtui` README.md.
-//!     // In this example, I assume they were put in environment variables beforehand.
-//!     let client_id = std::env::var("YOUTUI_OAUTH_CLIENT_ID").unwrap();
-//!     let client_secret = std::env::var("YOUTUI_OAUTH_CLIENT_SECRET").unwrap();
-//!     let (code, url) = ytmapi_rs::generate_oauth_code_and_url(&client, &client_id).await?;
-//!     println!("Go to {url}, finish the login flow, and press enter when done");
-//!     let mut _buf = String::new();
-//!     let _ = std::io::stdin().read_line(&mut _buf);
-//!     let token =
-//!         ytmapi_rs::generate_oauth_token(&client, code, client_id, client_secret).await?;
-//!     // NOTE: The token can be re-used until it expires, and refreshed once it has,
-//!     // so it's recommended to save it to a file here.
-//!     let yt = ytmapi_rs::YtMusicBuilder::new_with_client(client)
-//!         .with_auth_token(token)
-//!         .build()
-//!         .unwrap();
-//!     let result = yt.get_search_suggestions("Beatles").await?;
-//!     println!("{:?}", result);
-//!     Ok(())
-//! }
-//! ```
 //! ## Optional Features
 //! ### TLS
 //! NOTE: reqwest will prefer to utilise default-tls if multiple features are
@@ -75,8 +49,7 @@
 compile_error!("One of the TLS features must be enabled for this crate");
 use auth::browser::BrowserToken;
 use auth::noauth::NoAuthToken;
-use auth::oauth::OAuthDeviceCode;
-use auth::{AuthToken, OAuthToken, OAuthTokenGenerator, RawResult};
+use auth::{AuthToken, RawResult};
 #[doc(inline)]
 pub use builder::YtMusicBuilder;
 #[doc(inline)]
@@ -92,7 +65,6 @@ use parse::ParseFrom;
 pub use parse::ProcessedResult;
 use query::{PostQuery, Query, QueryMethod};
 use std::borrow::Borrow;
-use std::hash::{DefaultHasher, Hash, Hasher};
 use std::path::Path;
 
 #[macro_use]
@@ -177,29 +149,6 @@ impl YtMusic<BrowserToken> {
     /// # };
     pub async fn upload_song(&self, file_path: impl AsRef<Path>) -> Result<ApiOutcome> {
         upload_song::upload_song(file_path, &self.token, &self.client).await
-    }
-}
-impl YtMusic<OAuthToken> {
-    /// Create a new API handle using an OAuthToken.
-    /// Utilises the default TLS option for the enabled features.
-    #[deprecated = "Use generic `from_auth_token` instead"]
-    pub fn from_oauth_token(token: OAuthToken) -> Result<YtMusic<OAuthToken>> {
-        let client = Client::new()?;
-        Ok(YtMusic { client, token })
-    }
-    /// Refresh the internal oauth token, and return a clone of it (for user to
-    /// store locally, e.g).
-    pub async fn refresh_token(&mut self) -> Result<OAuthToken> {
-        let refreshed_token = self.token.refresh(&self.client).await?;
-        self.token = refreshed_token.clone();
-        Ok(refreshed_token)
-    }
-    /// Get a hash of the internal oauth token, for use in comparison
-    /// operations.
-    pub fn get_token_hash(&self) -> u64 {
-        let mut h = DefaultHasher::new();
-        self.token.hash(&mut h);
-        h.finish()
     }
 }
 impl<A: AuthToken> YtMusic<A> {
@@ -323,57 +272,6 @@ impl<A: AuthToken> YtMusic<A> {
     {
         continuations::raw_json_stream(query, &self.client, &self.token)
     }
-}
-/// Generates a tuple containing fresh OAuthDeviceCode and corresponding url for
-/// you to authenticate yourself at.
-/// This requires a [`Client`] to run.
-/// (OAuthDeviceCode, URL)
-/// # Usage
-/// ```no_run
-/// #  async {
-/// let client = ytmapi_rs::Client::new().unwrap();
-/// // A Client ID must be provided - see `youtui` README.md.
-/// // In this example, I assume it was put in an environment variable beforehand.
-/// let client_id = std::env::var("YOUTUI_OAUTH_CLIENT_ID").unwrap();
-/// let (code, url) = ytmapi_rs::generate_oauth_code_and_url(&client, client_id).await?;
-/// # Ok::<(), ytmapi_rs::Error>(())
-/// # };
-/// ```
-pub async fn generate_oauth_code_and_url(
-    client: &Client,
-    client_id: impl Into<String>,
-) -> Result<(OAuthDeviceCode, String)> {
-    let code = OAuthTokenGenerator::new(client, client_id).await?;
-    let url = format!("{}?user_code={}", code.verification_url, code.user_code);
-    Ok((code.device_code, url))
-}
-/// Generates an OAuth Token when given an OAuthDeviceCode.
-/// This requires a [`Client`] to run.
-/// # Usage
-/// ```no_run
-/// #  async {
-/// let client = ytmapi_rs::Client::new().unwrap();
-/// // A Client ID and Client Secret must be provided - see `youtui` README.md.
-/// // In this example, I assume they were put in environment variables beforehand.
-/// let client_id = std::env::var("YOUTUI_OAUTH_CLIENT_ID").unwrap();
-/// let client_secret = std::env::var("YOUTUI_OAUTH_CLIENT_SECRET").unwrap();
-/// let (code, url) = ytmapi_rs::generate_oauth_code_and_url(&client, &client_id).await?;
-/// println!("Go to {url}, finish the login flow, and press enter when done");
-/// let mut buf = String::new();
-/// let _ = std::io::stdin().read_line(&mut buf);
-/// let token = ytmapi_rs::generate_oauth_token(&client, code, client_id, client_secret).await;
-/// assert!(token.is_ok());
-/// # Ok::<(), ytmapi_rs::Error>(())
-/// # };
-/// ```
-pub async fn generate_oauth_token(
-    client: &Client,
-    code: OAuthDeviceCode,
-    client_id: impl Into<String>,
-    client_secret: impl Into<String>,
-) -> Result<OAuthToken> {
-    let token = OAuthToken::from_code(client, code, client_id, client_secret).await?;
-    Ok(token)
 }
 /// Generates a Browser Token when given a browser cookie.
 /// This requires a [`Client`] to run.

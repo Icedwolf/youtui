@@ -2,8 +2,7 @@ use crate::api::{DynamicApiError, DynamicYtMusic};
 use crate::app::CALLBACK_CHANNEL_SIZE;
 use crate::async_rodio_sink::send_or_error;
 use crate::config::ApiKey;
-use crate::{OAUTH_FILENAME, get_config_dir};
-use anyhow::{Context, Error, Result};
+use anyhow::{Error, Result};
 use async_callback_manager::PanickingReceiverStream;
 use async_cell::sync::AsyncCell;
 use futures::stream::FuturesUnordered;
@@ -14,12 +13,11 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::collections::hash_map;
 use std::sync::Arc;
-use tokio::io::AsyncWriteExt;
 use tokio::sync::RwLock;
 use tracing::{debug, info, trace, warn};
-use ytmapi_rs::auth::{BrowserToken, OAuthToken};
+use ytmapi_rs::auth::BrowserToken;
 use ytmapi_rs::common::{
-    AlbumID, ArtistChannelID, PlaylistID, SearchSuggestion, Thumbnail, VideoID, YoutubeID,
+    AlbumID, ArtistChannelID, PlaylistID, SearchSuggestion, VideoID, YoutubeID,
 };
 use ytmapi_rs::parse::{
     AlbumSong, GetAlbum, GetArtistAlbums, GetArtistAlbumsAlbum, ParsedSongAlbum, ParsedSongArtist,
@@ -74,10 +72,9 @@ impl Api {
     pub fn get_playlist_songs(
         &self,
         playlist_id: PlaylistID<'static>,
-        max_results: usize,
     ) -> impl Stream<Item = GetPlaylistSongsProgressUpdate> + 'static + use<> {
         let api = self.api.clone();
-        get_playlist_songs(api, playlist_id, max_results)
+        get_playlist_songs(api, playlist_id)
     }
     pub fn get_artist_songs(
         &self,
@@ -160,27 +157,10 @@ fn resolve_omv_album_songs_with_search(
     );
 }
 
-/// Update the local oauth token file.
-async fn update_oauth_token_file(token: OAuthToken) -> Result<()> {
-    let mut file_path = get_config_dir()?;
-    file_path.push(OAUTH_FILENAME);
-    let mut tmpfile_path = file_path.clone();
-    tmpfile_path.set_extension("json.tmp");
-    let out = serde_json::to_string_pretty(&token)?;
-    info!("Updating oauth token at: {:?}", &file_path);
-    let mut file = tokio::fs::File::create_new(&tmpfile_path).await?;
-    file.write_all(out.as_bytes()).await?;
-    tokio::fs::rename(tmpfile_path, &file_path).await?;
-    info!("Updated oauth token at: {:?}", file_path);
-    Ok(())
-}
-
-/// Run a query. If the oauth token is expired, take the lock and refresh
-/// it (single retry only). If another error occurs, try a single retry too.
+/// Run a query with a single retry on error.
 pub async fn query_api_with_retry<Q, O>(api: &ConcurrentApi, query: impl Borrow<Q>) -> Result<O>
 where
     Q: ytmapi_rs::query::Query<BrowserToken, Output = O>,
-    Q: ytmapi_rs::query::Query<OAuthToken, Output = O>,
 {
     let res = api
         .read()
@@ -191,47 +171,11 @@ where
         Ok(r) => Ok(r),
         Err(e) => {
             trace!("Got error {e} from api");
-            match e.downcast::<ytmapi_rs::Error>().map(|e| e.into_kind()) {
-                Ok(ytmapi_rs::error::ErrorKind::OAuthTokenExpired { token_hash }) => {
-                    // Take a clone to re-use later.
-                    let api_clone = api.to_owned();
-                    // First take an exclusive lock - prevent others from doing the same.
-                    let api_owned = api_clone.clone();
-                    let mut api_locked = api_owned.write_owned().await;
-                    // Then check to see if the token_hash hasn't changed since calling the
-                    // query. If it hasn't, we were the first one and are responsible for
-                    // refreshing. If it has, that means another query must have
-                    // already refreshed the token, and we don't need to do
-                    // anything.
-                    let api_token_hash = api_locked.get_token_hash()?;
-                    if api_token_hash == Some(token_hash) {
-                        // Spawn to move the write guard into another task,
-                        // releasing the RwLock so other operations can proceed
-                        // during the long-running token refresh.
-                        tokio::spawn(async {
-                            info!("Refreshing oauth token");
-                            let tok = api_locked.refresh_token().await?
-                                .context("Expected to be able to refresh token after OAuthTokenExpired error")?;
-                            info!("Oauth token refreshed");
-                            if let Err(e) = update_oauth_token_file(tok).await {
-                                warn!("Error updating locally saved oauth token: <{e}>")
-                            }
-                            Ok::<_,anyhow::Error>(api_locked)
-                        }).await??;
-                    }
-                    Ok(api_clone
-                        .read_owned()
-                        .await
-                        .query_browser_or_oauth(query)
-                        .await?)
-                }
-                // Regular retry without token refresh, if token isn't expired.
+            match e.downcast::<ytmapi_rs::Error>() {
                 Ok(_) => {
                     info!("Retrying once");
                     Ok(api.read().await.query_browser_or_oauth(query).await?)
                 }
-                // If the DynamicApi didn't return a ytmapi_rs::Error, the error must be
-                // non-retryable.
                 Err(e) => Err(e),
             }
         }
@@ -291,7 +235,6 @@ pub struct AlbumSongsData {
     pub album: ParsedSongAlbum,
     pub year: String,
     pub artists: Vec<ParsedSongArtist>,
-    pub thumbnails: Vec<Thumbnail>,
 }
 
 enum PerAlbumResult {
@@ -324,7 +267,7 @@ async fn fetch_and_resolve_album(
         artists,
         year,
         mut tracks,
-        thumbnails,
+        thumbnails: _,
         audio_playlist_id,
         ..
     } = album;
@@ -362,7 +305,6 @@ async fn fetch_and_resolve_album(
             },
             year,
             artists,
-            thumbnails,
         },
     )
 }
@@ -600,7 +542,6 @@ pub enum GetPlaylistSongsProgressUpdate {
 fn get_playlist_songs(
     api: Arc<AsyncCell<Result<ConcurrentApi, DynamicApiError>>>,
     playlist_id: PlaylistID<'static>,
-    _max_results: usize,
 ) -> impl Stream<Item = GetPlaylistSongsProgressUpdate> + 'static {
     let (tx, rx) = tokio::sync::mpsc::channel(CALLBACK_CHANNEL_SIZE);
     let handle = tokio::spawn(async move {

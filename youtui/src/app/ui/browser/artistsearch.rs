@@ -162,12 +162,12 @@ impl ArtistSearchBrowser {
                 data.album,
                 data.year,
                 data.artists,
-                data.thumbnails,
             );
         }
         if let Err(e) = self.songs_panel.apply_all_sort_commands() {
             error!("Error <{e}> sorting album songs panel");
         }
+        self.songs_panel.rebuild_filtered_indices();
         self.songs_panel.list.state = ListStatus::InProgress;
     }
 }

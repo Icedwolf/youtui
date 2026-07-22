@@ -57,6 +57,7 @@ pub struct SongsPanel<C: SongsPanelConfig> {
     pub widget_state: ScrollingTableState,
     _cfg: PhantomData<C>,
     cached_title: RefCell<Option<Line<'static>>>,
+    filtered_indices: Vec<usize>,
 }
 
 impl<C: SongsPanelConfig> SongsPanel<C> {
@@ -70,6 +71,7 @@ impl<C: SongsPanelConfig> SongsPanel<C> {
             widget_state: Default::default(),
             _cfg: PhantomData,
             cached_title: RefCell::new(None),
+            filtered_indices: Vec::new(),
         }
     }
     pub fn subcolumns_of_vec() -> [ListSongDisplayableField; 5] {
@@ -105,6 +107,20 @@ impl<C: SongsPanelConfig> SongsPanel<C> {
                 })
         })
     }
+    pub fn rebuild_filtered_indices(&mut self) {
+        self.filtered_indices = self
+            .list
+            .get_list_iter()
+            .enumerate()
+            .filter(|(_, ls)| {
+                self.get_filter_commands()
+                    .iter()
+                    .all(|command| command.matches_row(ls, Self::subcolumns_of_vec(), self.get_filterable_columns()))
+            })
+            .map(|(actual_idx, _)| actual_idx)
+            .collect();
+    }
+
     pub fn apply_filter(&mut self) {
         self.filter.shown = false;
         self.route = SongsInputRouting::List;
@@ -113,11 +129,12 @@ impl<C: SongsPanelConfig> SongsPanel<C> {
         };
         let cmd =
             TableFilterCommand::All(ViewFilter::Contains(FilterString::case_insensitive(filter)));
-        let prev_max_cur = self.get_filtered_list_iter().count().saturating_sub(1);
+        let prev_max_cur = self.filtered_indices.len().saturating_sub(1);
         let prev_cur = self.cur_selected;
         let prev_offset = self.widget_state.offset();
         self.filter.filter_commands.push(cmd);
-        let new_max_cur = self.get_filtered_list_iter().count().saturating_sub(1);
+        self.rebuild_filtered_indices();
+        let new_max_cur = self.filtered_indices.len().saturating_sub(1);
         self.cur_selected = self.cur_selected.min(new_max_cur);
         *self.widget_state.offset_mut() = get_offset_after_list_resize(
             prev_offset,
@@ -131,6 +148,7 @@ impl<C: SongsPanelConfig> SongsPanel<C> {
         self.filter.shown = false;
         self.route = SongsInputRouting::List;
         self.filter.filter_commands.clear();
+        self.rebuild_filtered_indices();
     }
     fn open_sort(&mut self) {
         self.sort.shown = true;
@@ -197,7 +215,7 @@ impl<C: SongsPanelConfig> SongsPanel<C> {
     pub fn go_to_last(&mut self) {
         match self.route {
             SongsInputRouting::List => {
-                self.cur_selected = self.get_filtered_list_iter().count().saturating_sub(1);
+                self.cur_selected = self.filtered_indices.len().saturating_sub(1);
             }
             SongsInputRouting::Sort => {
                 self.cur_selected = self.get_sortable_columns().len().saturating_sub(1);
@@ -209,7 +227,9 @@ impl<C: SongsPanelConfig> SongsPanel<C> {
 
 impl<C: SongsPanelConfig> SongListComponent for SongsPanel<C> {
     fn get_song_from_idx(&self, idx: usize) -> Option<&ListSong> {
-        self.get_filtered_list_iter().nth(idx)
+        self.filtered_indices
+            .get(idx)
+            .and_then(|&actual_idx| self.list.get_song_from_idx(actual_idx))
     }
 }
 
@@ -273,7 +293,7 @@ impl<C: SongsPanelConfig> Scrollable for SongsPanel<C> {
             self.cur_selected = self
                 .cur_selected
                 .saturating_add_signed(amount)
-                .min(self.get_filtered_list_iter().count().saturating_sub(1))
+                .min(self.filtered_indices.len().saturating_sub(1))
         }
     }
     fn is_scrollable(&self) -> bool {
@@ -309,7 +329,7 @@ impl<C: SongsPanelConfig> TableView for SongsPanel<C> {
 
 impl<C: SongsPanelConfig> AdvancedTableView for SongsPanel<C> {
     fn get_filtered_count(&self) -> usize {
-        self.get_filtered_list_iter().count()
+        self.filtered_indices.len()
     }
     fn get_sortable_columns(&self) -> &[usize] {
         C::sortable_columns()
@@ -346,7 +366,8 @@ impl<C: SongsPanelConfig> AdvancedTableView for SongsPanel<C> {
         &self.filter.filter_commands
     }
     fn clear_filter_commands(&mut self) {
-        self.filter.filter_commands.clear()
+        self.filter.filter_commands.clear();
+        self.rebuild_filtered_indices();
     }
     fn get_sort_popup_cur(&self) -> usize {
         self.sort.cur

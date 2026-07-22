@@ -9,7 +9,7 @@ use crate::app::server::{
     ResolveSongToAudio, Resume, Seek, SeekTo, Stop, StopAll, TaskMetadata,
 };
 use crate::app::structures::{
-    AudioQuality, BrowserSongsList, DownloadStatus, ListSong, ListSongDisplayableField, ListSongID,
+    BrowserSongsList, DownloadStatus, ListSong, ListSongDisplayableField, ListSongID,
     Percentage, PlayState, SongListComponent,
 };
 use crate::app::ui::playlist::effect_handlers::{
@@ -61,6 +61,19 @@ fn is_cancellation_error(msg: &str) -> bool {
     msg.starts_with("download cancelled")
 }
 
+/// Build an inverse visual→actual mapping for O(1) reverse lookups.
+/// Given `indices[visual] == actual`, produces `map[actual] == Some(visual)`.
+/// Entries without a visual position get `None`.
+fn build_visual_map(indices: &[usize], list_len: usize) -> Vec<Option<usize>> {
+    let mut map = vec![None; list_len];
+    for (vis, &actual) in indices.iter().enumerate() {
+        if actual < list_len {
+            map[actual] = Some(vis);
+        }
+    }
+    map
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum QueueState {
     NotQueued,
@@ -85,7 +98,6 @@ pub struct Playlist {
     pub play_status: PlayState,
     pub queue_status: QueueState,
     volume: Percentage,
-    audio_quality: AudioQuality,
     cur_selected: usize,
     pub widget_state: ScrollingTableState,
     shuffle_enabled: bool,
@@ -96,6 +108,10 @@ pub struct Playlist {
     /// Seed used to generate [`shuffle_indices`]. Deterministic — same seed + same
     /// list length always produces the same shuffle order.
     shuffle_seed: u64,
+    /// Inverse of [`shuffle_indices`] for O(1) `actual_to_visual_index` lookups.
+    /// `shuffle_visual_map[actual] == Some(visual)` when shuffle is active.
+    /// Rebuilt whenever `shuffle_indices` changes.
+    shuffle_visual_map: Vec<Option<usize>>,
     // WARNING: std::sync::Mutex held in async context. Do NOT hold the lock across
     // any .await point — acquire, do sync work, drop, then .await. The usages below
     // are all verified safe (lock released before any await).
@@ -108,6 +124,10 @@ pub struct Playlist {
     /// natural order. Index `i` is the list index of the i‑th search result.
     /// When `search_text` is empty, this is `(0..len)` (all entries, natural order).
     search_indices: Vec<usize>,
+    /// Inverse of [`search_indices`] for O(1) `actual_to_visual_index` lookups.
+    /// `search_visual_map[actual] == Some(visual)` when search is active.
+    /// Rebuilt whenever `search_indices` changes.
+    search_visual_map: Vec<Option<usize>>,
     /// Saved `cur_selected` before search was activated — restored when search
     /// is closed so the previously highlighted item regains focus.
     pre_search_selected: usize,
@@ -134,7 +154,6 @@ pub enum PlaylistAction {
     SaveQueue,
     LoadQueue,
     ClearSearch,
-    CycleAudioQuality,
     ResolveAudioTracks,
     AddToPlayNext,
 }
@@ -155,7 +174,6 @@ impl Action for PlaylistAction {
             PlaylistAction::ClearSearch => "Clear Search",
             PlaylistAction::SaveQueue => "Save Queue",
             PlaylistAction::LoadQueue => "Load Queue",
-            PlaylistAction::CycleAudioQuality => "Cycle Audio Quality",
             PlaylistAction::ResolveAudioTracks => "Resolve Audio Tracks",
             PlaylistAction::AddToPlayNext => "Add To Play Next",
         }
@@ -186,17 +204,6 @@ impl ActionHandler<PlaylistAction> for Playlist {
                     (AsyncTask::new_no_op(), None)
                 }
             },
-            PlaylistAction::CycleAudioQuality => {
-                self.audio_quality = match self.audio_quality {
-                    AudioQuality::Best => AudioQuality::High,
-                    AudioQuality::High => AudioQuality::Medium,
-                    AudioQuality::Medium => AudioQuality::Low,
-                    AudioQuality::Low => AudioQuality::Best,
-                };
-                self.cached_title.borrow_mut().take();
-                debug!("Audio quality set to: {:?}", self.audio_quality);
-                (AsyncTask::new_no_op(), None)
-            }
             PlaylistAction::ResolveAudioTracks => {
                 if self.resolving_audio {
                     return (AsyncTask::new_no_op(), None);
@@ -463,7 +470,6 @@ impl TableView for Playlist {
                     PlayState::NotPlaying => Cow::Borrowed(">>>"),
                     PlayState::Playing(_) => Cow::Borrowed(""),
                     PlayState::Paused(_) => Cow::Borrowed(""),
-                    PlayState::Stopped => Cow::Borrowed(">>>"),
                     PlayState::Error(_) => Cow::Borrowed(">>>"),
                     PlayState::Buffering(_) => Cow::Borrowed(""),
                 }
@@ -519,13 +525,6 @@ impl HasTitle for Playlist {
             ""
         };
 
-        let quality_indicator = match self.audio_quality {
-            AudioQuality::Best => " [Q:Best]",
-            AudioQuality::High => " [Q:High]",
-            AudioQuality::Medium => " [Q:Medium]",
-            AudioQuality::Low => " [Q:Low]",
-        };
-
         let resolve_indicator = if self.resolving_audio {
             " [RESOLVING]"
         } else {
@@ -540,7 +539,7 @@ impl HasTitle for Playlist {
 
         let song_count = self.list.get_list_iter().len();
         let base = format!(
-            "Local playlist - {song_count} songs{quality_indicator}{shuffle_indicator}{resolve_indicator}{next_indicator}"
+            "Local playlist - {song_count} songs{shuffle_indicator}{resolve_indicator}{next_indicator}"
         );
 
         let title = if !self.search_text.is_empty() {
@@ -571,7 +570,7 @@ impl SongListComponent for Playlist {
 }
 
 impl Playlist {
-    pub fn new(volume: Percentage, audio_quality: AudioQuality) -> (Self, ComponentEffect<Self>) {
+    pub fn new(volume: Percentage) -> (Self, ComponentEffect<Self>) {
         // No constraint on IncreaseVolume so multiple increments don't kill each
         // other (consecutive +5 presses sum to +10, not +5). SetVolume should
         // eventually be able to kill IncreaseVolume — tracked in backlog.
@@ -585,10 +584,10 @@ impl Playlist {
             cur_played_dur: None,
             cur_selected: 0,
             queue_status: QueueState::NotQueued,
-            audio_quality,
             widget_state: Default::default(),
             shuffle_enabled: false,
             shuffle_indices: Vec::new(),
+            shuffle_visual_map: Vec::new(),
             shuffle_seed: SystemTime::now()
                 .duration_since(SystemTime::UNIX_EPOCH)
                 .unwrap_or_default()
@@ -598,6 +597,7 @@ impl Playlist {
             search_enabled: false,
             search_text: String::new(),
             search_indices: Vec::new(),
+            search_visual_map: Vec::new(),
             pre_search_selected: 0,
             loaded_from_autosave: false,
             preloaded_sources: HashMap::new(),
@@ -751,7 +751,9 @@ impl Playlist {
         }
         self.rebuild_id_cache();
         if removed > 0 {
-            self.generate_shuffle_indices();
+            if self.shuffle_enabled {
+                self.generate_shuffle_indices();
+            }
             self.update_search_indices();
             self.rebuild_row_numbers();
             self.cached_title.borrow_mut().take();
@@ -779,7 +781,11 @@ impl Playlist {
         if let (Some(_current_id), Some(playing_idx)) =
             (self.get_cur_playing_id(), self.get_cur_playing_index())
         {
-            if let Some(shuffled_pos) = self.shuffle_indices.iter().position(|&i| i == playing_idx)
+            if let Some(shuffled_pos) =
+                self.shuffle_visual_map
+                    .get(playing_idx)
+                    .copied()
+                    .flatten()
             {
                 self.cur_selected = shuffled_pos;
             }
@@ -795,7 +801,9 @@ impl Playlist {
         self.list.clear();
         self.id_to_index_cache.clear();
         self.shuffle_indices.clear();
+        self.shuffle_visual_map.clear();
         self.search_indices.clear();
+        self.search_visual_map.clear();
         self.download_queue.clear();
         self.play_next_queue.clear();
         self.preloaded_sources.clear();
@@ -808,7 +816,7 @@ impl Playlist {
     pub fn play_prev(&mut self) -> ComponentEffect<Self> {
         let cur = &self.play_status;
         match cur {
-            PlayState::NotPlaying | PlayState::Stopped => {
+            PlayState::NotPlaying  => {
                 debug!("play_prev: stopped, jumping to last song");
                 let last_visual = self.get_max_visual_index();
                 let last_actual = self.visual_to_actual_index(last_visual);
@@ -950,7 +958,7 @@ impl Playlist {
     ) -> ComponentEffect<Self> {
         let current_id = self.get_cur_playing_id();
         match &self.play_status {
-            PlayState::NotPlaying | PlayState::Stopped => {
+            PlayState::NotPlaying  => {
                 debug!("Asked to play next, but not currently playing");
                 AsyncTask::new_no_op()
             }
@@ -1121,7 +1129,7 @@ impl Playlist {
     pub fn download_song(&mut self, id: ListSongID) -> ComponentEffect<Self> {
         let Some(song_index) = self.get_index_from_id(id) else {
             debug!("download_song: song id {:?} not found", id);
-            self.play_status = PlayState::Stopped;
+            self.play_status = PlayState::NotPlaying;
             return AsyncTask::new_no_op();
         };
 
@@ -1132,7 +1140,7 @@ impl Playlist {
                     "download_song: index {} for id {:?} out of bounds after getting index",
                     song_index, id
                 );
-                self.play_status = PlayState::Stopped;
+                self.play_status = PlayState::NotPlaying;
                 return AsyncTask::new_no_op();
             }
         };
@@ -1177,7 +1185,7 @@ impl Playlist {
                     "download_song: {} failed and no queued songs remaining",
                     video_id
                 );
-                self.play_status = PlayState::Stopped;
+                self.play_status = PlayState::NotPlaying;
                 return AsyncTask::new_no_op();
             }
             _ => {}
@@ -1265,7 +1273,7 @@ impl Playlist {
             | PlayState::Playing(id)
             | PlayState::Paused(id)
             | PlayState::Buffering(id) => Some(id),
-            PlayState::NotPlaying | PlayState::Stopped => None,
+            PlayState::NotPlaying  => None,
         }
     }
 
@@ -1289,7 +1297,7 @@ impl Playlist {
             PlayState::Buffering(_) => '',
             PlayState::Paused(_) => '',
             PlayState::Error(_) => '',
-            PlayState::NotPlaying | PlayState::Stopped => '',
+            PlayState::NotPlaying  => '',
         }
     }
 
@@ -1376,7 +1384,7 @@ impl Playlist {
 
     pub fn handle_next(&mut self) -> ComponentEffect<Self> {
         match self.play_status {
-            PlayState::NotPlaying | PlayState::Stopped => {
+            PlayState::NotPlaying  => {
                 debug!("Asked to play next, but not currently playing");
                 AsyncTask::new_no_op()
             }
@@ -1450,7 +1458,7 @@ impl Playlist {
     }
 
     pub fn stop(&mut self) -> ComponentEffect<Self> {
-        self.play_status = PlayState::Stopped;
+        self.play_status = PlayState::NotPlaying;
         self.preloaded_sources.clear();
         cache_clear();
         self.cancel_all_downloads();
@@ -1533,6 +1541,8 @@ impl Playlist {
                     *idx = idx.saturating_sub(1);
                 }
             }
+            self.shuffle_visual_map =
+                build_visual_map(&self.shuffle_indices, self.list.get_list_iter().count());
         }
 
         self.rebuild_row_numbers();
@@ -1586,6 +1596,7 @@ impl Playlist {
                     playing_idx.min(self.list.get_list_iter().len().saturating_sub(1));
             }
             self.shuffle_indices.clear();
+            self.shuffle_visual_map.clear();
         }
 
         self.rebuild_row_numbers();
@@ -1597,6 +1608,7 @@ impl Playlist {
         let len = self.list.get_list_iter().count();
         if len == 0 {
             self.shuffle_indices.clear();
+            self.shuffle_visual_map.clear();
             return;
         }
 
@@ -1614,6 +1626,7 @@ impl Playlist {
             indices.swap(0, pos);
         }
 
+        self.shuffle_visual_map = build_visual_map(&indices, len);
         self.shuffle_indices = indices;
     }
 
@@ -1642,10 +1655,12 @@ impl Playlist {
     }
 
     fn update_search_indices(&mut self) {
+        let list_len = self.list.get_list_iter().count();
         let search_lower = self.search_text.to_lowercase();
 
         if search_lower.is_empty() {
-            self.search_indices = (0..self.list.get_list_iter().count()).collect();
+            self.search_indices = (0..list_len).collect();
+            self.search_visual_map = build_visual_map(&self.search_indices, list_len);
             return;
         }
 
@@ -1667,6 +1682,7 @@ impl Playlist {
                 }
             })
             .collect();
+        self.search_visual_map = build_visual_map(&self.search_indices, list_len);
         self.rebuild_row_numbers();
     }
 
@@ -1706,24 +1722,27 @@ impl Playlist {
     /// Reverse of [`visual_to_actual_index`]: given an actual (list) index, find
     /// its visual (display) position.
     ///
+    /// Uses pre-built inverse maps for O(1) lookup instead of O(n) linear scan.
     /// Returns `None` if the index does not exist in the current visual mapping
     /// (e.g., it was filtered out by search).
     fn actual_to_visual_index(&self, actual_index: usize) -> Option<usize> {
-        // Search mode: find position in search results directly
         if !self.search_text.is_empty() {
-            return self.search_indices.iter().position(|&i| i == actual_index);
+            return self
+                .search_visual_map
+                .get(actual_index)
+                .copied()
+                .flatten();
         }
 
-        // No search: apply shuffle mapping
-        let shuffled_pos = if self.shuffle_enabled && !self.shuffle_indices.is_empty() {
-            self.shuffle_indices
-                .iter()
-                .position(|&i| i == actual_index)?
-        } else {
-            actual_index
-        };
+        if self.shuffle_enabled && !self.shuffle_indices.is_empty() {
+            return self
+                .shuffle_visual_map
+                .get(actual_index)
+                .copied()
+                .flatten();
+        }
 
-        Some(shuffled_pos)
+        Some(actual_index)
     }
 
     /// Returns the next song to play after `_current_id`, respecting the current
@@ -1779,6 +1798,7 @@ impl Playlist {
         }
         downloads.clear();
         self.download_queue.clear();
+        self.preloaded_sources.clear();
     }
 
     fn cancel_out_of_scope_downloads(&mut self, scope_ids: &[ListSongID]) {
@@ -2063,14 +2083,14 @@ impl Playlist {
         debug!("Received message that playback {:?} has been stopped", id);
         if self.check_id_is_cur(id) {
             debug!("Stopping {:?}", id);
-            self.play_status = PlayState::Stopped;
+            self.play_status = PlayState::NotPlaying;
             self.preloaded_sources.clear();
             cache_clear();
         }
     }
 
     pub fn handle_all_stopped(&mut self, _: AllStopped) {
-        if matches!(self.play_status, PlayState::Stopped | PlayState::NotPlaying) {
+        if matches!(self.play_status, PlayState::NotPlaying) {
             self.preloaded_sources.clear();
             cache_clear();
         }

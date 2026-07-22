@@ -39,7 +39,8 @@ pub struct SongSearchBrowser {
     pub search: SearchBlock,
     pub widget_state: ScrollingTableState,
     pub sort: SortManager,
-    pub filter: FilterManager,
+    pub     filter: FilterManager,
+    filtered_indices: Vec<usize>,
 }
 impl_youtui_component!(SongSearchBrowser);
 
@@ -69,11 +70,10 @@ impl Scrollable for SongSearchBrowser {
     fn increment_list(&mut self, amount: isize) {
         match self.input_routing {
             InputRouting::List => {
-                // Naive check using iterator - consider using exact size iterator
                 self.cur_selected = self
                     .cur_selected
                     .saturating_add_signed(amount)
-                    .min(self.get_filtered_list_iter().count().saturating_sub(1))
+                    .min(self.filtered_indices.len().saturating_sub(1))
             }
             InputRouting::Sort => {
                 self.sort.cur = self
@@ -250,8 +250,7 @@ impl TableView for SongSearchBrowser {
 }
 impl AdvancedTableView for SongSearchBrowser {
     fn get_filtered_count(&self) -> usize {
-        // Cheaper than get_filtered_items().count() — no field extraction.
-        self.get_filtered_list_iter().count()
+        self.filtered_indices.len()
     }
     fn get_sortable_columns(&self) -> &[usize] {
         &[0, 1, 2]
@@ -286,7 +285,8 @@ impl AdvancedTableView for SongSearchBrowser {
         &self.filter.filter_commands
     }
     fn clear_filter_commands(&mut self) {
-        self.filter.filter_commands.clear()
+        self.filter.filter_commands.clear();
+        self.rebuild_filtered_indices();
     }
     fn get_filterable_columns(&self) -> &[usize] {
         &[0, 1, 2]
@@ -295,7 +295,6 @@ impl AdvancedTableView for SongSearchBrowser {
         self.sort.cur
     }
     fn get_filtered_items(&self) -> impl Iterator<Item = impl Iterator<Item = Cow<'_, str>> + '_> {
-        // We are doing a lot here every draw cycle!
         self.get_filtered_list_iter()
             .map(|ls| ls.get_fields(Self::subcolumns_of_vec()).into_iter())
     }
@@ -347,6 +346,7 @@ impl SongSearchBrowser {
             sort: Default::default(),
             filter: Default::default(),
             cur_selected: Default::default(),
+            filtered_indices: Vec::new(),
         }
     }
     pub fn subcolumns_of_vec() -> [ListSongDisplayableField; 5] {
@@ -392,6 +392,20 @@ impl SongSearchBrowser {
                 })
         })
     }
+    fn rebuild_filtered_indices(&mut self) {
+        self.filtered_indices = self
+            .song_list
+            .get_list_iter()
+            .enumerate()
+            .filter(|(_, ls)| {
+                self.get_filter_commands()
+                    .iter()
+                    .all(|command| command.matches_row(ls, Self::subcolumns_of_vec(), self.get_filterable_columns()))
+            })
+            .map(|(actual_idx, _)| actual_idx)
+            .collect();
+    }
+
     pub fn apply_filter(&mut self) {
         self.filter.shown = false;
         self.input_routing = InputRouting::List;
@@ -402,15 +416,13 @@ impl SongSearchBrowser {
         let cmd = TableFilterCommand::All(crate::app::view::Filter::Contains(
             FilterString::case_insensitive(filter),
         ));
-        let prev_max_cur = self.get_filtered_list_iter().count().saturating_sub(1);
+        let prev_max_cur = self.filtered_indices.len().saturating_sub(1);
         let prev_cur = self.cur_selected;
         let prev_offset = self.widget_state.offset();
         self.filter.filter_commands.push(cmd);
-        // Clamp current selected row to length of list.
-        let new_max_cur = self.get_filtered_list_iter().count().saturating_sub(1);
+        self.rebuild_filtered_indices();
+        let new_max_cur = self.filtered_indices.len().saturating_sub(1);
         self.cur_selected = self.cur_selected.min(new_max_cur);
-        // Adjust offset accordingly to ensure if list fits on the screen, offset is
-        // zero.
         *self.widget_state.offset_mut() = get_offset_after_list_resize(
             prev_offset,
             prev_cur,
@@ -559,6 +571,7 @@ impl SongSearchBrowser {
     pub fn replace_song_list(&mut self, song_list: Vec<SearchResultSong>) {
         self.song_list.clear();
         self.song_list.append_raw_search_result_songs(song_list);
+        self.rebuild_filtered_indices();
         if let Err(e) = self.apply_all_sort_commands() {
             debug!("Tried to sort a column that is not sortable - error {e}")
         };
@@ -579,12 +592,7 @@ impl SongSearchBrowser {
     pub fn go_to_last(&mut self) {
         match self.input_routing {
             InputRouting::List => {
-                self.cur_selected = self
-                    .get_filtered_list_iter()
-                    .enumerate()
-                    .last()
-                    .map(|(idx, _)| idx)
-                    .unwrap_or(0);
+                self.cur_selected = self.filtered_indices.len().saturating_sub(1);
             }
             InputRouting::Sort => {
                 self.sort.cur = self.get_sortable_columns().len().saturating_sub(1);

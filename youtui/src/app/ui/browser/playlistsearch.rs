@@ -11,7 +11,6 @@ use tracing::{debug, error};
 use ytmapi_rs::common::PlaylistID;
 use ytmapi_rs::parse::{PlaylistItem, SearchResultPlaylist};
 
-const MAX_PLAYLIST_SONGS: usize = 1000;
 
 pub mod search_panel;
 pub mod songs_panel;
@@ -50,7 +49,6 @@ impl PlaylistSearchBrowser {
         AsyncTask::new_stream(
             GetPlaylistSongs {
                 playlist_id: cur_playlist.playlist_id,
-                max_songs: MAX_PLAYLIST_SONGS,
             },
             HandleGetPlaylistSongs,
             Some(Constraint::new_kill_same_type()),
@@ -83,6 +81,7 @@ impl PlaylistSearchBrowser {
         if let Err(e) = self.songs_panel.apply_all_sort_commands() {
             error!("Error <{e}> sorting playlist songs panel");
         }
+        self.songs_panel.rebuild_filtered_indices();
         self.songs_panel.list.state = ListStatus::InProgress;
     }
 }

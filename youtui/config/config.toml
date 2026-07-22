@@ -22,7 +22,6 @@ C-c = "quit"
 [keybinds.playlist]
 Tab = {action = "playlist.view_browser", visibility = "global"}
 s = {action = "playlist.toggle_shuffle", visibility = "global"}
-A = {action = "playlist.cycle_audio_quality", visibility = "global"}
 r = {action = "playlist.resolve_audio_tracks", visibility = "global"}
 "/" = {action = "playlist.toggle_search", visibility = "global"}
 esc = {action = "playlist.toggle_search", visibility = "hidden"}

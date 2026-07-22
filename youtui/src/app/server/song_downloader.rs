@@ -176,7 +176,8 @@ pub async fn resolve_url(
         None => format!("youtube:skip={skip}"),
     };
 
-    let output_fut = tokio::process::Command::new(cmd)
+    let mut resolve_cmd = tokio::process::Command::new(cmd);
+    resolve_cmd
         .args([
             "--print",
             "url",
@@ -189,8 +190,22 @@ pub async fn resolve_url(
             &url,
         ])
         .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::null())
-        .output();
+        .stderr(std::process::Stdio::null());
+    resolve_cmd.kill_on_drop(true);
+    let mut child = resolve_cmd.spawn().ok()?;
+    let mut stdout_pipe = child.stdout.take()?;
+
+    let output_fut = async move {
+        use tokio::io::AsyncReadExt;
+        let mut buf = Vec::new();
+        stdout_pipe.read_to_end(&mut buf).await?;
+        let status = child.wait().await?;
+        Ok::<_, std::io::Error>(std::process::Output {
+            status,
+            stdout: buf,
+            stderr: Vec::new(),
+        })
+    };
 
     let output = if let Some(ct) = cancel_token {
         tokio::select! {
@@ -210,6 +225,576 @@ pub async fn resolve_url(
 
     url_cache_put(video_id.to_string(), url.clone());
     Some(url)
+}
+
+/// yt-dlp pipeline: spawn yt-dlp (+ optional ffmpeg relay) or use a
+/// pre-resolved stream URL directly with ffmpeg.  Tries streaming decoder
+/// init, falls back to full download on failure.  Returns a decoder and
+/// caches the completed buffer (unless `stream_url` is Some — URL might be
+/// stale, so don't cache the full download).
+///
+/// `stream_url` = pre-resolved stream URL (URL-cache hit).  When provided,
+/// skips yt-dlp entirely and feeds the URL directly to ffmpeg.  When None,
+/// spawns yt-dlp (+ optional ffmpeg relay if available, or direct M4A).
+#[allow(clippy::too_many_arguments)]
+async fn ytdlp_pipeline(
+    yt_dlp_command: &str,
+    video_id: &str,
+    po_token: Option<&str>,
+    cookie_path: Option<PathBuf>,
+    js_runtime: Option<&str>,
+    ffmpeg_avail: bool,
+    cancel_token: tokio_util::sync::CancellationToken,
+    _permit: tokio::sync::SemaphorePermit<'_>,
+    t0: tokio::time::Instant,
+    stream_url: Option<String>,
+) -> anyhow::Result<SymphoniaDecoder> {
+    let from_url_cache = stream_url.is_some();
+    let is_wav = ffmpeg_avail || from_url_cache;
+
+    let buffer = SharedBuffer::new();
+    let mut writer = buffer.writer();
+
+    // ── Data source ──────────────────────────────────────────────────
+    let (_stderr_handle, stdout_handle, mut child, _relay_handle) =
+        if let Some(url) = &stream_url {
+            // URL-cache hit: ffmpeg reads directly from pre-resolved URL.
+            let mut ffmpeg = tokio::process::Command::new("ffmpeg");
+            ffmpeg
+                .args([
+                    "-i",
+                    url,
+                    "-fflags",
+                    "nobuffer",
+                    "-flags",
+                    "low_delay",
+                    "-f",
+                    "wav",
+                    "-loglevel",
+                    "error",
+                    "pipe:1",
+                ])
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::null())
+                .kill_on_drop(true);
+            let mut child = ffmpeg.spawn().context("spawn ffmpeg (stream_url)")?;
+            let ffmpeg_stdout = child.stdout.take().context("no ffmpeg stdout")?;
+
+            let write_handle = tokio::spawn(async move {
+                use tokio::io::AsyncReadExt;
+                let mut rdr = tokio::io::BufReader::new(ffmpeg_stdout);
+                let mut buf = vec![0u8; READ_BUF_SIZE];
+                loop {
+                    match rdr.read(&mut buf).await {
+                        Ok(0) => break,
+                        Ok(n) => writer.write(&buf[..n]),
+                        Err(e) => {
+                            warn!(error = %e, "ffmpeg stdout read error (stream_url), failing buffer");
+                            writer.fail();
+                            return;
+                        }
+                    }
+                }
+                writer.finish();
+            });
+
+            (tokio::spawn(async {}), write_handle, child, None)
+        } else if ffmpeg_avail {
+            // yt-dlp → relay → ffmpeg pipe:0
+            let quality = "ba/bestaudio";
+            let yt_dlp_cmd = if yt_dlp_command.is_empty() {
+                "yt-dlp".to_string()
+            } else {
+                yt_dlp_command.to_string()
+            };
+
+            let mut yt_cmd = tokio::process::Command::new(&yt_dlp_cmd);
+            yt_cmd.args(["-f", quality, "-o", "-", "--no-warnings", "--no-playlist"]);
+
+            let skip = "hls,translated_subs";
+            let extractor_args = match po_token {
+                Some(pt) => format!("youtube:po_token={pt};skip={skip}"),
+                None => format!("youtube:skip={skip}"),
+            };
+            yt_cmd.arg("--extractor-args");
+            yt_cmd.arg(&extractor_args);
+            if let Some(ref cp) = cookie_path {
+                yt_cmd.arg("--cookies");
+                yt_cmd.arg(cp.to_string_lossy().into_owned());
+            }
+            if let Some(js) = js_runtime {
+                yt_cmd.arg("--js-runtimes");
+                yt_cmd.arg(js);
+            }
+
+            yt_cmd.arg(format!("https://music.youtube.com/watch?v={video_id}"));
+            yt_cmd.stdout(std::process::Stdio::piped());
+            yt_cmd.stderr(std::process::Stdio::piped());
+            yt_cmd.kill_on_drop(true);
+            let mut yt_dlp_child = yt_cmd.spawn().context("spawn yt-dlp")?;
+            let yt_stdout = yt_dlp_child
+                .stdout
+                .take()
+                .context("no stdout from yt-dlp")?;
+            let yt_stderr = yt_dlp_child
+                .stderr
+                .take()
+                .context("no stderr from yt-dlp")?;
+            debug!(%video_id, elapsed = ?t0.elapsed(), "yt-dlp spawned");
+
+            let stderr_ct = cancel_token.clone();
+            let buf_for_stderr = buffer.clone();
+            let stderr_handle = tokio::spawn(async move {
+                use tokio::io::AsyncBufReadExt;
+                let reader = tokio::io::BufReader::new(yt_stderr);
+                let mut lines = reader.lines();
+                loop {
+                    if stderr_ct.is_cancelled() {
+                        debug!("yt-dlp stderr handler cancelled (relay)");
+                        return;
+                    }
+                    match lines.next_line().await {
+                        Ok(Some(line)) => {
+                            if let Some(bytes) = parse_total_size(&line) {
+                                debug!(total_bytes = bytes, "Parsed total size from yt-dlp progress");
+                                buf_for_stderr.set_total_len(bytes);
+                            } else if line.contains("ERROR") {
+                                warn!(stderr_line = %line.trim(), "yt-dlp stderr (error), failing buffer");
+                                buf_for_stderr.fail();
+                            } else if line.contains("WARNING") {
+                                debug!(stderr_line = %line.trim(), "yt-dlp stderr (warning)");
+                            }
+                        }
+                        Ok(None) => break,
+                        Err(e) => {
+                            warn!(error = %e, "yt-dlp stderr read error");
+                            break;
+                        }
+                    }
+                }
+                debug!("yt-dlp stderr stream ended");
+            });
+
+            let mut ffmpeg = tokio::process::Command::new("ffmpeg");
+            ffmpeg
+                .args([
+                    "-i",
+                    "pipe:0",
+                    "-fflags",
+                    "nobuffer",
+                    "-flags",
+                    "low_delay",
+                    "-f",
+                    "wav",
+                    "-loglevel",
+                    "error",
+                    "pipe:1",
+                ])
+                .stdin(std::process::Stdio::piped())
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::null())
+                .kill_on_drop(true);
+            let mut ffmpeg_child = ffmpeg.spawn().context("spawn ffmpeg")?;
+            let mut ffmpeg_stdin = ffmpeg_child.stdin.take().context("no ffmpeg stdin")?;
+            let ffmpeg_stdout = ffmpeg_child.stdout.take().context("no ffmpeg stdout")?;
+
+            let relay = tokio::spawn(async move {
+                use tokio::io::{AsyncReadExt, AsyncWriteExt};
+                let mut rdr = tokio::io::BufReader::new(yt_stdout);
+                let mut buf = vec![0u8; READ_BUF_SIZE];
+                loop {
+                    match rdr.read(&mut buf).await {
+                        Ok(0) => break,
+                        Ok(n) => {
+                            if ffmpeg_stdin.write_all(&buf[..n]).await.is_err() {
+                                break;
+                            }
+                        }
+                        Err(_) => break,
+                    }
+                }
+                let _ = ffmpeg_stdin.shutdown().await;
+            });
+
+            let write_handle = tokio::spawn(async move {
+                use tokio::io::AsyncReadExt;
+                let mut rdr = tokio::io::BufReader::new(ffmpeg_stdout);
+                let mut buf = vec![0u8; READ_BUF_SIZE];
+                loop {
+                    match rdr.read(&mut buf).await {
+                        Ok(0) => break,
+                        Ok(n) => writer.write(&buf[..n]),
+                        Err(e) => {
+                            warn!(error = %e, "ffmpeg stdout read error, failing buffer");
+                            writer.fail();
+                            return;
+                        }
+                    }
+                }
+                debug!("ffmpeg stream ended, finishing buffer");
+                writer.finish();
+            });
+
+            (stderr_handle, write_handle, ffmpeg_child, Some(relay))
+        } else {
+            // yt-dlp direct → M4A
+            let quality = "bestaudio[ext=m4a]/bestaudio/bestaudio*";
+            let yt_dlp_cmd = if yt_dlp_command.is_empty() {
+                "yt-dlp".to_string()
+            } else {
+                yt_dlp_command.to_string()
+            };
+
+            let mut yt_cmd = tokio::process::Command::new(&yt_dlp_cmd);
+            yt_cmd.args(["-f", quality, "-o", "-", "--no-warnings", "--no-playlist"]);
+
+            let skip = "hls,translated_subs";
+            let extractor_args = match po_token {
+                Some(pt) => format!("youtube:po_token={pt};skip={skip}"),
+                None => format!("youtube:skip={skip}"),
+            };
+            yt_cmd.arg("--extractor-args");
+            yt_cmd.arg(&extractor_args);
+            if let Some(ref cp) = cookie_path {
+                yt_cmd.arg("--cookies");
+                yt_cmd.arg(cp.to_string_lossy().into_owned());
+            }
+            if let Some(js) = js_runtime {
+                yt_cmd.arg("--js-runtimes");
+                yt_cmd.arg(js);
+            }
+
+            yt_cmd.arg(format!("https://music.youtube.com/watch?v={video_id}"));
+            yt_cmd.stdout(std::process::Stdio::piped());
+            yt_cmd.stderr(std::process::Stdio::piped());
+            yt_cmd.kill_on_drop(true);
+            let mut yt_dlp_child = yt_cmd.spawn().context("spawn yt-dlp")?;
+            let yt_stdout = yt_dlp_child
+                .stdout
+                .take()
+                .context("no stdout from yt-dlp")?;
+            let yt_stderr = yt_dlp_child
+                .stderr
+                .take()
+                .context("no stderr from yt-dlp")?;
+            debug!(%video_id, elapsed = ?t0.elapsed(), "yt-dlp spawned");
+
+            let stderr_ct = cancel_token.clone();
+            let buf_for_stderr = buffer.clone();
+            let stderr_handle = tokio::spawn(async move {
+                use tokio::io::AsyncBufReadExt;
+                let reader = tokio::io::BufReader::new(yt_stderr);
+                let mut lines = reader.lines();
+                loop {
+                    if stderr_ct.is_cancelled() {
+                        return;
+                    }
+                    match lines.next_line().await {
+                        Ok(Some(line)) => {
+                            if let Some(bytes) = parse_total_size(&line) {
+                                debug!(total_bytes = bytes, "Parsed total size from yt-dlp progress");
+                                buf_for_stderr.set_total_len(bytes);
+                            } else if line.contains("ERROR") {
+                                warn!(stderr_line = %line.trim(), "yt-dlp stderr (error), failing buffer");
+                                buf_for_stderr.fail();
+                            } else if line.contains("WARNING") {
+                                debug!(stderr_line = %line.trim(), "yt-dlp stderr (warning)");
+                            }
+                        }
+                        Ok(None) => break,
+                        Err(e) => {
+                            warn!(error = %e, "yt-dlp stderr read error");
+                            break;
+                        }
+                    }
+                }
+                debug!("yt-dlp stderr stream ended");
+            });
+
+            let write_handle = tokio::spawn(async move {
+                use tokio::io::AsyncReadExt;
+                let mut rdr = tokio::io::BufReader::new(yt_stdout);
+                let mut buf = vec![0u8; READ_BUF_SIZE];
+                loop {
+                    match rdr.read(&mut buf).await {
+                        Ok(0) => break,
+                        Ok(n) => writer.write(&buf[..n]),
+                        Err(e) => {
+                            warn!(error = %e, "yt-dlp stdout read error, failing buffer");
+                            writer.fail();
+                            return;
+                        }
+                    }
+                }
+                debug!("yt-dlp stdout stream ended, finishing buffer");
+                writer.finish();
+            });
+
+            (stderr_handle, write_handle, yt_dlp_child, None)
+        };
+
+    // ── Streaming init ──────────────────────────────────────────────
+    let (decoder, needs_cache) = if is_wav {
+        let deadline =
+            tokio::time::Instant::now() + std::time::Duration::from_secs(DECODER_INIT_DEADLINE_S);
+        while buffer.len() < STREAM_INIT_THRESHOLD
+            && tokio::time::Instant::now() < deadline
+            && !buffer.is_failed()
+            && !cancel_token.is_cancelled()
+        {
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
+        if cancel_token.is_cancelled() {
+            bail!("download cancelled during buffering");
+        }
+        if buffer.is_failed() {
+            let reason = if from_url_cache { "ffmpeg" } else { "yt-dlp" };
+            debug!(%video_id, elapsed = ?t0.elapsed(),
+                "{reason} failed before data arrived — bailing early");
+            bail!("format not available ({reason} error)");
+        }
+        let current = buffer.len();
+        if current == 0 {
+            debug!(%video_id, elapsed = ?t0.elapsed(),
+                "No data after {}s, format may be unavailable — bailing early", DECODER_INIT_DEADLINE_S);
+            bail!(
+                "format not available (empty pipe after {}s)",
+                DECODER_INIT_DEADLINE_S
+            );
+        }
+        let stream_type = if from_url_cache {
+            "url-cache→ffmpeg→wav"
+        } else {
+            "ffmpeg→wav"
+        };
+        debug!(%video_id, stream_type, buf_len = current, elapsed = ?t0.elapsed(),
+            "Trying early decoder init");
+
+        match try_streaming_init(&buffer, None).await {
+            Ok(decoder) => {
+                debug!(%video_id, buf_len = buffer.len(), elapsed = ?t0.elapsed(),
+                    "Streaming decoder init succeeded");
+                let log_prefix = if from_url_cache { "ffmpeg (stream_url)" } else { "ffmpeg" };
+                let _cache_task = tokio::spawn(spawn_bg_cache_task(
+                    video_id.to_string(),
+                    cancel_token.clone(),
+                    child,
+                    stdout_handle,
+                    buffer.clone(),
+                    log_prefix,
+                    Some(t0),
+                ));
+                drop(_permit);
+                (decoder, false)
+            }
+            Err(stream_err) => {
+                drop(_permit);
+                debug!(%video_id, error = %stream_err,
+                    "Streaming decoder init failed, waiting for {} stream to complete",
+                    if from_url_cache { "ffmpeg" } else { "ffmpeg relay" });
+                let pipe_label = if from_url_cache { "ffmpeg (stream_url)" } else { "ffmpeg" };
+                match tokio::time::timeout(
+                    std::time::Duration::from_secs(DOWNLOAD_TIMEOUT_S),
+                    stdout_handle,
+                )
+                .await
+                {
+                    Ok(Ok(())) => {}
+                    Ok(Err(join_err)) => {
+                        if from_url_cache {
+                            URL_CACHE.lock().unwrap_or_warn().remove(video_id);
+                        }
+                        bail!("{pipe_label} writer task panicked: {join_err}");
+                    }
+                    Err(_elapsed) => {
+                        let _ = child.start_kill();
+                        if from_url_cache {
+                            URL_CACHE.lock().unwrap_or_warn().remove(video_id);
+                        }
+                        bail!("{pipe_label} download timed out ({}s)", DOWNLOAD_TIMEOUT_S);
+                    }
+                }
+
+                let status = child.wait().await.with_context(|| format!("wait {pipe_label}"))?;
+                if !status.success() {
+                    let code = exit_code_string(&status);
+                    if from_url_cache {
+                        URL_CACHE.lock().unwrap_or_warn().remove(video_id);
+                    }
+                    bail!("{pipe_label} exited with code {code}");
+                }
+                debug!(%video_id, "{pipe_label} completed successfully");
+
+                debug!(%video_id, buf_len = buffer.len(),
+                    "Creating decoder from completed download (fallback)");
+                let reader = buffer.reader();
+                let source = ReadSeekSource::new(reader, None);
+                let mss = MediaSourceStream::new(Box::new(source), Default::default());
+                let d = SymphoniaDecoder::new(mss).context("decoder (fallback)")?;
+                (d, !from_url_cache)
+            }
+        }
+    } else {
+        let _total_len = {
+            let deadline = tokio::time::Instant::now()
+                + std::time::Duration::from_secs(M4A_TOTAL_LEN_TIMEOUT_S);
+            loop {
+                if buffer.is_failed() {
+                    break None;
+                }
+                if cancel_token.is_cancelled() {
+                    break None;
+                }
+                if let Some(tl) = buffer.total_len() {
+                    break Some(tl);
+                }
+                if tokio::time::Instant::now() >= deadline {
+                    break None;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            }
+        }
+        .unwrap_or(buffer.len() as u64);
+
+        if cancel_token.is_cancelled() {
+            bail!("download cancelled during M4A total_len wait");
+        }
+
+        debug!(
+            %video_id,
+            stream_type = "direct m4a",
+            buf_len = buffer.len(),
+            elapsed = ?t0.elapsed(),
+            "Trying early decoder init (spawn_blocking + {}s timeout)", DECODER_INIT_DEADLINE_S
+        );
+        match try_streaming_init(&buffer, Some(_total_len)).await {
+            Ok(decoder) => {
+                debug!(%video_id, buf_len = buffer.len(), elapsed = ?t0.elapsed(),
+                "Streaming decoder init succeeded (M4A)");
+
+                let pipe_name: &str = "yt-dlp";
+                let _handle = tokio::spawn(spawn_bg_cache_task(
+                    video_id.to_string(),
+                    cancel_token.clone(),
+                    child,
+                    stdout_handle,
+                    buffer.clone(),
+                    pipe_name,
+                    None,
+                ));
+
+                drop(_permit);
+                (decoder, false)
+            }
+            Err(stream_err) => {
+                drop(_permit);
+                debug!(%video_id, error = %stream_err,
+                "Streaming decoder init failed, waiting for yt-dlp stream to complete");
+                match tokio::time::timeout(
+                    std::time::Duration::from_secs(DOWNLOAD_TIMEOUT_S),
+                    stdout_handle,
+                )
+                .await
+                {
+                    Ok(Ok(())) => {}
+                    Ok(Err(join_err)) => {
+                        bail!("yt-dlp writer task panicked: {join_err}");
+                    }
+                    Err(_elapsed) => {
+                        let _ = child.start_kill();
+                        bail!("yt-dlp download timed out ({}s)", DOWNLOAD_TIMEOUT_S);
+                    }
+                }
+
+                let status = child
+                    .wait()
+                    .await
+                    .with_context(|| "wait yt-dlp".to_string())?;
+                if !status.success() {
+                    let code = exit_code_string(&status);
+                    bail!("yt-dlp exited with code {code}");
+                }
+                debug!(%video_id, "yt-dlp completed successfully");
+
+                debug!(%video_id, buf_len = buffer.len(),
+                "Creating decoder from completed download (fallback)");
+                let reader = buffer.reader();
+                let source = ReadSeekSource::new(reader, Some(_total_len));
+                let mss = MediaSourceStream::new(Box::new(source), Default::default());
+                let d = SymphoniaDecoder::new(mss).context("decoder (fallback)")?;
+                (d, true)
+            }
+        }
+    };
+
+    if needs_cache {
+        let data = buffer.finalize();
+        debug!(%video_id, len = data.len(), "Caching completed download (fallback)");
+        cache_put(video_id.to_string(), data);
+    }
+
+    debug!(%video_id, elapsed = ?t0.elapsed(), "download_and_decode returning decoder");
+    Ok(decoder)
+}
+
+/// Fire-and-forget background task that waits for a download to complete,
+/// then stores the buffer in the shared byte cache.  Uses `tokio::select!`
+/// with `biased` priority so that cancellation kills the child process
+/// immediately (releasing ~42MB of SharedBuffer) rather than waiting for
+/// the download timeout.  See module-level lifecycle safety invariant.
+async fn spawn_bg_cache_task(
+    vid: String,
+    ct: tokio_util::sync::CancellationToken,
+    mut child: tokio::process::Child,
+    write_handle: tokio::task::JoinHandle<()>,
+    buf: Arc<SharedBuffer>,
+    log_prefix: &'static str,
+    _t0: Option<tokio::time::Instant>,
+) {
+    tokio::select! {
+        biased;
+        _ = ct.cancelled() => {
+            debug!(%vid, "{log_prefix} background cancelled, killing child");
+            let _ = child.start_kill();
+        }
+        result = tokio::time::timeout(
+            std::time::Duration::from_secs(DOWNLOAD_TIMEOUT_S),
+            write_handle,
+        ) => {
+            match result {
+                Ok(Ok(())) => {}
+                Ok(Err(join_err)) => {
+                    error!(%vid, error = %join_err, "{log_prefix} writer task panicked");
+                    return;
+                }
+                Err(_elapsed) => {
+                    warn!(%vid, "{log_prefix} download timed out ({}s), killing", DOWNLOAD_TIMEOUT_S);
+                    let _ = child.start_kill();
+                    return;
+                }
+            }
+            let status = child.wait().await;
+            match status {
+                Ok(s) if !s.success() => {
+                    debug!(%vid, code = exit_code_string(&s),
+                        "{log_prefix} exited with non-zero code (post-stream)");
+                    return;
+                }
+                Ok(_) => {
+                    if let Some(t0) = _t0 {
+                        debug!(%vid, elapsed = ?t0.elapsed(), "{log_prefix} completed successfully");
+                    }
+                }
+                Err(e) => {
+                    debug!(%vid, error = %e, "{log_prefix} wait failed");
+                    return;
+                }
+            }
+            let data = buf.finalize();
+            debug!(%vid, len = data.len(), "Caching completed download ({log_prefix})");
+            cache_put(vid, data);
+        }
+    }
 }
 
 pub async fn download_and_decode(
@@ -260,643 +845,19 @@ pub async fn download_and_decode(
 
     let t0 = tokio::time::Instant::now();
 
-    if let Some(stream_url) = cached_url {
-        let buffer = SharedBuffer::new();
-        let mut writer = buffer.writer();
-
-        debug!(%video_id, elapsed = ?t0.elapsed(), "URL-cache HIT — spawning ffmpeg direct");
-
-        let mut ffmpeg = tokio::process::Command::new("ffmpeg");
-        ffmpeg
-            .args([
-                "-i",
-                &stream_url,
-                "-fflags",
-                "nobuffer",
-                "-flags",
-                "low_delay",
-                "-f",
-                "wav",
-                "-loglevel",
-                "error",
-                "pipe:1",
-            ])
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::null())
-            .kill_on_drop(true);
-        let mut child = ffmpeg.spawn().context("spawn ffmpeg (url-cache)")?;
-        let ffmpeg_stdout = child.stdout.take().context("no ffmpeg stdout")?;
-
-        let write_handle = tokio::spawn(async move {
-            use tokio::io::AsyncReadExt;
-            let mut rdr = tokio::io::BufReader::new(ffmpeg_stdout);
-            let mut buf = vec![0u8; READ_BUF_SIZE];
-            loop {
-                match rdr.read(&mut buf).await {
-                    Ok(0) => break,
-                    Ok(n) => writer.write(&buf[..n]),
-                    Err(e) => {
-                        warn!(error = %e, "ffmpeg stdout read error (url-cache), failing buffer");
-                        writer.fail();
-                        return;
-                    }
-                }
-            }
-            writer.finish();
-        });
-
-        // Wait for enough data, then try streaming init.
-        // WAV header is ~270 bytes (RIFF + fmt + data chunk start),
-        // so STREAM_INIT_THRESHOLD is enough for probe + first audio frame.
-        let deadline =
-            tokio::time::Instant::now() + std::time::Duration::from_secs(DECODER_INIT_DEADLINE_S);
-        while buffer.len() < STREAM_INIT_THRESHOLD
-            && tokio::time::Instant::now() < deadline
-            && !buffer.is_failed()
-            && !cancel_token.is_cancelled()
-        {
-            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
-        }
-
-        if cancel_token.is_cancelled() {
-            anyhow::bail!("download cancelled during buffering");
-        }
-
-        debug!(%video_id, stream_type = "url-cache→ffmpeg→wav",
-            buf_len = buffer.len(), elapsed = ?t0.elapsed(),
-            "Trying early decoder init");
-        match try_streaming_init(&buffer, None).await {
-            Ok(decoder) => {
-                debug!(%video_id, buf_len = buffer.len(), elapsed = ?t0.elapsed(),
-                    "Streaming decoder init succeeded (URL-cache)");
-
-                let vid = video_id.to_string();
-                let buf_for_cache = buffer.clone();
-                // SAFETY: fire-and-forget.  This task captures `child` (ffmpeg
-                // process with kill_on_drop).  Dropping the JoinHandle does NOT
-                // cancel the task — the Child stays alive, ffmpeg continues
-                // filling the buffer, finalize + cache happen when it finishes.
-                // NEVER change this to an abortable handle — see module doc.
-                let _cache_task = tokio::spawn(async move {
-                    match tokio::time::timeout(
-                        std::time::Duration::from_secs(DOWNLOAD_TIMEOUT_S),
-                        write_handle,
-                    )
-                    .await
-                    {
-                        Ok(Ok(())) => {}
-                        Ok(Err(join_err)) => {
-                            error!(%vid, error = %join_err, "ffmpeg writer panicked (url-cache)");
-                            return;
-                        }
-                        Err(_) => {
-                            let _ = child.start_kill();
-                            return;
-                        }
-                    }
-                    let status = child.wait().await;
-                    match status {
-                        Ok(s) if !s.success() => {
-                            debug!(%vid, code = exit_code_string(&s),
-                                "ffmpeg (url-cache) exited with non-zero code");
-                            return;
-                        }
-                        _ => {}
-                    }
-                    let data = buf_for_cache.finalize();
-                    debug!(%vid, len = data.len(), "Caching completed download (url-cache)");
-                    cache_put(vid, data);
-                });
-
-                drop(_permit);
-                debug!(%video_id, elapsed = ?t0.elapsed(), "download_and_decode returning decoder (URL-cache)");
-                return Ok(decoder);
-            }
-            Err(_stream_err) => {
-                debug!(%video_id,
-                    "Streaming decoder init failed (URL-cache), waiting for full download");
-
-                match tokio::time::timeout(
-                    std::time::Duration::from_secs(DOWNLOAD_TIMEOUT_S),
-                    write_handle,
-                )
-                .await
-                {
-                    Ok(Ok(())) => {}
-                    Ok(Err(join_err)) => {
-                        URL_CACHE.lock().unwrap_or_warn().remove(video_id);
-                        bail!("ffmpeg writer panicked (url-cache): {join_err}");
-                    }
-                    Err(_) => {
-                        let _ = child.start_kill();
-                        URL_CACHE.lock().unwrap_or_warn().remove(video_id);
-                        bail!(
-                            "ffmpeg (url-cache) download timed out ({}s)",
-                            DOWNLOAD_TIMEOUT_S
-                        );
-                    }
-                }
-                let status = child.wait().await.context("wait ffmpeg (url-cache)")?;
-                if !status.success() {
-                    let code = exit_code_string(&status);
-                    URL_CACHE.lock().unwrap_or_warn().remove(video_id);
-                    let msg = format!("ffmpeg (url-cache) exited with code {code}");
-                    debug!(%video_id, error = %msg, "Removed stale URL from cache");
-                    bail!("{}", msg);
-                }
-
-                debug!(%video_id, buf_len = buffer.len(),
-                    "Creating decoder from completed download (URL-cache fallback)");
-                let reader = buffer.reader();
-                let source = ReadSeekSource::new(reader, None);
-                let mss = MediaSourceStream::new(Box::new(source), Default::default());
-                let d = SymphoniaDecoder::new(mss).context("decoder (url-cache fallback)")?;
-                drop(_permit);
-                return Ok(d);
-            }
-        }
-    }
-
-    // ── Normal yt-dlp pipeline ────────────────────────────────────────
-    // Download WebM/Opus and pipe through ffmpeg for WAV transcoding.
-    // If ffmpeg not available, fall back to direct M4A.
-    let is_relay = ffmpeg_avail;
-
-    let quality = if is_relay {
-        // ffmpeg handles any container/codec, so use yt-dlp's most permissive
-        // audio-only selector. "ba" = bestaudio* with internal fallback logic.
-        // Avoid extension filters — they reject valid streams for some videos.
-        "ba/bestaudio"
-    } else {
-        // Direct M4A: symphonia isomp4 reader requires AAC-in-MP4.
-        // Opus/webm is not decodable by symphonia 0.5, so restrict to m4a.
-        "bestaudio[ext=m4a]/bestaudio/bestaudio*"
-    };
-
-    let yt_dlp_cmd = if yt_dlp_command.is_empty() {
-        "yt-dlp".to_string()
-    } else {
-        yt_dlp_command.to_string()
-    };
-
-    let buffer = SharedBuffer::new();
-    let mut writer = buffer.writer();
-
-    // ── Spawn yt-dlp ──────────────────────────────────────────────────
-    let mut yt_cmd = tokio::process::Command::new(&yt_dlp_cmd);
-    yt_cmd.args(["-f", quality, "-o", "-", "--no-warnings", "--no-playlist"]);
-
-    let skip = "hls,translated_subs";
-    let extractor_args = match po_token {
-        Some(pt) => format!("youtube:po_token={pt};skip={skip}"),
-        None => format!("youtube:skip={skip}"),
-    };
-    yt_cmd.arg("--extractor-args");
-    yt_cmd.arg(&extractor_args);
-    if let Some(ref cp) = cookie_path {
-        yt_cmd.arg("--cookies");
-        yt_cmd.arg(cp.to_string_lossy().into_owned());
-    }
-    if let Some(js) = js_runtime {
-        yt_cmd.arg("--js-runtimes");
-        yt_cmd.arg(js);
-    }
-
-    yt_cmd.arg(format!("https://music.youtube.com/watch?v={video_id}"));
-    yt_cmd.stdout(std::process::Stdio::piped());
-    yt_cmd.stderr(std::process::Stdio::piped());
-
-    // kill_on_drop is paired with capturing yt_dlp_child in a spawned
-    // task below, so it stays alive as long as the relay pipeline.
-    yt_cmd.kill_on_drop(true);
-    let mut yt_dlp_child = yt_cmd.spawn().context("spawn yt-dlp")?;
-    let yt_stdout = yt_dlp_child
-        .stdout
-        .take()
-        .context("no stdout from yt-dlp")?;
-    let yt_stderr = yt_dlp_child
-        .stderr
-        .take()
-        .context("no stderr from yt-dlp")?;
-    debug!(%video_id, elapsed = ?t0.elapsed(), "yt-dlp spawned");
-
-    // ── Build relay pipeline or read directly ─────────────────────────
-    // _stderr_handle, _relay_handle are JoinHandles dropped at function exit.
-    // Dropping a JoinHandle does NOT cancel the spawned task — tasks continue
-    // to fill the SharedBuffer independently.  This is intentional: the caller
-    // (play_song) returns immediately with a decoder while background tasks
-    // complete the download and populate the cache.  Only stdout_handle and
-    // child are needed post-return (stdout_handle drives the buffer, child is
-    // captured by the cache task).  See module-level lifecycle safety invariant.
-    let (_stderr_handle, stdout_handle, mut child, _relay_handle) = if is_relay {
-        // Read yt-dlp stderr for total_len + error logging.
-        // Also captures yt_dlp_child to keep it alive — dropped when
-        // stderr pipe closes (yt-dlp has exited), kill_on_drop(true)
-        // ensures the process is killed if orphaned during shutdown.
-        let buf_for_stderr = buffer.clone();
-        let stderr_handle = tokio::spawn(async move {
-            let _yt_guard = yt_dlp_child;
-            use tokio::io::AsyncBufReadExt;
-            let reader = tokio::io::BufReader::new(yt_stderr);
-            let mut lines = reader.lines();
-            while let Ok(Some(line)) = lines.next_line().await {
-                if let Some(bytes) = parse_total_size(&line) {
-                    debug!(
-                        total_bytes = bytes,
-                        "Parsed total size from yt-dlp progress"
-                    );
-                    buf_for_stderr.set_total_len(bytes);
-                } else if line.contains("ERROR") {
-                    warn!(stderr_line = %line.trim(), "yt-dlp stderr (error), failing buffer");
-                    buf_for_stderr.fail();
-                } else if line.contains("WARNING") {
-                    debug!(stderr_line = %line.trim(), "yt-dlp stderr (warning)");
-                }
-            }
-            debug!("yt-dlp stderr stream ended");
-        });
-
-        // Spawn ffmpeg: transcodes WebM/Opus to MP3 on-the-fly.
-        // -fflags nobuffer + -flags low_delay minimize internal buffering so
-        // ffmpeg starts emitting MP3 frames as soon as the first Opus packet
-        // is decoded.
-        let mut ffmpeg = tokio::process::Command::new("ffmpeg");
-        ffmpeg
-            .args([
-                "-i",
-                "pipe:0",
-                "-fflags",
-                "nobuffer",
-                "-flags",
-                "low_delay",
-                "-f",
-                "wav",
-                "-loglevel",
-                "error",
-                "pipe:1",
-            ])
-            .stdin(std::process::Stdio::piped())
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::null())
-            .kill_on_drop(true);
-        let mut ffmpeg_child = ffmpeg.spawn().context("spawn ffmpeg")?;
-        let mut ffmpeg_stdin = ffmpeg_child.stdin.take().context("no ffmpeg stdin")?;
-        let ffmpeg_stdout = ffmpeg_child.stdout.take().context("no ffmpeg stdout")?;
-
-        // Relay: yt-dlp stdout → ffmpeg stdin (runs until yt-dlp EOF).
-        let relay = tokio::spawn(async move {
-            use tokio::io::{AsyncReadExt, AsyncWriteExt};
-            let mut rdr = tokio::io::BufReader::new(yt_stdout);
-            let mut buf = vec![0u8; READ_BUF_SIZE];
-            loop {
-                match rdr.read(&mut buf).await {
-                    Ok(0) => break,
-                    Ok(n) => {
-                        if ffmpeg_stdin.write_all(&buf[..n]).await.is_err() {
-                            break;
-                        }
-                    }
-                    Err(_) => break,
-                }
-            }
-            let _ = ffmpeg_stdin.shutdown().await;
-        });
-
-        // Write ffmpeg stdout (MP3) into SharedBuffer.
-        let write_handle = tokio::spawn(async move {
-            use tokio::io::AsyncReadExt;
-            let mut rdr = tokio::io::BufReader::new(ffmpeg_stdout);
-            let mut buf = vec![0u8; READ_BUF_SIZE];
-            loop {
-                match rdr.read(&mut buf).await {
-                    Ok(0) => break,
-                    Ok(n) => writer.write(&buf[..n]),
-                    Err(e) => {
-                        warn!(error = %e, "ffmpeg stdout read error, failing buffer");
-                        writer.fail();
-                        return;
-                    }
-                }
-            }
-            debug!("ffmpeg mp3 stream ended, finishing buffer");
-            writer.finish();
-        });
-
-        (stderr_handle, write_handle, ffmpeg_child, Some(relay))
-    } else {
-        // Direct: read yt-dlp stdout into SharedBuffer (M4A, no relay).
-        let buf_for_stderr = buffer.clone();
-        let stderr_handle = tokio::spawn(async move {
-            use tokio::io::AsyncBufReadExt;
-            let reader = tokio::io::BufReader::new(yt_stderr);
-            let mut lines = reader.lines();
-            while let Ok(Some(line)) = lines.next_line().await {
-                if let Some(bytes) = parse_total_size(&line) {
-                    debug!(
-                        total_bytes = bytes,
-                        "Parsed total size from yt-dlp progress"
-                    );
-                    buf_for_stderr.set_total_len(bytes);
-                } else if line.contains("ERROR") {
-                    warn!(stderr_line = %line.trim(), "yt-dlp stderr (error), failing buffer");
-                    buf_for_stderr.fail();
-                } else if line.contains("WARNING") {
-                    debug!(stderr_line = %line.trim(), "yt-dlp stderr (warning)");
-                }
-            }
-            debug!("yt-dlp stderr stream ended");
-        });
-
-        let write_handle = tokio::spawn(async move {
-            use tokio::io::AsyncReadExt;
-            let mut rdr = tokio::io::BufReader::new(yt_stdout);
-            let mut buf = vec![0u8; READ_BUF_SIZE];
-            loop {
-                match rdr.read(&mut buf).await {
-                    Ok(0) => break,
-                    Ok(n) => writer.write(&buf[..n]),
-                    Err(e) => {
-                        warn!(error = %e, "yt-dlp stdout read error, failing buffer");
-                        writer.fail();
-                        return;
-                    }
-                }
-            }
-            debug!("yt-dlp stdout stream ended, finishing buffer");
-            writer.finish();
-        });
-
-        (stderr_handle, write_handle, yt_dlp_child, None)
-    };
-
-    // ── Try early decoder init ────────────────────────────────────────
-    // WAV relay: RIFF header + fmt chunk + data chunk start are in the
-    // first ~270 bytes, so try init as soon as a few KB are in the buffer
-    // (don't wait for total_len).
-    // M4A direct: must wait for total_len AND full download (moov-at-end).
-    let (decoder, needs_cache) = if is_relay {
-        // WAV header is ~270 bytes, STREAM_INIT_THRESHOLD is enough for probe + first frame.
-        let deadline =
-            tokio::time::Instant::now() + std::time::Duration::from_secs(DECODER_INIT_DEADLINE_S);
-        while buffer.len() < STREAM_INIT_THRESHOLD
-            && tokio::time::Instant::now() < deadline
-            && !buffer.is_failed()
-            && !cancel_token.is_cancelled()
-        {
-            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
-        }
-        if cancel_token.is_cancelled() {
-            bail!("download cancelled during buffering");
-        }
-        if buffer.is_failed() {
-            debug!(%video_id, elapsed = ?t0.elapsed(),
-                "yt-dlp failed before data arrived — bailing early");
-            bail!("format not available (yt-dlp error)");
-        }
-        let current = buffer.len();
-        if current == 0 {
-            debug!(%video_id, elapsed = ?t0.elapsed(),
-                "No data after {}s, format may be unavailable — bailing early", DECODER_INIT_DEADLINE_S);
-            bail!(
-                "format not available (empty pipe after {}s)",
-                DECODER_INIT_DEADLINE_S
-            );
-        }
-        debug!(
-            %video_id,
-            stream_type = "ffmpeg→wav",
-            buf_len = current,
-            elapsed = ?t0.elapsed(),
-            "Trying early decoder init (spawn_blocking + 5s timeout)"
-        );
-        match try_streaming_init(&buffer, None).await {
-            Ok(decoder) => {
-                debug!(%video_id, buf_len = buffer.len(), elapsed = ?t0.elapsed(),
-                    "Streaming decoder init succeeded");
-
-                // Background: wait for download completion, handle errors, cache.
-                // SAFETY: same as URL-cache path above — fire-and-forget.
-                // Captures `child` (ffmpeg process with kill_on_drop).
-                // Dropping JoinHandle does NOT cancel the task. Never abort.
-                let vid = video_id.to_string();
-                let buf_for_cache = buffer.clone();
-                let _t0 = t0;
-                let _cache_task = tokio::spawn(async move {
-                    match tokio::time::timeout(
-                        std::time::Duration::from_secs(DOWNLOAD_TIMEOUT_S),
-                        stdout_handle,
-                    )
-                    .await
-                    {
-                        Ok(Ok(())) => {}
-                        Ok(Err(join_err)) => {
-                            error!(%vid, error = %join_err, "ffmpeg writer task panicked");
-                            return;
-                        }
-                        Err(elapsed) => {
-                            warn!(%vid, elapsed = ?elapsed, "ffmpeg download timed out ({}s), killing", DOWNLOAD_TIMEOUT_S);
-                            let _ = child.start_kill();
-                            return;
-                        }
-                    }
-                    let status = child.wait().await.context("wait ffmpeg");
-                    match status {
-                        Ok(s) if !s.success() => {
-                            debug!(%vid, code = exit_code_string(&s),
-                                elapsed = ?_t0.elapsed(),
-                                "ffmpeg exited with non-zero code (post-stream)");
-                            return;
-                        }
-                        Ok(_) => debug!(%vid, elapsed = ?_t0.elapsed(),
-                            "ffmpeg completed successfully"),
-                        Err(e) => {
-                            debug!(%vid, error = %e, "ffmpeg wait failed");
-                            return;
-                        }
-                    }
-                    let data = buf_for_cache.finalize();
-                    debug!(%vid, len = data.len(), elapsed = ?_t0.elapsed(),
-                        "Caching completed download");
-                    cache_put(vid, data);
-                });
-
-                drop(_permit);
-                (decoder, false)
-            }
-            Err(stream_err) => {
-                // Streaming failed — release semaphore, wait for full stream.
-                drop(_permit);
-                debug!(%video_id, error = %stream_err,
-                    "Streaming decoder init failed, waiting for ffmpeg stream to complete");
-                match tokio::time::timeout(
-                    std::time::Duration::from_secs(DOWNLOAD_TIMEOUT_S),
-                    stdout_handle,
-                )
-                .await
-                {
-                    Ok(Ok(())) => {}
-                    Ok(Err(join_err)) => {
-                        bail!("ffmpeg writer task panicked: {join_err}");
-                    }
-                    Err(_elapsed) => {
-                        let _ = child.start_kill();
-                        bail!("ffmpeg download timed out ({}s)", DOWNLOAD_TIMEOUT_S);
-                    }
-                }
-
-                let status = child.wait().await.context("wait ffmpeg")?;
-                if !status.success() {
-                    let code = exit_code_string(&status);
-                    bail!("ffmpeg exited with code {code}");
-                }
-                debug!(%video_id, "ffmpeg completed successfully");
-
-                debug!(%video_id, buf_len = buffer.len(),
-                    "Creating decoder from completed download (fallback)");
-                let reader = buffer.reader();
-                let source = ReadSeekSource::new(reader, None);
-                let mss = MediaSourceStream::new(Box::new(source), Default::default());
-                let d = SymphoniaDecoder::new(mss).context("decoder (fallback)")?;
-                (d, true)
-            }
-        }
-    } else {
-        // M4A direct: wait for total_len + full download.
-        let _total_len = {
-            let deadline = tokio::time::Instant::now()
-                + std::time::Duration::from_secs(M4A_TOTAL_LEN_TIMEOUT_S);
-            loop {
-                if buffer.is_failed() {
-                    break None;
-                }
-                if cancel_token.is_cancelled() {
-                    break None;
-                }
-                if let Some(tl) = buffer.total_len() {
-                    break Some(tl);
-                }
-                if tokio::time::Instant::now() >= deadline {
-                    break None;
-                }
-                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-            }
-        }
-        .unwrap_or(buffer.len() as u64);
-
-        if cancel_token.is_cancelled() {
-            bail!("download cancelled during M4A total_len wait");
-        }
-
-        debug!(
-            %video_id,
-            stream_type = "direct m4a",
-            buf_len = buffer.len(),
-            elapsed = ?t0.elapsed(),
-            "Trying early decoder init (spawn_blocking + {}s timeout)", DECODER_INIT_DEADLINE_S
-        );
-        match try_streaming_init(&buffer, Some(_total_len)).await {
-            Ok(decoder) => {
-                debug!(%video_id, buf_len = buffer.len(), elapsed = ?t0.elapsed(),
-                "Streaming decoder init succeeded (M4A)");
-
-                // Background: wait for download completion, handle errors, cache.
-                let vid = video_id.to_string();
-                let buf_for_cache = buffer.clone();
-                let pipe_name = if is_relay { "ffmpeg" } else { "yt-dlp" };
-                let _handle = tokio::spawn(async move {
-                    match tokio::time::timeout(
-                        std::time::Duration::from_secs(DOWNLOAD_TIMEOUT_S),
-                        stdout_handle,
-                    )
-                    .await
-                    {
-                        Ok(Ok(())) => {}
-                        Ok(Err(join_err)) => {
-                            error!(%vid, error = %join_err, "{pipe_name} writer task panicked");
-                            return;
-                        }
-                        Err(_elapsed) => {
-                            warn!(%vid, "{pipe_name} download timed out ({}s), killing", DOWNLOAD_TIMEOUT_S);
-                            let _ = child.start_kill();
-                            return;
-                        }
-                    }
-                    let status = child
-                        .wait()
-                        .await
-                        .with_context(|| format!("wait {pipe_name}"));
-                    match status {
-                        Ok(s) if !s.success() => {
-                            warn!(%vid, code = exit_code_string(&s),
-                            "{pipe_name} exited with non-zero code (post-stream)");
-                            return;
-                        }
-                        Ok(_) => debug!(%vid, "{pipe_name} completed successfully"),
-                        Err(e) => {
-                            debug!(%vid, error = %e, "{pipe_name} wait failed");
-                            return;
-                        }
-                    }
-                    let data = buf_for_cache.finalize();
-                    debug!(%vid, len = data.len(), "Caching completed download");
-                    cache_put(vid, data);
-                });
-
-                drop(_permit);
-                (decoder, false)
-            }
-            Err(stream_err) => {
-                // Streaming failed — release semaphore, wait for full stream.
-                drop(_permit);
-                let pipe_name = if is_relay { "ffmpeg" } else { "yt-dlp" };
-                debug!(%video_id, error = %stream_err,
-                "Streaming decoder init failed, waiting for {pipe_name} stream to complete");
-                match tokio::time::timeout(
-                    std::time::Duration::from_secs(DOWNLOAD_TIMEOUT_S),
-                    stdout_handle,
-                )
-                .await
-                {
-                    Ok(Ok(())) => {}
-                    Ok(Err(join_err)) => {
-                        bail!("{pipe_name} writer task panicked: {join_err}");
-                    }
-                    Err(_elapsed) => {
-                        let _ = child.start_kill();
-                        bail!("{pipe_name} download timed out ({}s)", DOWNLOAD_TIMEOUT_S);
-                    }
-                }
-
-                let status = child
-                    .wait()
-                    .await
-                    .with_context(|| format!("wait {pipe_name}"))?;
-                if !status.success() {
-                    let code = exit_code_string(&status);
-                    bail!("{pipe_name} exited with code {code}");
-                }
-                debug!(%video_id, "{pipe_name} completed successfully");
-
-                // Create decoder from completed stream.
-                debug!(%video_id, buf_len = buffer.len(),
-                "Creating decoder from completed download (fallback)");
-                let reader = buffer.reader();
-                let source = ReadSeekSource::new(reader, Some(_total_len));
-                let mss = MediaSourceStream::new(Box::new(source), Default::default());
-                let d = SymphoniaDecoder::new(mss).context("decoder (fallback)")?;
-                (d, true)
-            }
-        }
-    };
-
-    if needs_cache {
-        let data = buffer.finalize();
-        debug!(%video_id, len = data.len(), "Caching completed download (fallback)");
-        cache_put(video_id.to_string(), data);
-    }
-
-    debug!(%video_id, elapsed = ?t0.elapsed(), "download_and_decode returning decoder");
-    Ok(decoder)
+    ytdlp_pipeline(
+        yt_dlp_command,
+        video_id,
+        po_token,
+        cookie_path,
+        js_runtime,
+        ffmpeg_avail,
+        cancel_token,
+        _permit,
+        t0,
+        cached_url,
+    )
+    .await
 }
 
 /// Parse the total download size from a yt-dlp progress line like:
@@ -1777,6 +1738,7 @@ mod tests {
             relay_data_arrival.as_secs_f64() / relay_total_dur.as_secs_f64().max(0.001);
         let m4a_dl_fraction = m4a_dl_dur.as_secs_f64() / m4a_total_dur.as_secs_f64().max(0.001);
 
+        let playable_delta = relay_playable.as_secs_f64() - m4a_playable.as_secs_f64();
         println!(
             "===== PIPELINE COMPARISON (video: {video_id}) =====\n\
              \n  ffmpeg relay:\
@@ -1795,7 +1757,7 @@ mod tests {
              \n    playable @:       {:>8.1?}\
              \n    total (cleanup):  {:>8.1?}\
              \n    final m4a buf:    {} bytes  ({}% of total)\
-             \n  \n  PLAYABLE delta: relay first-frame @ {:>8.1?} vs M4A @ {:>8.1?} = {:+.1?}",
+             \n  \n  PLAYABLE delta: relay @ {:>8.1?} vs M4A @ {:>8.1?} = {:+.3}s",
             yt_spawn_dur,
             ff_spawn_dur,
             relay_buf.len(),
@@ -1815,7 +1777,7 @@ mod tests {
             m4a_dl_fraction * 100.0,
             relay_playable,
             m4a_playable,
-            relay_playable - m4a_playable,
+            playable_delta,
         );
 
         assert!(relay_ttf.is_some(), "ffmpeg relay must produce frames");

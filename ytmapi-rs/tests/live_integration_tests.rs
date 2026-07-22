@@ -1,19 +1,16 @@
 //! Due to quota limits - all live api tests are extracted out into their own
 //! integration tests module.
 #![allow(deprecated)]
-use crate::utils::{
-    maybe_new_standard_api, maybe_new_standard_oauth_api, new_standard_api, new_standard_oauth_api,
-};
+use crate::utils::{maybe_new_standard_api, new_standard_api};
 use common::{EpisodeID, LikeStatus, PodcastChannelID, PodcastChannelParams, PodcastID, VideoID};
 use futures::{StreamExt, TryStreamExt};
 use std::time::Duration;
-use utils::get_oauth_client_id_and_secret;
 use ytmapi_rs::auth::*;
 use ytmapi_rs::common::{
     ApiOutcome, ArtistChannelID, FeedbackTokenAddToLibrary, FeedbackTokenRemoveFromLibrary,
     PlaylistID, UserChannelID, YoutubeID,
 };
-use ytmapi_rs::error::ErrorKind;
+
 use ytmapi_rs::query::playlist::{GetPlaylistDetailsQuery, PrivacyStatus};
 use ytmapi_rs::query::search::{
     AlbumsFilter, ArtistsFilter, CommunityPlaylistsFilter, EpisodesFilter, FeaturedPlaylistsFilter,
@@ -26,77 +23,11 @@ use ytmapi_rs::*;
 mod utils;
 
 #[tokio::test]
-async fn test_refresh_expired_oauth() {
-    let Some(mut api): Option<YtMusic<OAuthToken>> = utils::maybe_new_standard_oauth_api().await else {
-        eprintln!("SKIP: oauth token not configured (set youtui_test_oauth or create oauth.json)");
-        return;
-    };
-    api.refresh_token().await.unwrap();
-}
-
-#[tokio::test]
-async fn test_get_oauth_code() {
-    let Ok((client_id, _)) = get_oauth_client_id_and_secret() else {
-        eprintln!("SKIP: oauth client_id not configured (set youtui_client_id and youtui_client_secret)");
-        return;
-    };
-    let client = crate::client::Client::new().unwrap();
-    let _code = OAuthTokenGenerator::new(&client, client_id).await.unwrap();
-}
-
-// NOTE: Internal only - due to use of error.is_oauth_expired()
-#[tokio::test]
-async fn test_expired_oauth() {
-    // XXX: Assuming this error only occurs for expired headers.
-    // This assumption may be incorrect.
-    let Some(api): Option<YtMusic<OAuthToken>> = maybe_new_standard_oauth_api().await else {
-        eprintln!("SKIP: oauth token not configured");
-        return;
-    };
-    // Library query needs authentication.
-    let res = api.json_query(GetLibraryPlaylistsQuery).await;
-    // TODO: Add matching functions to error type. Current method not very
-    // ergonomic.
-    let Err(error) = res else {
-        panic!("Expected an error")
-    };
-    assert!(matches!(
-        error.into_kind(),
-        ErrorKind::OAuthTokenExpired { .. }
-    ));
-}
-// Placeholder for future implementation.
-// #[tokio::test]
-// async fn test_expired_header() {
-// }
-
-// Placeholder for future implementation
-// #[tokio::test]
-// async fn test_invalid_expired_oauth() {
-//     let oauth_token: OAuthToken =
-// serde_json::from_str(INVALID_EXPIRED_OAUTH).unwrap();     let api =
-// YtMusic::from_oauth_token(oauth_token);     // Library query needs
-// authentication.     let res = api.json_query(GetLibraryPlaylistsQuery).await;
-//     // TODO: Add matching functions to error type. Current method not very
-// ergonomic.     let Err(error) = res else {
-//         eprintln!("{:#?}", res);
-//         panic!("Expected an error")
-//     };
-//     eprintln!("{:#?}", error);
-//     assert!(error.is_browser_authentication_failed());
-// }
-
-#[tokio::test]
 async fn test_new() {
-    if let Some(_) = maybe_new_standard_api().await {
+    if maybe_new_standard_api().await.is_some() {
         eprintln!("Browser auth: OK");
     } else {
         eprintln!("SKIP: browser auth not configured");
-    }
-    if let Some(_) = maybe_new_standard_oauth_api().await {
-        eprintln!("OAuth: OK");
-    } else {
-        eprintln!("SKIP: oauth not configured");
     }
 }
 //// BASIC STREAM TESTS
@@ -545,24 +476,7 @@ async fn test_add_remove_history_items() {
     );
 }
 
-#[cfg(feature = "test-oauth")]
-#[tokio::test]
-#[ignore = "Ignored by default due to quota"]
-async fn test_delete_create_playlist_oauth() {
-    let mut api = new_standard_oauth_api().await.unwrap();
-    // Don't stuff around trying the keep the local OAuth secret up to date, just
-    // refresh it each time.
-    api.refresh_token().await.unwrap();
-    let id = api
-        .create_playlist(CreatePlaylistQuery::new(
-            "TEST PLAYLIST",
-            None,
-            PrivacyStatus::Unlisted,
-        ))
-        .await
-        .unwrap();
-    api.delete_playlist(id).await.unwrap();
-}
+
 #[tokio::test]
 #[ignore = "Ignored by default due to quota"]
 async fn test_delete_create_playlist() {
@@ -761,19 +675,7 @@ async fn test_edit_playlist() {
 
 // # BASIC TESTS WITH ADDITIONAL ASSERTIONS
 
-#[cfg(feature = "test-oauth")]
-#[tokio::test]
-async fn test_get_library_playlists_oauth() {
-    let Some(mut api): Option<YtMusic<OAuthToken>> = maybe_new_standard_oauth_api().await else {
-        eprintln!("SKIP: oauth not configured");
-        return;
-    };
-    // Don't stuff around trying the keep the local OAuth secret up to date, just
-    // refresh it each time.
-    api.refresh_token().await.unwrap();
-    let res = api.get_library_playlists().await.unwrap();
-    assert!(!res.is_empty());
-}
+
 #[tokio::test]
 async fn test_get_library_playlists() {
     let Some(api): Option<YtMusic<BrowserToken>> = maybe_new_standard_api().await else {
@@ -783,16 +685,7 @@ async fn test_get_library_playlists() {
     let res = api.get_library_playlists().await.unwrap();
     assert!(!res.is_empty());
 }
-#[cfg(feature = "test-oauth")]
-#[tokio::test]
-async fn test_get_library_artists_oauth() {
-    let mut api = new_standard_oauth_api().await.unwrap();
-    // Don't stuff around trying the keep the local OAuth secret up to date, just
-    // refresh it each time.
-    api.refresh_token().await.unwrap();
-    let res = api.get_library_artists().await.unwrap();
-    assert!(!res.is_empty());
-}
+
 #[tokio::test]
 async fn test_get_library_artists() {
     let Some(api): Option<YtMusic<BrowserToken>> = maybe_new_standard_api().await else {

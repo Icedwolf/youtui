@@ -7,7 +7,6 @@ use crate::query::{GetQuery, PostQuery};
 use crate::utils::constants::{YTM_API_URL, YTM_PARAMS, YTM_PARAMS_KEY};
 pub use browser::BrowserToken;
 use chrono::Utc;
-pub use oauth::{OAuthToken, OAuthTokenGenerator};
 use reqwest::Url;
 use serde_json::json;
 use std::borrow::Cow;
@@ -15,7 +14,6 @@ use std::marker::PhantomData;
 
 pub mod browser;
 pub mod noauth;
-pub mod oauth;
 
 /// An AuthToken is required to use the API.
 /// AuthToken is reponsible for HTTP request headers, client_version and
@@ -106,7 +104,6 @@ pub(crate) async fn raw_query_get<'a, Q: GetQuery, A: AuthToken>(
 pub trait LoggedIn: AuthToken {}
 
 impl LoggedIn for BrowserToken {}
-impl LoggedIn for OAuthToken {}
 
 /// Generate a dummy client version at the provided time.
 /// Original implementation: https://github.com/sigma67/ytmusicapi/blob/459bc40e4ce31584f9d87cf75838a1f404aa472d/ytmusicapi/helpers.py#L35C18-L35C31

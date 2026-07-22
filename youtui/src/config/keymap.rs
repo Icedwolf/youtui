@@ -497,13 +497,6 @@ fn default_playlist_keybinds() -> BTreeMap<Keybind, KeyActionTree<AppAction>> {
             ),
         ),
         (
-            Keybind::new_unmodified(crossterm::event::KeyCode::Char('A')),
-            KeyActionTree::new_key_with_visibility(
-                AppAction::Playlist(PlaylistAction::CycleAudioQuality),
-                KeyActionVisibility::Global,
-            ),
-        ),
-        (
             Keybind::new_unmodified(crossterm::event::KeyCode::Char('r')),
             KeyActionTree::new_key_with_visibility(
                 AppAction::Playlist(PlaylistAction::ResolveAudioTracks),

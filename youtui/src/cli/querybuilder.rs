@@ -4,7 +4,7 @@ use anyhow::bail;
 use std::borrow::Borrow;
 use std::fmt::Debug;
 use ytmapi_rs::auth::noauth::NoAuthToken;
-use ytmapi_rs::auth::{BrowserToken, OAuthToken};
+use ytmapi_rs::auth::BrowserToken;
 use ytmapi_rs::common::{
     AlbumID, ArtistChannelID, BrowseParams, EpisodeID, FeedbackTokenAddToLibrary,
     FeedbackTokenRemoveFromHistory, LikeStatus, LyricsID, MoodCategoryParams, PlaylistID,
@@ -644,7 +644,7 @@ async fn get_string_output_of_query<Q, O>(
 ) -> anyhow::Result<String>
 where
     Q: Query<BrowserToken, Output = O>,
-    Q: Query<OAuthToken, Output = O>,
+
     Q: Query<NoAuthToken, Output = O>,
     O: ParseFrom<Q>,
 {
@@ -683,7 +683,7 @@ async fn get_string_output_of_query_browser_or_oauth<Q, O>(
 ) -> anyhow::Result<String>
 where
     Q: Query<BrowserToken, Output = O>,
-    Q: Query<OAuthToken, Output = O>,
+
     O: ParseFrom<Q>,
 {
     match cli_query {
@@ -725,7 +725,7 @@ async fn get_string_output_of_streaming_query<Q, O>(
 ) -> anyhow::Result<String>
 where
     Q: Query<BrowserToken, Output = O>,
-    Q: Query<OAuthToken, Output = O>,
+
     Q: Query<NoAuthToken, Output = O>,
     Q: PostQuery,
     O: ParseFromContinuable<Q>,
@@ -783,7 +783,7 @@ async fn get_string_output_of_streaming_query_browser_or_oauth<Q, O>(
 ) -> anyhow::Result<String>
 where
     Q: Query<BrowserToken, Output = O>,
-    Q: Query<OAuthToken, Output = O>,
+
     Q: PostQuery,
     O: ParseFromContinuable<Q>,
 {
@@ -845,7 +845,7 @@ fn process_json_based_on_dyn_api<Q, O>(
 ) -> anyhow::Result<String>
 where
     Q: Query<BrowserToken, Output = O>,
-    Q: Query<OAuthToken, Output = O>,
+
     Q: Query<NoAuthToken, Output = O>,
     O: Debug,
 {
@@ -854,9 +854,6 @@ where
     // the variant of DynamicYtMusic.
     match yt {
         DynamicYtMusic::Browser(_) => process_json::<Q, BrowserToken>(source, query)
-            .map(|r| format!("{r:#?}"))
-            .map_err(|e| e.into()),
-        DynamicYtMusic::OAuth(_) => process_json::<Q, OAuthToken>(source, query)
             .map(|r| format!("{r:#?}"))
             .map_err(|e| e.into()),
         DynamicYtMusic::NoAuth(_) => process_json::<Q, NoAuthToken>(source, query)
@@ -872,17 +869,11 @@ fn process_json_based_on_dyn_api_browser_or_oauth<Q, O>(
 ) -> anyhow::Result<String>
 where
     Q: Query<BrowserToken, Output = O>,
-    Q: Query<OAuthToken, Output = O>,
+
     O: Debug,
 {
-    // The matching on yt is a neat hack to ensure process_json utilises the same
-    // AuthType as was set in config. This works as the config step sets
-    // the variant of DynamicYtMusic.
     match yt {
         DynamicYtMusic::Browser(_) => process_json::<Q, BrowserToken>(source, query)
-            .map(|r| format!("{r:#?}"))
-            .map_err(|e| e.into()),
-        DynamicYtMusic::OAuth(_) => process_json::<Q, OAuthToken>(source, query)
             .map(|r| format!("{r:#?}"))
             .map_err(|e| e.into()),
         DynamicYtMusic::NoAuth(_) => {

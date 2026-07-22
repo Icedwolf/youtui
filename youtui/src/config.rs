@@ -1,18 +1,14 @@
-use crate::app::structures::AudioQuality;
 use crate::get_config_dir;
 use anyhow::{Context, Result};
 use clap::ValueEnum;
 use keymap::{YoutuiKeymap, YoutuiKeymapIR, YoutuiModeNamesIR};
 use serde::{Deserialize, Serialize};
-use ytmapi_rs::auth::OAuthToken;
-
 const CONFIG_FILE_NAME: &str = "config.toml";
 
 pub mod keymap;
 
 #[derive(Serialize, Deserialize)]
 pub enum ApiKey {
-    OAuthToken(OAuthToken),
     // BrowserToken takes the cookie, not the BrowserToken itself. This is because to obtain the
     // BrowserToken you must make a web request, and we want to obtain it as lazily as possible.
     BrowserToken(String),
@@ -22,23 +18,17 @@ pub enum ApiKey {
 impl std::fmt::Debug for ApiKey {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ApiKey::OAuthToken(_) => f
-                .debug_tuple("OAuthToken")
-                .field(&"/* private fields */")
-                .finish(),
             ApiKey::BrowserToken(_) => f
                 .debug_tuple("BrowserToken")
                 .field(&"/* private fields */")
                 .finish(),
-            ApiKey::None => f.debug_tuple("NoAuthToken").finish(),
+            ApiKey::None => f.debug_tuple("None").finish(),
         }
     }
 }
 
 #[derive(ValueEnum, Copy, PartialEq, Clone, Default, Debug, Serialize, Deserialize)]
 pub enum AuthType {
-    #[value(name = "oauth")]
-    OAuth,
     #[default]
     Browser,
     Unauthenticated,
@@ -66,7 +56,6 @@ pub struct Config {
     pub yt_dlp_command: String,
     pub keybinds: YoutuiKeymap,
     pub volume: u8,
-    pub audio_quality: AudioQuality,
     pub notifications_enabled: bool,
     pub download_cache_size: usize,
 }
@@ -78,7 +67,6 @@ impl Default for Config {
             yt_dlp_command: default_yt_dlp_command(),
             keybinds: Default::default(),
             volume: default_volume(),
-            audio_quality: AudioQuality::default(),
             notifications_enabled: true,
             download_cache_size: default_cache_size(),
         }
@@ -96,7 +84,6 @@ pub struct ConfigIR {
     pub mode_names: YoutuiModeNamesIR,
     #[serde(default = "default_volume")]
     pub volume: u8,
-    pub audio_quality: AudioQuality,
     #[serde(default = "default_notifications_enabled")]
     pub notifications_enabled: bool,
     #[serde(default = "default_cache_size")]
@@ -112,7 +99,6 @@ impl TryFrom<ConfigIR> for Config {
             mode_names,
             yt_dlp_command,
             volume,
-            audio_quality,
             notifications_enabled,
             download_cache_size,
         } = value;
@@ -121,7 +107,6 @@ impl TryFrom<ConfigIR> for Config {
             keybinds: YoutuiKeymap::try_from_stringy(keybinds, mode_names)?,
             yt_dlp_command,
             volume,
-            audio_quality,
             notifications_enabled,
             download_cache_size,
         })
@@ -211,7 +196,6 @@ raisevolume = {action = "vol_up", visiblity = "hidden"}"#;
             mode_names,
             yt_dlp_command,
             volume: _,
-            audio_quality: _,
             ..
         } = toml::from_str(&config_file).unwrap();
         let keybinds = YoutuiKeymap::try_from_stringy_exact(keybinds, mode_names).unwrap();
@@ -220,7 +204,6 @@ raisevolume = {action = "vol_up", visiblity = "hidden"}"#;
             keybinds,
             yt_dlp_command,
             volume: super::default_volume(),
-            audio_quality: super::AudioQuality::default(),
             notifications_enabled: true,
             download_cache_size: super::default_cache_size(),
         };

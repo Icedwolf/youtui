@@ -6,8 +6,6 @@ use config::{ApiKey, AuthType, Config};
 use directories::ProjectDirs;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
-use ytmapi_rs::auth::OAuthToken;
-
 mod api;
 mod app;
 mod appevent;
@@ -26,11 +24,8 @@ mod tests;
 
 pub const POTOKEN_FILENAME: &str = "po_token.txt";
 pub const COOKIE_FILENAME: &str = "cookie.txt";
-pub const OAUTH_FILENAME: &str = "oauth.json";
 const BROWSER_AUTH_SETUP_STEPS_URL: &str =
     "https://github.com/nick42d/youtui?tab=readme-ov-file#browser-auth-setup-steps";
-const OAUTH_SETUP_STEPS_URL: &str =
-    "https://github.com/nick42d/youtui?tab=readme-ov-file#oauth-setup-steps-optional";
 const POTOKEN_INFORMATION_URL: &str =
     "https://github.com/nick42d/youtui?tab=readme-ov-file#po-token-information";
 const RUNNING_YOUTUI_GUIDE_URL: &str =
@@ -49,8 +44,6 @@ struct Arguments {
     disable_media_controls: bool,
     #[command(flatten)]
     cli: Cli,
-    #[command(subcommand)]
-    auth_cmd: Option<AuthCmd>,
     /// Generate shell completions for the specified shell
     #[arg(short, long, id = "SHELL", value_enum)]
     generate_completions: Option<Shell>,
@@ -74,22 +67,6 @@ struct Cli {
     input_json: Option<Vec<PathBuf>>,
     #[command(subcommand)]
     command: Option<Command>,
-}
-#[derive(Subcommand, Debug, Clone)]
-enum AuthCmd {
-    /// Generate an OAuth token.
-    SetupOauth {
-        /// Optional: Write to a specific file instead of the config directory.
-        #[arg(short, long)]
-        file_name: Option<PathBuf>,
-        /// Optional: Print to stdout instead of the config directory.
-        #[arg(short, long, default_value_t = false)]
-        stdout: bool,
-        /// Client ID - from Google Cloud Console
-        client_id: String,
-        /// Client Secret - from Google Cloud Console
-        client_secret: String,
-    },
 }
 #[derive(Subcommand, Debug, Clone)]
 enum Command {
@@ -373,32 +350,14 @@ async fn main() -> ExitCode {
 // Main function is refactored here so that we can pretty print errors.
 // Regular main function returns debug errors so not as friendly.
 async fn try_main() -> anyhow::Result<()> {
-    let _start = std::time::Instant::now();
     let args = Arguments::parse();
     let Arguments {
         debug,
         cli,
-        auth_cmd,
         auth_type,
         generate_completions,
         disable_media_controls,
     } = args;
-    // We don't need configuration to setup oauth token or generate completions.
-    if let Some(c) = auth_cmd {
-        match c {
-            AuthCmd::SetupOauth {
-                file_name,
-                stdout,
-                client_id,
-                client_secret,
-            } => {
-                cli::get_and_output_oauth_token(file_name, stdout, client_id, client_secret).await?
-            }
-        };
-        // Done here if we got this command. No need to go further.
-        return Ok(());
-    };
-    // We don't need configuration to setup oauth token or generate completions.
     if let Some(shell) = generate_completions {
         let mut cmd = Arguments::command();
         let bin_name = cmd.get_name().to_string();
@@ -439,18 +398,6 @@ async fn try_main() -> anyhow::Result<()> {
 async fn get_api(config: &Config) -> anyhow::Result<api::DynamicYtMusic> {
     let confdir = get_config_dir()?;
     let api = match config.auth_type {
-        config::AuthType::OAuth => {
-            let mut oauth_loc = confdir;
-            oauth_loc.push(OAUTH_FILENAME);
-            let file = tokio::fs::read_to_string(oauth_loc).await?;
-            let oath_tok: OAuthToken = serde_json::from_str(&file)?;
-            let mut api = ytmapi_rs::builder::YtMusicBuilder::new_rustls_tls()
-                .with_auth_token(oath_tok)
-                .build()?;
-            // For simplicity for now - refresh OAuth token every time.
-            api.refresh_token().await?;
-            api::DynamicYtMusic::OAuth(api)
-        }
         config::AuthType::Browser => {
             let mut cookies_loc = confdir;
             cookies_loc.push(COOKIE_FILENAME);
@@ -526,16 +473,6 @@ async fn load_cookie_file() -> anyhow::Result<String> {
         .with_context(|| auth_token_error_message(config::AuthType::Browser, &path))
 }
 
-async fn load_oauth_file() -> anyhow::Result<OAuthToken> {
-    let mut path = get_config_dir()?;
-    path.push(OAUTH_FILENAME);
-    let file = tokio::fs::read_to_string(&path)
-        .await
-        .with_context(|| auth_token_error_message(config::AuthType::OAuth, &path))?;
-    serde_json::from_str(&file)
-        .with_context(|| format!("Error parsing AuthType::OAuth auth token from {}. See README.md for more information on auth tokens: {}", path.display(), OAUTH_SETUP_STEPS_URL))
-}
-
 /// Create the Config and Data directories for the app if they do not already
 /// exist. Returns an error if unsuccesful.
 async fn initialise_directories() -> anyhow::Result<()> {
@@ -550,7 +487,6 @@ async fn initialise_directories() -> anyhow::Result<()> {
 
 async fn load_api_key(cfg: &Config) -> anyhow::Result<ApiKey> {
     let api_key = match cfg.auth_type {
-        config::AuthType::OAuth => ApiKey::OAuthToken(load_oauth_file().await?),
         config::AuthType::Browser => ApiKey::BrowserToken(load_cookie_file().await?),
         config::AuthType::Unauthenticated => ApiKey::None,
     };
@@ -562,7 +498,6 @@ async fn load_api_key(cfg: &Config) -> anyhow::Result<ApiKey> {
 /// the repo's README if they closed it in their browser.
 fn auth_token_readme_link(token_type: config::AuthType) -> &'static str {
     match token_type {
-        config::AuthType::OAuth => OAUTH_SETUP_STEPS_URL,
         config::AuthType::Browser => BROWSER_AUTH_SETUP_STEPS_URL,
         config::AuthType::Unauthenticated => RUNNING_YOUTUI_GUIDE_URL,
     }

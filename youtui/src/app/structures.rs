@@ -6,7 +6,6 @@ use std::ops::Deref;
 use std::rc::Rc;
 use std::time::Duration;
 use tracing::{debug, info, warn};
-pub use ytmapi_rs::common::Thumbnail;
 use ytmapi_rs::common::{
     AlbumID, ArtistChannelID, Explicit, UploadAlbumID, UploadArtistID, VideoID, YoutubeID,
 };
@@ -92,7 +91,6 @@ pub struct ListSong {
     pub resolution_checked: bool,
     pub year: Option<Rc<String>>,
     pub artists: MaybeRc<Vec<ListSongArtist>>,
-    pub thumbnails: MaybeRc<Vec<Thumbnail>>,
     pub album: Option<MaybeRc<ListSongAlbum>>,
 }
 
@@ -109,7 +107,6 @@ impl PartialEq for ListSong {
             && self.actual_duration == other.actual_duration
             && self.year == other.year
             && self.artists == other.artists
-            && self.thumbnails == other.thumbnails
             && self.album == other.album
     }
 }
@@ -207,9 +204,6 @@ pub enum DownloadStatus {
     Downloading(Percentage),
     Downloaded,
     Failed,
-    Retrying {
-        times_retried: usize,
-    },
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -217,19 +211,8 @@ pub enum PlayState {
     NotPlaying,
     Playing(ListSongID),
     Paused(ListSongID),
-    // May be the same as NotPlaying?
-    Stopped,
     Error(ListSongID),
     Buffering(ListSongID),
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, Default)]
-pub enum AudioQuality {
-    Best,
-    High,
-    Medium,
-    #[default]
-    Low,
 }
 
 impl DownloadStatus {
@@ -240,7 +223,6 @@ impl DownloadStatus {
             Self::None => " ",
             Self::Downloading(_) => "↓",
             Self::Downloaded => "✓",
-            Self::Retrying { .. } => "↻",
         }
     }
 }
@@ -318,16 +300,7 @@ impl ListSong {
         artists: Vec<String>,
         album: Option<String>,
         duration_string: String,
-        thumbnail_url: Option<String>,
     ) -> Self {
-        let thumb = thumbnail_url.map(|url| {
-            let thumb = Thumbnail {
-                height: 200,
-                width: 200,
-                url,
-            };
-            vec![thumb]
-        });
         let list_artists: Vec<ListSongArtist> = artists
             .iter()
             .map(|name| ListSongArtist {
@@ -364,7 +337,6 @@ impl ListSong {
             resolution_checked: false,
             year: None,
             artists: MaybeRc::Owned(list_artists),
-            thumbnails: MaybeRc::Owned(thumb.unwrap_or_default()),
             album: list_album,
         }
     }
@@ -410,7 +382,6 @@ impl BrowserSongsList {
         album: ParsedSongAlbum,
         year: String,
         artists: Vec<ParsedSongArtist>,
-        thumbnails: Vec<Thumbnail>,
     ) {
         use std::collections::hash_map::Entry;
         for song in &raw_list {
@@ -439,14 +410,12 @@ impl BrowserSongsList {
         let year = Rc::new(year);
         let album = Rc::new(ListSongAlbum::from(album));
         let artists = Rc::new(artists.into_iter().map(Into::into).collect::<Vec<_>>());
-        let thumbnails = Rc::new(thumbnails);
         for song in best.into_values() {
             self.add_raw_album_song(
                 song.clone(),
                 album.clone(),
                 year.clone(),
                 artists.clone(),
-                thumbnails.clone(),
             );
         }
     }
@@ -494,7 +463,6 @@ impl BrowserSongsList {
         album: Rc<ListSongAlbum>,
         year: Rc<String>,
         artists: Rc<Vec<ListSongArtist>>,
-        thumbnails: Rc<Vec<Thumbnail>>,
     ) -> ListSongID {
         let id = self.create_next_id();
         let AlbumSong {
@@ -529,7 +497,6 @@ impl BrowserSongsList {
             artists_lower,
             artists_string,
             track_no_string,
-            thumbnails: MaybeRc::Rc(thumbnails),
             resolution_checked: false,
         });
         id
@@ -544,7 +511,6 @@ impl BrowserSongsList {
             plays,
             explicit,
             video_id,
-            thumbnails,
             ..
         } = song;
         let search_album = album.map(Into::<ListSongAlbum>::into).map(MaybeRc::Owned);
@@ -578,14 +544,13 @@ impl BrowserSongsList {
             artists_lower,
             artists_string,
             track_no_string,
-            thumbnails: MaybeRc::Owned(thumbnails),
             resolution_checked: false,
         });
         id
     }
     fn add_raw_playlist_item(&mut self, item: PlaylistItem) -> Option<ListSongID> {
         let id = self.create_next_id();
-        let (track_no, title, video_id, duration, artists, album, thumbnails, explicit) = match item
+        let (track_no, title, video_id, duration, artists, album, explicit) = match item
         {
             PlaylistItem::Song(PlaylistSong {
                 video_id,
@@ -593,7 +558,7 @@ impl BrowserSongsList {
                 duration,
                 title,
                 artists,
-                thumbnails,
+                thumbnails: _,
                 track_no,
                 explicit,
                 ..
@@ -604,14 +569,13 @@ impl BrowserSongsList {
                 duration,
                 artists.into_iter().map(Into::into).collect(),
                 Some(album.into()),
-                thumbnails,
                 Some(explicit),
             ),
             PlaylistItem::Video(PlaylistVideo {
                 video_id,
                 duration,
                 title,
-                thumbnails,
+                thumbnails: _,
                 track_no,
                 ..
             }) => (
@@ -621,7 +585,6 @@ impl BrowserSongsList {
                 duration,
                 vec![],
                 None,
-                thumbnails,
                 None,
             ),
             // Episode has no video id, so we can't currently handle it as a ListSong.
@@ -635,7 +598,7 @@ impl BrowserSongsList {
                 title,
                 artists,
                 album,
-                thumbnails,
+                thumbnails: _,
                 track_no,
                 ..
             }) => (
@@ -645,7 +608,6 @@ impl BrowserSongsList {
                 duration,
                 artists.into_iter().map(Into::into).collect(),
                 album.map(Into::into),
-                thumbnails,
                 None,
             ),
         };
@@ -675,7 +637,6 @@ impl BrowserSongsList {
             artists_lower,
             artists_string,
             track_no_string,
-            thumbnails: MaybeRc::Owned(thumbnails),
             resolution_checked: false,
         });
         Some(id)
@@ -793,7 +754,6 @@ mod tests {
             vec!["Artist".into()],
             None,
             "3:00".into(),
-            None,
         )
     }
 
@@ -1019,7 +979,6 @@ mod bench {
                     vec!["Artist A".into(), "Artist B".into()],
                     Some("Album".into()),
                     "3:30".into(),
-                    None,
                 )
             })
             .collect()
@@ -1176,7 +1135,6 @@ mod criterion_benches {
                     vec!["Artist A".into(), "Artist B".into()],
                     Some("Album".into()),
                     "3:30".into(),
-                    None,
                 )
             })
             .collect()
@@ -1242,7 +1200,6 @@ mod criterion_benches {
                     vec!["Artist A".into(), "Artist B".into()],
                     Some("Album".into()),
                     "3:30".into(),
-                    None,
                 ));
             });
         });

@@ -6,28 +6,24 @@ use std::time::Duration;
 pub fn draw_app_media_controls(w: &YoutuiWindow) -> MediaControlsUpdate<'_> {
     let mut duration = 0;
     let mut progress = Duration::default();
-    match &w.playlist.play_status {
-        PlayState::Playing(id) | PlayState::Paused(id) => {
-            duration = w
-                .playlist
-                .get_song_from_id(*id)
-                .map(|s| {
-                    s.actual_duration
-                        .map(|d| d.as_secs() as usize)
-                        .unwrap_or(s.duration_secs)
-                })
-                .unwrap_or(0);
-            progress = w.playlist.get_cur_played_dur().unwrap_or_default();
-            (progress.as_secs_f64() / duration as f64).clamp(0.0, 1.0)
-        }
-        _ => 0.0,
-    };
+    if let PlayState::Playing(id) | PlayState::Paused(id) = &w.playlist.play_status {
+        duration = w
+            .playlist
+            .get_song_from_id(*id)
+            .map(|s| {
+                s.actual_duration
+                    .map(|d| d.as_secs() as usize)
+                    .unwrap_or(s.duration_secs)
+            })
+            .unwrap_or(0);
+        progress = w.playlist.get_cur_played_dur().unwrap_or_default();
+    }
     let cur_active_song = match w.playlist.play_status {
         PlayState::Error(id)
         | PlayState::Playing(id)
         | PlayState::Paused(id)
         | PlayState::Buffering(id) => w.playlist.get_song_from_id(id),
-        PlayState::NotPlaying | PlayState::Stopped => None,
+        PlayState::NotPlaying  => None,
     };
     let song_title = cur_active_song
         .map(|s| s.title.as_str())
@@ -37,10 +33,6 @@ pub fn draw_app_media_controls(w: &YoutuiWindow) -> MediaControlsUpdate<'_> {
         .map(|s| s.name.as_str())
         .unwrap_or_default();
 
-    let cover_url = cur_active_song.and_then(|s| {
-        let thumb = s.thumbnails.iter().max_by_key(|t| t.height * t.width);
-        thumb.map(|t| t.url.clone())
-    });
     let artist_title = cur_active_song
         .map(|s| s.artists_string.as_str())
         .unwrap_or("")
@@ -55,7 +47,7 @@ pub fn draw_app_media_controls(w: &YoutuiWindow) -> MediaControlsUpdate<'_> {
         title: Some(song_title.into()),
         album: Some(album_title.into()),
         artist: Some(artist_title),
-        cover_url: cover_url.map(Into::into),
+        cover_url: None,
         duration: Some(std::time::Duration::from_secs(duration as u64)),
         playback_status,
         volume,

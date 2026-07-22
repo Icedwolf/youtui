@@ -1,7 +1,7 @@
 use super::{DownloadTask, Playlist, QueueState};
 use crate::app::queue_persistence::{CompactSavedQueue, CompactSongRef};
 use crate::app::structures::{
-    AudioQuality, DownloadStatus, ListSong, ListSongDisplayableField, ListSongID, ListStatus,
+    DownloadStatus, ListSong, ListSongDisplayableField, ListSongID, ListStatus,
     Percentage, PlayState,
 };
 use pretty_assertions::assert_eq;
@@ -27,7 +27,7 @@ fn get_dummy_album() -> GetAlbum {
 }
 
 fn get_dummy_playlist() -> Playlist {
-    let (mut playlist, _effect) = Playlist::new(Percentage(50), AudioQuality::Low);
+    let (mut playlist, _effect) = Playlist::new(Percentage(50));
     playlist.list.state = ListStatus::Loaded;
     let GetAlbum {
         title,
@@ -42,7 +42,6 @@ fn get_dummy_playlist() -> Playlist {
             id: AlbumID::from_raw(""),
         },
         year,
-        vec![],
         vec![],
     );
     playlist
@@ -78,7 +77,6 @@ fn compact_song_ref_contains_all_fields() {
         artists: vec!["Artist 1".to_string(), "Artist 2".to_string()],
         album: Some("Test Album".to_string()),
         duration_string: "3:45".to_string(),
-        thumbnail_url: Some("https://example.com/thumb.jpg".to_string()),
     };
 
     assert_eq!(song_ref.video_id.get_raw(), "test123");
@@ -86,7 +84,6 @@ fn compact_song_ref_contains_all_fields() {
     assert_eq!(song_ref.artists.len(), 2);
     assert_eq!(song_ref.album, Some("Test Album".to_string()));
     assert_eq!(song_ref.duration_string, "3:45");
-    assert!(song_ref.thumbnail_url.is_some());
 }
 
 #[test]
@@ -97,7 +94,6 @@ fn compact_song_ref_serialization_roundtrip() {
         artists: vec!["Solo Artist".to_string()],
         album: None,
         duration_string: "4:20".to_string(),
-        thumbnail_url: None,
     };
 
     let json = serde_json::to_string(&song_ref).unwrap();
@@ -119,7 +115,6 @@ fn compact_queue_with_current_index() {
             artists: vec!["Artist".to_string()],
             album: Some("Album".to_string()),
             duration_string: "3:00".to_string(),
-            thumbnail_url: None,
         },
         CompactSongRef {
             video_id: VideoID::from_raw("song2"),
@@ -127,7 +122,6 @@ fn compact_queue_with_current_index() {
             artists: vec!["Artist".to_string()],
             album: Some("Album".to_string()),
             duration_string: "4:00".to_string(),
-            thumbnail_url: None,
         },
     ];
 
@@ -162,7 +156,6 @@ fn list_song_create_with_metadata_has_album() {
         vec!["Artist".to_string()],
         Some("Album Name".to_string()),
         "3:33".to_string(),
-        None,
     );
 
     use crate::app::structures::ListSongDisplayableField;
@@ -184,7 +177,6 @@ fn list_song_create_with_metadata_no_album() {
         vec!["Artist1".to_string(), "Artist2".to_string()],
         None,
         "4:00".to_string(),
-        Some("https://example.com/thumb.jpg".to_string()),
     );
 
     assert!(song.album.is_none());
@@ -192,7 +184,6 @@ fn list_song_create_with_metadata_no_album() {
         song.get_field(ListSongDisplayableField::Artists).as_ref(),
         "Artist1, Artist2"
     );
-    assert!(!song.thumbnails.is_empty());
 }
 
 #[cfg(test)]
@@ -213,12 +204,11 @@ mod render_tests {
             artists.into_iter().map(String::from).collect(),
             album.map(String::from),
             "3:30".to_string(),
-            None,
         )
     }
 
     fn render_playlist(songs: Vec<ListSong>) -> String {
-        let (mut playlist, _) = Playlist::new(Percentage(50), AudioQuality::Low);
+        let (mut playlist, _) = Playlist::new(Percentage(50));
         playlist.list.state = ListStatus::Loaded;
         playlist.list.push_song_list(songs);
         let backend = TestBackend::new(120, 20);
@@ -345,7 +335,7 @@ fn download_scope_max_2_songs() {
 mod state_transitions {
     use crate::app::component::actionhandler::ActionHandler;
     use crate::app::structures::{
-        AudioQuality, DownloadStatus, ListSong, ListSongID, ListStatus, Percentage, PlayState,
+        DownloadStatus, ListSong, ListSongID, ListStatus, Percentage, PlayState,
     };
     use crate::app::ui::playlist::{PlayMode, Playlist, PlaylistAction};
     use crate::app::view::HasTitle;
@@ -354,7 +344,7 @@ mod state_transitions {
     use ytmapi_rs::common::{VideoID, YoutubeID};
 
     fn undownloaded_songs(n: usize) -> Playlist {
-        let (mut p, _) = Playlist::new(Percentage(50), AudioQuality::Low);
+        let (mut p, _) = Playlist::new(Percentage(50));
         p.list.state = ListStatus::Loaded;
         let songs: Vec<ListSong> = (0..n)
             .map(|i| {
@@ -364,7 +354,6 @@ mod state_transitions {
                     vec!["Artist".to_string()],
                     None,
                     "3:00".to_string(),
-                    None,
                 );
                 song.download_status = DownloadStatus::None;
                 song
@@ -375,7 +364,7 @@ mod state_transitions {
     }
 
     fn downloaded_songs(n: usize) -> Playlist {
-        let (mut p, _) = Playlist::new(Percentage(50), AudioQuality::Low);
+        let (mut p, _) = Playlist::new(Percentage(50));
         p.list.state = ListStatus::Loaded;
         let songs: Vec<ListSong> = (0..n)
             .map(|i| {
@@ -385,7 +374,6 @@ mod state_transitions {
                     vec!["Artist".to_string()],
                     None,
                     "3:00".to_string(),
-                    None,
                 );
                 song.download_status = DownloadStatus::Downloaded;
                 song
@@ -507,7 +495,7 @@ mod state_transitions {
         assert_eq!(p.play_status, PlayState::Buffering(ListSongID(0)));
 
         let _ = p.stop();
-        assert_eq!(p.play_status, PlayState::Stopped);
+        assert_eq!(p.play_status, PlayState::NotPlaying);
     }
 
     #[test]
@@ -534,7 +522,7 @@ mod state_transitions {
     fn not_playing_stop_goes_to_stopped() {
         let mut p = downloaded_songs(3);
         let _ = p.stop();
-        assert_eq!(p.play_status, PlayState::Stopped);
+        assert_eq!(p.play_status, PlayState::NotPlaying);
     }
 
     #[test]
@@ -605,7 +593,7 @@ mod state_transitions {
         p.play_status = PlayState::Paused(ListSongID(0));
 
         let _ = p.stop();
-        assert_eq!(p.play_status, PlayState::Stopped);
+        assert_eq!(p.play_status, PlayState::NotPlaying);
     }
 
     #[test]
@@ -667,7 +655,7 @@ mod state_transitions {
         assert_eq!(p.play_status, PlayState::Buffering(ListSongID(0)));
 
         let _ = p.stop();
-        assert_eq!(p.play_status, PlayState::Stopped);
+        assert_eq!(p.play_status, PlayState::NotPlaying);
     }
 
     #[test]
@@ -739,7 +727,7 @@ mod state_transitions {
         p.play_status = PlayState::Error(ListSongID(0));
 
         let _ = p.stop();
-        assert_eq!(p.play_status, PlayState::Stopped);
+        assert_eq!(p.play_status, PlayState::NotPlaying);
     }
 
     #[test]
@@ -779,7 +767,7 @@ mod state_transitions {
         let _ = p.stop();
 
         let _ = p.pause();
-        assert_eq!(p.play_status, PlayState::Stopped);
+        assert_eq!(p.play_status, PlayState::NotPlaying);
     }
 
     #[test]
@@ -788,7 +776,7 @@ mod state_transitions {
         let _ = p.stop();
 
         let _ = p.resume();
-        assert_eq!(p.play_status, PlayState::Stopped);
+        assert_eq!(p.play_status, PlayState::NotPlaying);
     }
 
     #[test]
@@ -797,7 +785,7 @@ mod state_transitions {
         let _ = p.stop();
 
         let _ = p.pauseplay();
-        assert_eq!(p.play_status, PlayState::Stopped);
+        assert_eq!(p.play_status, PlayState::NotPlaying);
     }
 
     #[test]
@@ -806,7 +794,7 @@ mod state_transitions {
         let _ = p.stop();
 
         let _ = p.stop();
-        assert_eq!(p.play_status, PlayState::Stopped);
+        assert_eq!(p.play_status, PlayState::NotPlaying);
     }
 
     #[test]
@@ -815,7 +803,7 @@ mod state_transitions {
         let _ = p.stop();
 
         let _ = p.handle_next();
-        assert_eq!(p.play_status, PlayState::Stopped);
+        assert_eq!(p.play_status, PlayState::NotPlaying);
     }
 
     #[test]
@@ -838,7 +826,7 @@ mod state_transitions {
 
     #[test]
     fn play_song_advances_download_status() {
-        let (mut p, _) = Playlist::new(Percentage(50), AudioQuality::Low);
+        let (mut p, _) = Playlist::new(Percentage(50));
         p.list.state = ListStatus::Loaded;
         let songs: Vec<ListSong> = (0..3)
             .map(|i| {
@@ -848,7 +836,6 @@ mod state_transitions {
                     vec!["Artist".to_string()],
                     None,
                     "3:00".to_string(),
-                    None,
                 )
             })
             .collect();
@@ -881,7 +868,7 @@ mod state_transitions {
 
     #[test]
     fn prebuffer_does_not_retry_failed() {
-        let (mut p, _) = Playlist::new(Percentage(50), AudioQuality::Low);
+        let (mut p, _) = Playlist::new(Percentage(50));
         p.list.state = ListStatus::Loaded;
         let songs: Vec<ListSong> = (0..3)
             .map(|i| {
@@ -891,7 +878,6 @@ mod state_transitions {
                     vec!["Artist".to_string()],
                     None,
                     "3:00".to_string(),
-                    None,
                 )
             })
             .collect();
@@ -919,7 +905,7 @@ mod state_transitions {
 
     #[test]
     fn play_song_clears_failed_status() {
-        let (mut p, _) = Playlist::new(Percentage(50), AudioQuality::Low);
+        let (mut p, _) = Playlist::new(Percentage(50));
         p.list.state = ListStatus::Loaded;
         let songs: Vec<ListSong> = (0..3)
             .map(|i| {
@@ -929,7 +915,6 @@ mod state_transitions {
                     vec!["Artist".to_string()],
                     None,
                     "3:00".to_string(),
-                    None,
                 )
             })
             .collect();
@@ -1049,7 +1034,7 @@ mod state_transitions {
     #[test]
     fn status_bar_icon_stopped_shows_stop() {
         let mut p = downloaded_songs(3);
-        p.play_status = PlayState::Stopped;
+        p.play_status = PlayState::NotPlaying;
         assert_eq!(p.status_bar_icon(), '', "Stopped must show stop icon");
     }
 
@@ -1360,7 +1345,7 @@ mod state_transitions {
 
         if Some(visual_idx) == cur_playing_visual {
             match p.play_status {
-                PlayState::NotPlaying | PlayState::Stopped | PlayState::Error(_) => {
+                PlayState::NotPlaying | PlayState::NotPlaying | PlayState::Error(_) => {
                     ">>>".to_string()
                 }
                 PlayState::Playing(_) | PlayState::Paused(_) | PlayState::Buffering(_) => {

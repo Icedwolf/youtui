@@ -4,7 +4,6 @@ pub const CONTENT: &str = "/contents/0";
 pub const RUN_TEXT: &str = "/runs/0/text";
 pub const TAB_CONTENT: &str = "/tabs/0/tabRenderer/content";
 pub const TAB_RENDERER: &str = "/tabRenderer/content";
-pub const _TAB_1_CONTENT: &str = "/tabs/1/tabRenderer/content";
 pub const SINGLE_COLUMN: &str = "/contents/singleColumnBrowseResultsRenderer";
 pub const SINGLE_COLUMN_TABS: &str = "/contents/singleColumnBrowseResultsRenderer/tabs";
 pub const TWO_COLUMN: &str = "/contents/twoColumnBrowseResultsRenderer";
@@ -15,7 +14,6 @@ pub const MUSIC_PLAYLIST_SHELF: &str = "/musicPlaylistShelfRenderer";
 pub const GRID: &str = "/gridRenderer";
 pub const MENU: &str = "/menu/menuRenderer";
 pub const MENU_SERVICE: &str = "/menuServiceItemRenderer/serviceEndpoint";
-pub const _TOGGLE_MENU: &str = "/toggleMenuServiceItemRenderer";
 pub const PLAY_BUTTON: &str =
     "/overlay/musicItemThumbnailOverlayRenderer/content/musicPlayButtonRenderer";
 pub const NAVIGATION_BROWSE: &str = "/navigationEndpoint/browseEndpoint";
@@ -42,14 +40,12 @@ pub const CATEGORY_PARAMS: &str = "/clickCommand/browseEndpoint/params";
 pub const MRLIR: &str = "/musicResponsiveListItemRenderer";
 pub const MMRLIR: &str = "/musicMultiRowListItemRenderer";
 pub const PPR: &str = "/playlistPanelRenderer";
-pub const _MRLIFCR: &str = "/musicResponsiveListItemFlexColumnRenderer";
 pub const MTRIR: &str = "/musicTwoRowItemRenderer";
 pub const TASTE_PROFILE_ITEMS: &str = "/contents/tastebuilderRenderer/contents";
 pub const TASTE_ITEM_CONTENTS: &str = "/tastebuilderItemListRenderer/contents";
 pub const TASTE_PROFILE_SELECTION: &str = "/tastebuilderItemRenderer/selectionFormValue";
 pub const TASTE_PROFILE_IMPRESSION: &str = "/tastebuilderItemRenderer/impressionFormValue";
 pub const TASTE_PROFILE_ARTIST: &str = "/tastebuilderItemRenderer/title/runs/0/text";
-pub const _SECTION_LIST_CONTINUATION: &str = "/continuationContents/sectionListContinuation";
 pub const PLAYLIST_PANEL_CONTINUATION: &str = "/continuationContents/playlistPanelContinuation";
 pub const CONTINUATION_RENDERER_COMMAND: &str =
     "/continuationItemRenderer/continuationEndpoint/continuationCommand/token";
@@ -66,8 +62,6 @@ pub const DESCRIPTION_SHELF: &str = "/musicDescriptionShelfRenderer";
 pub const DESCRIPTION_SHELF_RUNS: &str =
     "/description/musicDescriptionShelfRenderer/description/runs";
 pub const CAROUSEL: &str = "/musicCarouselShelfRenderer";
-pub const _IMMERSIVE_CAROUSEL: &str = "/musicImmersiveCarouselShelfRenderer";
-pub const _FRAMEWORK_MUTATIONS: &str = "/frameworkUpdates/entityBatchUpdate/mutations";
 pub const INDEX_TEXT: &str = "/index/runs/0/text";
 pub const RESPONSIVE_HEADER: &str = "/musicResponsiveHeaderRenderer";
 pub const DISPLAY_POLICY: &str = "/musicItemRendererDisplayPolicy";
@@ -125,10 +119,7 @@ pub const MENU_PLAYLIST_ID: &str = concatcp!(
     NAVIGATION_WATCH_PLAYLIST_ID
 );
 pub const DESCRIPTION: &str = concatcp!("/description", RUN_TEXT);
-pub const _CAROUSEL_CONTENTS: &str = concatcp!(CAROUSEL, "/contents");
 pub const CAROUSEL_TITLE: &str = concatcp!("/header/musicCarouselShelfBasicHeaderRenderer", TITLE);
-pub const _CARD_SHELF_TITLE: &str =
-    concatcp!("/header/musicCardShelfHeaderBasicRenderer", TITLE_TEXT);
 pub const STRAPLINE_TEXT: &str = concatcp!("/straplineTextOne", RUN_TEXT);
 pub const STRAPLINE_RUNS: &str = "/straplineTextOne/runs";
 pub const DELETION_ENTITY_ID: &str = "/menuNavigationItemRenderer/navigationEndpoint/confirmDialogEndpoint/content/confirmDialogRenderer/confirmButton/buttonRenderer/command/musicDeletePrivatelyOwnedEntityCommand/entityId";

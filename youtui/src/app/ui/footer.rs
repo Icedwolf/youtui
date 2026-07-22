@@ -63,7 +63,7 @@ pub fn draw_footer(f: &mut Frame, w: &mut super::YoutuiWindow, chunk: Rect) {
         | PlayState::Playing(id)
         | PlayState::Paused(id)
         | PlayState::Buffering(id) => Some(id),
-        PlayState::NotPlaying | PlayState::Stopped => None,
+        PlayState::NotPlaying  => None,
     };
 
     let mut duration = 0;
@@ -81,7 +81,7 @@ pub fn draw_footer(f: &mut Frame, w: &mut super::YoutuiWindow, chunk: Rect) {
                 .filter(|&secs| secs < 7200 || secs <= song.duration_secs * 2)
                 .unwrap_or(song.duration_secs);
             progress = w.playlist.get_cur_played_dur().unwrap_or_default();
-            (progress.as_secs_f64() / duration as f64).clamp(0.0, 1.0)
+            if duration == 0 { 0.0 } else { (progress.as_secs_f64() / duration as f64).clamp(0.0, 1.0) }
         } else {
             0.0
         }

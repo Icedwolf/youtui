@@ -70,7 +70,6 @@ pub struct GetArtistSongs(pub ArtistChannelID<'static>);
 #[derive(Debug, PartialEq)]
 pub struct GetPlaylistSongs {
     pub playlist_id: PlaylistID<'static>,
-    pub max_songs: usize,
 }
 
 #[derive(Debug)]
@@ -292,7 +291,7 @@ impl BackendStreamingTask<ArcServer> for GetPlaylistSongs {
         let backend = backend.clone();
         backend
             .api
-            .get_playlist_songs(self.playlist_id, self.max_songs)
+            .get_playlist_songs(self.playlist_id)
     }
 }
 

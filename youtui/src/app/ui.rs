@@ -270,7 +270,7 @@ impl ActionHandler<AppAction> for YoutuiWindow {
 
 impl YoutuiWindow {
     pub fn new(config: Config) -> (YoutuiWindow, ComponentEffect<YoutuiWindow>) {
-        let (playlist, task) = Playlist::new(Percentage(config.volume), config.audio_quality);
+        let (playlist, task) = Playlist::new(Percentage(config.volume));
         let this = YoutuiWindow {
             context: WindowContext::Browser,
             playlist,
