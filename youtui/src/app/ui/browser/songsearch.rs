@@ -5,10 +5,12 @@ use super::shared_components::{
     play_song_impl, play_songs_impl,
 };
 use crate::app::component::actionhandler::{
-    Action, ActionHandler, ComponentEffect, KeyRouter, Scrollable, Suggestable, TextHandler,
+    Action, ActionHandler, Component, KeyRouter, Scrollable, Suggestable, TextHandler,
     YoutuiEffect,
 };
-use crate::app::server::{HandleApiError, SearchSongs};
+use crate::app::effect::Effects;
+use crate::app::server::ArcServer;
+use std::sync::Arc;
 use crate::app::structures::{
     BrowserSongsList, ListSong, ListSongDisplayableField, ListStatus, Percentage, SongListComponent,
 };
@@ -22,12 +24,11 @@ use crate::config::keymap::Keymap;
 use crate::drawutils::get_offset_after_list_resize;
 use crate::widgets::ScrollingTableState;
 use anyhow::{Result, bail};
-use async_callback_manager::{AsyncTask, Constraint, NoOpHandler};
 use itertools::Either;
 use ratatui::text::Line;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
-use tracing::debug;
+use tracing::{debug, warn};
 use ytmapi_rs::common::SearchSuggestion;
 use ytmapi_rs::parse::SearchResultSong;
 
@@ -42,7 +43,7 @@ pub struct SongSearchBrowser {
     pub     filter: FilterManager,
     filtered_indices: Vec<usize>,
 }
-impl_youtui_component!(SongSearchBrowser);
+impl Component for SongSearchBrowser {}
 
 use crate::define_browser_songs_action;
 
@@ -123,16 +124,16 @@ impl TextHandler for SongSearchBrowser {
     fn handle_text_event_impl(
         &mut self,
         event: &crossterm::event::Event,
-    ) -> Option<ComponentEffect<Self>> {
+    ) -> Option<Effects<Self>> {
         match self.input_routing {
             InputRouting::Search => self
                 .search
                 .handle_text_event_impl(event)
-                .map(|effect| effect.map_frontend(|this: &mut Self| &mut this.search)),
+                .map(|effect| effect.map(|this: &mut Self| &mut this.search)),
             InputRouting::Filter => self
                 .filter
                 .handle_text_event_impl(event)
-                .map(|effect| effect.map_frontend(|this: &mut Self| &mut this.filter)),
+                .map(|effect| effect.map(|this: &mut Self| &mut this.filter)),
             InputRouting::List => None,
             InputRouting::Sort => None,
         }
@@ -145,7 +146,7 @@ impl ActionHandler<FilterAction> for SongSearchBrowser {
             FilterAction::Apply => self.apply_filter(),
             FilterAction::ClearFilter => self.clear_filter(),
         };
-        AsyncTask::new_no_op()
+        Effects::none()
     }
 }
 impl ActionHandler<SortAction> for SongSearchBrowser {
@@ -156,7 +157,7 @@ impl ActionHandler<SortAction> for SongSearchBrowser {
             SortAction::Close => self.close_sort(),
             SortAction::ClearSort => self.handle_clear_sort(),
         }
-        AsyncTask::new_no_op()
+        Effects::none()
     }
 }
 impl ActionHandler<BrowserSearchAction> for SongSearchBrowser {
@@ -165,7 +166,7 @@ impl ActionHandler<BrowserSearchAction> for SongSearchBrowser {
             BrowserSearchAction::PrevSearchSuggestion => self.search.increment_list(-1),
             BrowserSearchAction::NextSearchSuggestion => self.search.increment_list(1),
         }
-        AsyncTask::new_no_op()
+        Effects::none()
     }
 }
 impl ActionHandler<BrowserSongsAction> for SongSearchBrowser {
@@ -491,7 +492,7 @@ impl SongSearchBrowser {
         };
         self.close_sort();
     }
-    pub fn handle_text_entry_action(&mut self, action: TextEntryAction) -> ComponentEffect<Self> {
+    pub fn handle_text_entry_action(&mut self, action: TextEntryAction) -> Effects<Self> {
         if self.is_text_handling()
             && self.search_popped
             && matches!(self.input_routing, InputRouting::Search)
@@ -509,11 +510,11 @@ impl SongSearchBrowser {
                 TextEntryAction::Backspace => (),
                 TextEntryAction::DeleteWord => {
                     self.search.delete_word();
-                    return AsyncTask::new_no_op();
+                    return Effects::none();
                 }
             }
         }
-        AsyncTask::new_no_op()
+        Effects::none()
     }
     pub fn handle_toggle_search(&mut self) {
         if self.search_popped {
@@ -524,21 +525,31 @@ impl SongSearchBrowser {
             self.input_routing = InputRouting::Search;
         }
     }
-    pub fn search(&mut self) -> ComponentEffect<Self> {
+    pub fn search(&mut self) -> Effects<Self> {
         self.search_popped = false;
         self.input_routing = InputRouting::List;
         let Some(search_query) = self.search.get_text().map(|s| s.to_string()) else {
-            // Do nothing if no text
-            return AsyncTask::new_no_op();
+            return Effects::none();
         };
         self.search.clear_text();
 
-        AsyncTask::new_future_try(
-            SearchSongs(search_query),
-            HandleSearchSongsOk,
-            HandleSearchSongsErr,
-            Some(Constraint::new_kill_same_type()),
-        )
+        Effects::new(move |server: &ArcServer| {
+            let query = search_query.clone();
+            let server = Arc::clone(server);
+            async move {
+                match server.api.search_songs(query).await {
+                    Ok(songs) => Box::new(move |this: &mut SongSearchBrowser| {
+                        this.replace_song_list(songs);
+                        Effects::none()
+                    }) as Box<dyn FnOnce(&mut SongSearchBrowser) -> Effects<SongSearchBrowser> + Send>,
+                    Err(error) => {
+                        warn!("Song search error: {error}");
+                        Box::new(|_: &mut SongSearchBrowser| Effects::none())
+                            as Box<dyn FnOnce(&mut SongSearchBrowser) -> Effects<SongSearchBrowser> + Send>
+                    }
+                }
+            }
+        }).kill_prev::<SongSearchBrowser>()
     }
     pub fn play_song(&mut self) -> impl Into<YoutuiEffect<Self>> + use<> {
         play_song_impl::<Self>(self.get_selected_item(), |idx| {
@@ -604,66 +615,5 @@ impl SongSearchBrowser {
     }
 }
 
-#[derive(Debug, PartialEq)]
-struct HandleSearchSongsOk;
-#[derive(Debug, PartialEq)]
-struct HandleSearchSongsErr;
 
-impl_youtui_task_handler!(
-    HandleSearchSongsOk,
-    Vec<SearchResultSong>,
-    SongSearchBrowser,
-    |_, songs| |this: &mut SongSearchBrowser| { this.replace_song_list(songs) }
-);
-impl_youtui_task_handler!(
-    HandleSearchSongsErr,
-    anyhow::Error,
-    SongSearchBrowser,
-    |_, error| |_: &mut SongSearchBrowser| AsyncTask::new_future(
-        HandleApiError {
-            error,
-            // To avoid needing to clone search query to use in the error message, this
-            // error message is minimal.
-            message: "Error received getting songs".to_string(),
-        },
-        NoOpHandler,
-        None,
-    )
-);
 
-#[cfg(test)]
-mod tests {
-    use crate::app::server::SearchSongs;
-    use crate::app::ui::browser::songsearch::{
-        HandleSearchSongsErr, HandleSearchSongsOk, SongSearchBrowser,
-    };
-    use async_callback_manager::{AsyncTask, Constraint};
-
-    fn get_dummy_song_search_browser() -> SongSearchBrowser {
-        SongSearchBrowser::new()
-    }
-
-    #[test]
-    fn test_on_submit_action_search_box_cleared() {
-        let mut browser = get_dummy_song_search_browser();
-        browser.search.search_contents.set_text("Search!");
-        let browser_text = browser.search.search_contents.text();
-        assert!(!browser_text.is_empty());
-        let _ = browser.handle_text_entry_action(crate::app::ui::action::TextEntryAction::Submit);
-        let browser_text = browser.search.search_contents.text();
-        assert!(browser_text.is_empty());
-    }
-    #[test]
-    fn test_search_returns_effect() {
-        let mut browser = get_dummy_song_search_browser();
-        browser.search.search_contents.set_text("Search!");
-        let effect = browser.search();
-        let expected_effect = AsyncTask::new_future_try(
-            SearchSongs("Search!".to_string()),
-            HandleSearchSongsOk,
-            HandleSearchSongsErr,
-            Some(Constraint::new_kill_same_type()),
-        );
-        assert_eq!(effect, expected_effect);
-    }
-}

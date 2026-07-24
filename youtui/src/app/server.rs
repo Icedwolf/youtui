@@ -1,12 +1,8 @@
 use crate::config::Config;
-pub use messages::*;
 use std::sync::Arc;
 use tracing::warn;
 
-mod messages;
-
 pub mod api;
-pub mod api_error_handler;
 pub mod player;
 pub mod song_downloader;
 pub mod streaming_buffer;
@@ -16,7 +12,6 @@ pub type ArcServer = Arc<Server>;
 pub struct Server {
     pub api: api::Api,
     pub player: player::Player,
-    pub api_error_handler: api_error_handler::ApiErrorHandler,
     pub config: Config,
     pub po_token: Option<String>,
 }
@@ -50,11 +45,9 @@ impl Server {
         let api_client = downloader_client.clone();
         let api = api::Api::new(api_key, api_client);
         let player = player::Player::new()?;
-        let api_error_handler = api_error_handler::ApiErrorHandler::new();
         Ok(Server {
             api,
             player,
-            api_error_handler,
             config: config.clone(),
             po_token,
         })

@@ -3,31 +3,32 @@ use crate::config::ApiKey;
 use crate::core::get_limited_sequential_file;
 use crate::{RuntimeInfo, get_data_dir};
 use anyhow::{Context, Result, bail};
-use async_callback_manager::{AsyncCallbackManager, TaskOutcome};
 use component::actionhandler::YoutuiEffect;
 use crossterm::event::{DisableMouseCapture, EnableMouseCapture};
 use crossterm::execute;
 use crossterm::terminal::{
     EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
 };
+use effect::TaskResult;
 use media_controls::MediaController;
 use queue_persistence::auto_save;
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
-use server::{ArcServer, Server, TaskMetadata};
+use server::Server;
 use std::borrow::Cow;
 use std::fmt::Display;
 use std::io;
 use std::sync::Arc;
 use server::song_downloader;
 use structures::ListSong;
-use tracing::{debug, error, info, trace, warn};
-use ytmapi_rs::common::YoutubeID;
+use tracing::{debug, error, info, warn};
 use tracing_subscriber::prelude::*;
+use ytmapi_rs::common::YoutubeID;
 use ui::{WindowContext, YoutuiWindow};
 
 #[macro_use]
 pub mod component;
+pub mod effect;
 mod media_controls;
 pub mod queue_persistence;
 mod server;
@@ -51,7 +52,7 @@ pub struct Youtui {
     status: AppStatus,
     event_handler: EventHandler,
     window_state: YoutuiWindow,
-    task_manager: AsyncCallbackManager<YoutuiWindow, ArcServer, TaskMetadata>,
+    task_manager: effect::TaskManager<YoutuiWindow>,
     server: Arc<Server>,
     terminal: Terminal<CrosstermBackend<io::Stdout>>,
     // Optional as may be disabled at runtime.
@@ -121,13 +122,7 @@ impl Youtui {
             }
         }));
         // Setup components
-        let mut task_manager = async_callback_manager::AsyncCallbackManager::new()
-            .with_on_task_spawn_callback(|task| {
-                debug!(
-                    "Received task {:?}: type_id: {:?},  constraint: {:?}",
-                    task.type_debug, task.type_id, task.constraint
-                )
-            });
+        let task_manager = effect::TaskManager::<YoutuiWindow>::new();
         let t_server = std::time::Instant::now();
         let server = Arc::new(server::Server::new(api_key, po_token, &config)?);
         debug!(
@@ -150,7 +145,7 @@ impl Youtui {
         let (mut window_state, effect) = YoutuiWindow::new(config);
         // Even the creation of a YoutuiWindow causes an effect. We'll spawn it straight
         // away.
-        task_manager.spawn_task(&server, effect);
+        task_manager.spawn(&server, effect);
 
         // Auto-load playlist from previous session (if any)
         let t_load = std::time::Instant::now();
@@ -166,9 +161,9 @@ impl Youtui {
                 if window_state.playlist.loaded_from_autosave() {
                     window_state.handle_change_context(WindowContext::Playlist);
                 }
-                task_manager.spawn_task(
+                task_manager.spawn(
                     &server,
-                    load_effect.map_frontend(|w: &mut YoutuiWindow| &mut w.playlist),
+                    load_effect.map(|w: &mut YoutuiWindow| &mut w.playlist),
                 );
             }
             Err(e) => {
@@ -243,43 +238,18 @@ impl Youtui {
         }
         Ok(())
     }
-    fn handle_effect(&mut self, effect: TaskOutcome<YoutuiWindow, ArcServer, TaskMetadata>) {
-        match effect {
-            async_callback_manager::TaskOutcome::StreamFinished {
-                type_id,
-                type_debug,
-                task_id,
-                ..
-            } => {
-                debug!(
-                    "Stream task {:?}: type_id: {:?}, task_id: {:?} finished",
-                    type_debug, type_id, task_id
-                );
+    fn handle_effect(&mut self, result: TaskResult<YoutuiWindow>) {
+        match result {
+            TaskResult::Mutation(mutation) => {
+                let next = mutation(&mut self.window_state);
+                self.task_manager.spawn(&self.server, next);
             }
-            async_callback_manager::TaskOutcome::TaskPanicked {
-                type_debug, error, ..
+            TaskResult::StreamFinished => {
+                debug!("Stream task finished");
             }
-            | async_callback_manager::TaskOutcome::StreamPanicked {
-                type_debug, error, ..
-            } => {
-                error!("Task {type_debug} panicked!");
-                // We are about to panic - ignore terminal destruction error.
-                let _ = cleanup_tui_and_print_panic_message(&error);
-                std::panic::resume_unwind(error.into_panic());
-            }
-            async_callback_manager::TaskOutcome::MutationReceived {
-                mutation,
-                type_id,
-                type_debug,
-                task_id,
-                ..
-            } => {
-                trace!(
-                    "Received response to {:?}: type_id: {:?}, task_id: {:?}",
-                    type_debug, type_id, task_id
-                );
-                let next_task = mutation(&mut self.window_state);
-                self.task_manager.spawn_task(&self.server, next_task);
+            TaskResult::Panic(msg) => {
+                error!("Task panicked: {msg}");
+                let _ = cleanup_tui_and_print_panic_message(&msg);
             }
         }
     }
@@ -289,7 +259,7 @@ impl Youtui {
             AppEvent::Crossterm(e) => {
                 let YoutuiEffect { effect, callback } =
                     self.window_state.handle_crossterm_event(e).await;
-                self.task_manager.spawn_task(&self.server, effect);
+                self.task_manager.spawn(&self.server, effect);
                 if let Some(callback) = callback {
                     self.handle_callback(callback);
                 }
@@ -297,7 +267,7 @@ impl Youtui {
             AppEvent::MediaControls(e) => {
                 let YoutuiEffect { effect, callback } =
                     self.window_state.handle_media_controls_event(e).await;
-                self.task_manager.spawn_task(&self.server, effect);
+                self.task_manager.spawn(&self.server, effect);
                 if let Some(callback) = callback {
                     self.handle_callback(callback);
                 }
@@ -309,11 +279,11 @@ impl Youtui {
         match callback {
             AppCallback::Quit => self.status = AppStatus::Exiting("Quitting".into()),
             AppCallback::ChangeContext(context) => self.window_state.handle_change_context(context),
-            AppCallback::AddSongsToPlaylist(song_list) => self.task_manager.spawn_task(
+            AppCallback::AddSongsToPlaylist(song_list) => self.task_manager.spawn(
                 &self.server,
                 self.window_state.handle_add_songs_to_playlist(song_list),
             ),
-            AppCallback::AddSongsToPlaylistAndPlay(song_list) => self.task_manager.spawn_task(
+            AppCallback::AddSongsToPlaylistAndPlay(song_list) => self.task_manager.spawn(
                 &self.server,
                 self.window_state
                     .handle_add_songs_to_playlist_and_play(song_list),

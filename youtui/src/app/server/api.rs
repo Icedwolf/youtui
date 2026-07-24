@@ -3,7 +3,6 @@ use crate::app::CALLBACK_CHANNEL_SIZE;
 use crate::async_rodio_sink::send_or_error;
 use crate::config::ApiKey;
 use anyhow::{Error, Result};
-use async_callback_manager::PanickingReceiverStream;
 use async_cell::sync::AsyncCell;
 use futures::stream::FuturesUnordered;
 use futures::{Stream, StreamExt};
@@ -14,14 +13,15 @@ use std::collections::HashSet;
 use std::collections::hash_map;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use tokio_stream::wrappers::ReceiverStream;
 use tracing::{debug, info, trace, warn};
 use ytmapi_rs::auth::BrowserToken;
 use ytmapi_rs::common::{
-    AlbumID, ArtistChannelID, PlaylistID, SearchSuggestion, VideoID, YoutubeID,
+    AlbumID, ArtistChannelID, PlaylistID, VideoID, YoutubeID,
 };
 use ytmapi_rs::parse::{
     AlbumSong, GetAlbum, GetArtistAlbums, GetArtistAlbumsAlbum, ParsedSongAlbum, ParsedSongArtist,
-    PlaylistItem, SearchResultArtist, SearchResultPlaylist, SearchResultSong, SearchResults,
+    PlaylistItem, SearchResultArtist, SearchResultPlaylist, SearchResultSong,
 };
 use ytmapi_rs::query::{GetAlbumQuery, GetArtistAlbumsQuery};
 
@@ -53,12 +53,6 @@ impl Api {
     pub async fn get_api(&self) -> Result<ConcurrentApi, DynamicApiError> {
         // Note that the error, if it exists, is cloned here.
         self.api.get().await
-    }
-    pub async fn get_search_suggestions(
-        &self,
-        text: String,
-    ) -> Result<(Vec<SearchSuggestion>, String)> {
-        get_search_suggestions(self.get_api().await?, text).await
     }
     pub async fn search_playlists(&self, text: String) -> Result<Vec<SearchResultPlaylist>> {
         search_playlists(self.get_api().await?, text).await
@@ -208,27 +202,6 @@ async fn search_songs(api: ConcurrentApi, text: String) -> Result<Vec<SearchResu
     query_api_with_retry(&api, query).await
 }
 
-/// Unfiltered search that returns all result types (songs, videos, albums, etc.).
-/// May include multiple entries for the same (title, artist) pair that the
-/// SongsFilter deduplicates away.
-async fn search_broad(api: ConcurrentApi, text: String) -> Result<SearchResults> {
-    debug!("Broad search for {text}");
-    let query =
-        ytmapi_rs::query::SearchQuery::<ytmapi_rs::query::search::BasicSearch>::from(text.as_str())
-            .with_spelling_mode(ytmapi_rs::query::search::SpellingMode::ExactMatch);
-    query_api_with_retry(&api, query).await
-}
-
-pub async fn get_search_suggestions(
-    api: ConcurrentApi,
-    text: String,
-) -> Result<(Vec<SearchSuggestion>, String)> {
-    debug!("Getting search suggestions for {text}");
-    let query = ytmapi_rs::query::GetSearchSuggestionsQuery::new(&text);
-    let results = query_api_with_retry(&api, query).await?;
-    Ok((results, text))
-}
-
 #[derive(Debug, Clone)]
 pub struct AlbumSongsData {
     pub song_list: Vec<AlbumSong>,
@@ -339,7 +312,7 @@ fn get_artist_songs(
     browse_id: ArtistChannelID<'static>,
 ) -> impl Stream<Item = GetArtistSongsProgressUpdate> + 'static {
     let (tx, rx) = tokio::sync::mpsc::channel(CALLBACK_CHANNEL_SIZE);
-    let handle = tokio::spawn(async move {
+    let _handle = tokio::spawn(async move {
         debug!("Running songs query");
         if tx.try_send(GetArtistSongsProgressUpdate::Loading).is_err() {
             debug!("artist_songs: Loading signal dropped (channel full or closed)");
@@ -522,7 +495,7 @@ fn get_artist_songs(
         .await;
         send_or_error(tx, GetArtistSongsProgressUpdate::AllSongsSent).await;
     });
-    PanickingReceiverStream::new(rx, handle)
+    ReceiverStream::new(rx)
 }
 
 pub enum GetPlaylistSongsProgressUpdate {
@@ -544,7 +517,7 @@ fn get_playlist_songs(
     playlist_id: PlaylistID<'static>,
 ) -> impl Stream<Item = GetPlaylistSongsProgressUpdate> + 'static {
     let (tx, rx) = tokio::sync::mpsc::channel(CALLBACK_CHANNEL_SIZE);
-    let handle = tokio::spawn(async move {
+    let _handle = tokio::spawn(async move {
         debug!("Running songs query");
         if tx
             .try_send(GetPlaylistSongsProgressUpdate::Loading)
@@ -587,59 +560,7 @@ fn get_playlist_songs(
         }
         send_or_error(tx, GetPlaylistSongsProgressUpdate::AllSongsSent).await;
     });
-    PanickingReceiverStream::new(rx, handle)
-}
-
-/// Given a non-audio song's metadata, try to find its audio-only (Atv)
-/// version by doing a targeted search for the song's title + artist.
-/// Returns `Some(resolved_video_id)` if a different Atv track was found,
-/// or `None` if no resolution is possible.
-pub async fn resolve_to_audio_track(
-    api: &ConcurrentApi,
-    title: &str,
-    artist: &str,
-    original_raw_id: &str,
-) -> Option<VideoID<'static>> {
-    let search_query = format!("{} {}", title, artist);
-    // First try the filtered songs search.
-    if let Ok(results) = search_songs(api.clone(), search_query.clone()).await {
-        for result in &results {
-            if result.is_audio_track()
-                && result.title == title
-                && result.artist == artist
-                && result.video_id.get_raw() != original_raw_id
-            {
-                debug!(
-                    original = original_raw_id,
-                    resolved = result.video_id.get_raw(),
-                    title,
-                    artist,
-                    "Resolved Omv search result to Atv track"
-                );
-                return Some(result.video_id.clone());
-            }
-        }
-    }
-    // Fallback: broad search (may return multiple results per title+artist).
-    if let Ok(results) = search_broad(api.clone(), search_query).await {
-        for result in &results.songs {
-            if result.is_audio_track()
-                && result.title == title
-                && result.artist == artist
-                && result.video_id.get_raw() != original_raw_id
-            {
-                debug!(
-                    original = original_raw_id,
-                    resolved = result.video_id.get_raw(),
-                    title,
-                    artist,
-                    "Resolved Omv search result to Atv track (broad search)"
-                );
-                return Some(result.video_id.clone());
-            }
-        }
-    }
-    None
+    ReceiverStream::new(rx)
 }
 
 /// Build a title → video_id map from audio-only search results.

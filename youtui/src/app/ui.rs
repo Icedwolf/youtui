@@ -1,20 +1,21 @@
 use self::browser::Browser;
-use self::playlist::{PlayMode, Playlist};
+use self::playlist::Playlist;
 use super::AppCallback;
 use super::component::actionhandler::{
-    ActionHandler, ComponentEffect, DominantKeyRouter, KeyHandleAction, KeyRouter, Scrollable,
+    ActionHandler, Component, DominantKeyRouter, KeyHandleAction, KeyRouter, Scrollable,
     TextHandler, YoutuiEffect, apply_action_mapped, handle_key_stack,
 };
-use super::server::{IncreaseVolume, SetVolume};
 use super::structures::{ListSong, Percentage};
+use crate::app::effect::Effects;
 use crate::app::ui::footer::FooterCache;
-use crate::async_rodio_sink::{SeekDirection, VolumeUpdate};
+use crate::app::server::ArcServer;
+use crate::async_rodio_sink::SeekDirection;
+use std::sync::Arc;
 use crate::config::Config;
 use crate::config::keymap::Keymap;
 use crate::keyaction::{DisplayableKeyAction, DisplayableMode, flatten_keybinds_as_readable};
 use crate::widgets::ScrollingTableState;
 use action::{AppAction, ListAction, PAGE_KEY_LINES, SEEK_AMOUNT, TextEntryAction};
-use async_callback_manager::{AsyncTask, Constraint};
 use crossterm::event::{Event, KeyEvent};
 use itertools::Either;
 use std::time::Duration;
@@ -47,7 +48,7 @@ pub struct YoutuiWindow {
     tick: u64,
     footer_cache: FooterCache,
 }
-impl_youtui_component!(YoutuiWindow);
+impl Component for YoutuiWindow {}
 
 pub struct HelpMenu {
     pub shown: bool,
@@ -66,7 +67,7 @@ impl HelpMenu {
         }
     }
 }
-impl_youtui_component!(HelpMenu);
+impl Component for HelpMenu {}
 
 impl Scrollable for HelpMenu {
     fn increment_list(&mut self, amount: isize) {
@@ -191,16 +192,16 @@ impl TextHandler for YoutuiWindow {
             WindowContext::Playlist => self.playlist.clear_text(),
         }
     }
-    fn handle_text_event_impl(&mut self, event: &Event) -> Option<ComponentEffect<Self>> {
+    fn handle_text_event_impl(&mut self, event: &Event) -> Option<Effects<Self>> {
         match self.context {
             WindowContext::Browser => self
                 .browser
                 .handle_text_event_impl(event)
-                .map(|effect| effect.map_frontend(|this: &mut YoutuiWindow| &mut this.browser)),
+                .map(|effect| effect.map(|this: &mut YoutuiWindow| &mut this.browser)),
             WindowContext::Playlist => self
                 .playlist
                 .handle_text_event_impl(event)
-                .map(|effect| effect.map_frontend(|this: &mut YoutuiWindow| &mut this.playlist)),
+                .map(|effect| effect.map(|this: &mut YoutuiWindow| &mut this.playlist)),
         }
     }
 }
@@ -225,7 +226,7 @@ impl ActionHandler<AppAction> for YoutuiWindow {
                 return self.handle_seek(SEEK_AMOUNT, SeekDirection::Back).into();
             }
             AppAction::ToggleHelp => self.toggle_help(),
-            AppAction::Quit => return (AsyncTask::new_no_op(), Some(AppCallback::Quit)).into(),
+            AppAction::Quit => return (Effects::none(), Some(AppCallback::Quit)).into(),
             AppAction::PlayPause => return self.pauseplay().into(),
             AppAction::Playlist(a) => {
                 return apply_action_mapped(self, a, |this: &mut Self| &mut this.playlist);
@@ -264,12 +265,12 @@ impl ActionHandler<AppAction> for YoutuiWindow {
             AppAction::List(a) => return self.handle_list_action(a).into(),
             AppAction::NoOp => (),
         };
-        AsyncTask::new_no_op().into()
+        Effects::none().into()
     }
 }
 
 impl YoutuiWindow {
-    pub fn new(config: Config) -> (YoutuiWindow, ComponentEffect<YoutuiWindow>) {
+    pub fn new(config: Config) -> (YoutuiWindow, Effects<YoutuiWindow>) {
         let (playlist, task) = Playlist::new(Percentage(config.volume));
         let this = YoutuiWindow {
             context: WindowContext::Browser,
@@ -283,7 +284,7 @@ impl YoutuiWindow {
         };
         (
             this,
-            task.map_frontend(|this: &mut Self| &mut this.playlist),
+            task.map(|this: &mut Self| &mut this.playlist),
         )
     }
     pub fn get_help_list_items(&self) -> impl Iterator<Item = DisplayableKeyAction<'_>> {
@@ -317,7 +318,7 @@ impl YoutuiWindow {
             Event::Resize(..) => tracing::debug!("Received Resize event"),
             other => tracing::warn!("Received unimplemented {:?} event", other),
         }
-        AsyncTask::new_no_op().into()
+        Effects::none().into()
     }
     pub async fn handle_media_controls_event(
         &mut self,
@@ -353,7 +354,7 @@ impl YoutuiWindow {
                 return self.handle_set_volume((v * 100.0) as u8).into();
             }
             souvlaki::MediaControlEvent::Quit => {
-                return (AsyncTask::new_no_op(), Some(AppCallback::Quit)).into();
+                return (Effects::none(), Some(AppCallback::Quit)).into();
             }
             souvlaki::MediaControlEvent::OpenUri(_) => {
                 tracing::debug!("Received intentionally unhandled event {:?}", event)
@@ -362,7 +363,7 @@ impl YoutuiWindow {
                 tracing::debug!("Received intentionally unhandled event {:?}", event)
             }
         }
-        AsyncTask::new_no_op().into()
+        Effects::none().into()
     }
     pub async fn handle_tick(&mut self) {
         self.tick = self.tick.wrapping_add(1);
@@ -375,11 +376,11 @@ impl YoutuiWindow {
     fn handle_mouse_event(
         &mut self,
         mouse_event: crossterm::event::MouseEvent,
-    ) -> ComponentEffect<Self> {
+    ) -> Effects<Self> {
         tracing::debug!("Received unimplemented {:?} mouse event", mouse_event);
-        AsyncTask::new_no_op()
+        Effects::none()
     }
-    pub fn handle_list_action(&mut self, action: ListAction) -> ComponentEffect<Self> {
+    pub fn handle_list_action(&mut self, action: ListAction) -> Effects<Self> {
         if self.is_scrollable() {
             match action {
                 ListAction::Up => self.increment_list(-1),
@@ -408,102 +409,115 @@ impl YoutuiWindow {
                 }
             }
         }
-        AsyncTask::new_no_op()
+        Effects::none()
     }
-    pub fn handle_text_entry_action(&mut self, action: TextEntryAction) -> ComponentEffect<Self> {
+    pub fn handle_text_entry_action(&mut self, action: TextEntryAction) -> Effects<Self> {
         if !self.is_text_handling() {
-            return AsyncTask::new_no_op();
+            return Effects::none();
         }
         match self.context {
             WindowContext::Browser => self
                 .browser
                 .handle_text_entry_action(action)
-                .map_frontend(|this: &mut Self| &mut this.browser),
-            WindowContext::Playlist => AsyncTask::new_no_op(),
+                .map(|this: &mut Self| &mut this.browser),
+            WindowContext::Playlist => Effects::none(),
         }
     }
-    pub fn pauseplay(&mut self) -> ComponentEffect<Self> {
+    pub fn pauseplay(&mut self) -> Effects<Self> {
         self.playlist
             .pauseplay()
-            .map_frontend(|this: &mut Self| &mut this.playlist)
+            .map(|this: &mut Self| &mut this.playlist)
     }
-    pub fn resume(&mut self) -> ComponentEffect<Self> {
+    pub fn resume(&mut self) -> Effects<Self> {
         self.playlist
             .resume()
-            .map_frontend(|this: &mut Self| &mut this.playlist)
+            .map(|this: &mut Self| &mut this.playlist)
     }
-    pub fn pause(&mut self) -> ComponentEffect<Self> {
+    pub fn pause(&mut self) -> Effects<Self> {
         self.playlist
             .pause()
-            .map_frontend(|this: &mut Self| &mut this.playlist)
+            .map(|this: &mut Self| &mut this.playlist)
     }
-    pub fn stop(&mut self) -> ComponentEffect<Self> {
+    pub fn stop(&mut self) -> Effects<Self> {
         self.playlist
             .stop()
-            .map_frontend(|this: &mut Self| &mut this.playlist)
+            .map(|this: &mut Self| &mut this.playlist)
     }
-    pub fn handle_next(&mut self) -> ComponentEffect<Self> {
+    pub fn handle_next(&mut self) -> Effects<Self> {
         self.playlist
             .handle_next()
-            .map_frontend(|this: &mut Self| &mut this.playlist)
+            .map(|this: &mut Self| &mut this.playlist)
     }
-    pub fn handle_prev(&mut self) -> ComponentEffect<Self> {
+    pub fn handle_prev(&mut self) -> Effects<Self> {
         self.playlist
             .handle_previous()
-            .map_frontend(|this: &mut Self| &mut this.playlist)
+            .map(|this: &mut Self| &mut this.playlist)
     }
-    pub fn handle_increase_volume(&mut self, inc: i8) -> ComponentEffect<Self> {
-        // Visually update the state first for instant feedback.
+    pub fn handle_increase_volume(&mut self, inc: i8) -> Effects<Self> {
         self.increase_volume(inc);
-        AsyncTask::new_future_option(
-            IncreaseVolume(inc),
-            HandleVolumeUpdate,
-            Some(Constraint::new_block_same_type()),
-        )
+        Effects::new(move |server: &ArcServer| {
+            let server = Arc::clone(server);
+            async move {
+                let update = server.player.increase_volume(inc).await;
+                Box::new(move |this: &mut YoutuiWindow| {
+                    if let Some(update) = update {
+                        this.playlist.handle_volume_update(update);
+                    }
+                    Effects::none()
+                }) as Box<dyn FnOnce(&mut YoutuiWindow) -> Effects<YoutuiWindow> + Send>
+            }
+        })
     }
-    pub fn handle_set_volume(&mut self, new_vol: u8) -> ComponentEffect<Self> {
-        // Visually update the state first for instant feedback.
+    pub fn handle_set_volume(&mut self, new_vol: u8) -> Effects<Self> {
         self.set_volume(new_vol);
-        AsyncTask::new_future_option(
-            SetVolume(new_vol),
-            HandleVolumeUpdate,
-            Some(Constraint::new_block_same_type()),
-        )
+        Effects::new(move |server: &ArcServer| {
+            let server = Arc::clone(server);
+            async move {
+                let update = server.player.set_volume(new_vol).await;
+                Box::new(move |this: &mut YoutuiWindow| {
+                    if let Some(update) = update {
+                        this.playlist.handle_volume_update(update);
+                    }
+                    Effects::none()
+                }) as Box<dyn FnOnce(&mut YoutuiWindow) -> Effects<YoutuiWindow> + Send>
+            }
+        })
+    }
+    pub fn finish_handle_add_songs_to_playlist_and_play(
+        &mut self,
+        song_list: Vec<ListSong>,
+    ) -> Effects<Playlist> {
+        let e = self.playlist.reset();
+        let (id, next_effect) = self.playlist.push_song_list(song_list);
+        e.push(next_effect).push(self.playlist.play_song(id))
     }
     pub fn handle_seek(
         &mut self,
         duration: Duration,
         direction: SeekDirection,
-    ) -> ComponentEffect<Self> {
+    ) -> Effects<Self> {
         self.playlist
             .handle_seek(duration, direction)
-            .map_frontend(|this: &mut Self| &mut this.playlist)
+            .map(|this: &mut Self| &mut this.playlist)
     }
-    pub fn handle_seek_to(&mut self, position: Duration) -> ComponentEffect<Self> {
+    pub fn handle_seek_to(&mut self, position: Duration) -> Effects<Self> {
         self.playlist
             .handle_seek_to(position)
-            .map_frontend(|this: &mut Self| &mut this.playlist)
-    }
-    pub fn handle_volume_update(&mut self, update: VolumeUpdate) {
-        self.playlist.handle_volume_update(update)
+            .map(|this: &mut Self| &mut this.playlist)
     }
     pub fn handle_add_songs_to_playlist(
         &mut self,
         song_list: Vec<ListSong>,
-    ) -> ComponentEffect<Self> {
+    ) -> Effects<Self> {
         let (_, effect) = self.playlist.push_song_list(song_list);
-        effect.map_frontend(|this: &mut Self| &mut this.playlist)
+        effect.map(|this: &mut Self| &mut this.playlist)
     }
     pub fn handle_add_songs_to_playlist_and_play(
         &mut self,
         song_list: Vec<ListSong>,
-    ) -> ComponentEffect<Self> {
-        let effect = self.playlist.reset();
-        let (id, next_effect) = self.playlist.push_song_list(song_list);
-        effect
-            .push(next_effect)
-            .push(self.playlist.play_song(id, PlayMode::UserInitiated))
-            .map_frontend(|this: &mut Self| &mut this.playlist)
+    ) -> Effects<Self> {
+        let inner = self.finish_handle_add_songs_to_playlist_and_play(song_list);
+        inner.map(|this: &mut Self| &mut this.playlist)
     }
     fn global_handle_key_stack(&mut self) -> YoutuiEffect<Self> {
         match handle_key_stack(self.get_active_keybinds(&self.config), &self.key_stack) {
@@ -512,10 +526,10 @@ impl YoutuiWindow {
                 self.key_stack.clear();
                 effect
             }
-            KeyHandleAction::Mode { .. } => AsyncTask::new_no_op().into(),
+            KeyHandleAction::Mode { .. } => Effects::none().into(),
             KeyHandleAction::NoMap => {
                 self.key_stack.clear();
-                AsyncTask::new_no_op().into()
+                Effects::none().into()
             }
         }
     }
@@ -570,15 +584,4 @@ impl YoutuiWindow {
     }
 }
 
-#[derive(Debug, PartialEq)]
-struct HandleVolumeUpdate;
 
-impl_youtui_task_handler!(
-    HandleVolumeUpdate,
-    VolumeUpdate,
-    YoutuiWindow,
-    |_, update| |this: &mut YoutuiWindow| {
-        YoutuiWindow::handle_volume_update(this, update);
-        AsyncTask::new_no_op()
-    }
-);

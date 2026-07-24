@@ -6,10 +6,10 @@ use super::browser::shared_components::{BrowserSearchAction, FilterAction, SortA
 use super::browser::songsearch::BrowserSongsAction;
 use super::playlist::PlaylistAction;
 use crate::app::component::actionhandler::{Action, ActionHandler, YoutuiEffect};
+use crate::app::effect::Effects;
 use crate::app::ui::browser::playlistsearch::search_panel::BrowserPlaylistsAction;
 use crate::app::ui::browser::playlistsearch::songs_panel::BrowserPlaylistSongsAction;
 use anyhow::bail;
-use async_callback_manager::AsyncTask;
 use serde::de::{self};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
@@ -209,6 +209,6 @@ impl ActionHandler<HelpAction> for HelpMenu {
         match action {
             HelpAction::Close => self.shown = false,
         }
-        AsyncTask::new_no_op()
+        Effects::none()
     }
 }

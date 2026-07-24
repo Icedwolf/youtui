@@ -1,7 +1,7 @@
 use crate::app::component::actionhandler::{
-    Action, ComponentEffect, KeyRouter, Scrollable, Suggestable, TextHandler,
+    Action, KeyRouter, Scrollable, Suggestable, TextHandler,
 };
-use crate::app::server::{ArcServer, TaskMetadata};
+use crate::app::effect::Effects;
 use crate::app::ui::action::AppAction;
 use crate::app::ui::browser::shared_components::SearchBlock;
 use crate::app::view::{HasTitle, ListView};
@@ -66,10 +66,7 @@ impl<C: SearchPanelConfig> SearchPanel<C> {
     }
 }
 
-impl<C: SearchPanelConfig> crate::app::component::actionhandler::Component for SearchPanel<C> {
-    type Bkend = ArcServer;
-    type Md = TaskMetadata;
-}
+impl<C: SearchPanelConfig> crate::app::component::actionhandler::Component for SearchPanel<C> {}
 
 impl<C: SearchPanelConfig> TextHandler for SearchPanel<C> {
     fn is_text_handling(&self) -> bool {
@@ -87,10 +84,10 @@ impl<C: SearchPanelConfig> TextHandler for SearchPanel<C> {
     fn handle_text_event_impl(
         &mut self,
         event: &crossterm::event::Event,
-    ) -> Option<ComponentEffect<Self>> {
+    ) -> Option<Effects<Self>> {
         self.search
             .handle_text_event_impl(event)
-            .map(|effect| effect.map_frontend(|this: &mut SearchPanel<C>| &mut this.search))
+            .map(|effect| effect.map(|this: &mut SearchPanel<C>| &mut this.search))
     }
 }
 

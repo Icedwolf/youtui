@@ -1,8 +1,7 @@
-use crate::app::component::actionhandler::ComponentEffect;
+use crate::app::effect::Effects;
 use crate::app::structures::ListSong;
-use crate::app::ui::playlist::{PlayMode, Playlist};
+use crate::app::ui::playlist::Playlist;
 use crate::get_data_dir;
-use async_callback_manager::AsyncTask;
 use fs_err as fs;
 use serde::{Deserialize, Serialize};
 use std::io::Write;
@@ -98,7 +97,7 @@ pub fn save_queue(playlist: &Playlist, name: &str) -> Result<(), Box<dyn std::er
 pub fn load_queue(
     playlist: &mut Playlist,
     name: &str,
-) -> Result<ComponentEffect<Playlist>, Box<dyn std::error::Error>> {
+) -> Result<Effects<Playlist>, Box<dyn std::error::Error>> {
     let path = get_queue_dir()?.join(format!("{}.json", name));
     debug!("Loading queue from path: {:?}", path);
 
@@ -116,14 +115,14 @@ pub fn load_queue(
         normalize_and_load(playlist, saved, name)
     } else {
         warn!("Queue file corrupted, starting fresh");
-        Ok(AsyncTask::new_no_op())
+        Ok(Effects::none())
     }
 }
 
 fn load_compact_queue(
     playlist: &mut Playlist,
     saved: CompactSavedQueue,
-) -> Result<ComponentEffect<Playlist>, Box<dyn std::error::Error>> {
+) -> Result<Effects<Playlist>, Box<dyn std::error::Error>> {
     debug!("Loaded compact queue with {} songs", saved.songs.len());
     debug!("Clearing playlist (reset)");
     let mut effect = playlist.reset();
@@ -157,10 +156,10 @@ fn load_compact_queue(
 
         if let Some(idx) = saved.current_index {
             if let Some(song_id) = playlist.get_id_from_index(idx) {
-                effect = effect.push(playlist.play_song(song_id, PlayMode::UserInitiated));
+                effect = effect.push(playlist.play_song(song_id));
                 debug!("Restored playback to song at index {}", idx);
             } else {
-                effect = effect.push(playlist.play_song(first_id, PlayMode::UserInitiated));
+                effect = effect.push(playlist.play_song(first_id));
                 debug!("Saved index {} out of bounds, playing first song", idx);
             }
         }
@@ -175,7 +174,7 @@ fn normalize_and_load(
     playlist: &mut Playlist,
     saved: LegacySong,
     name: &str,
-) -> Result<ComponentEffect<Playlist>, Box<dyn std::error::Error>> {
+) -> Result<Effects<Playlist>, Box<dyn std::error::Error>> {
     debug!("Normalizing queue file to compact format");
     let songs: Vec<CompactSongRef> = saved.songs.iter().map(CompactSongRef::from).collect();
     let current_idx = saved.current_index;
@@ -207,11 +206,11 @@ pub fn auto_save(playlist: &Playlist) -> Result<(), Box<dyn std::error::Error>> 
 
 pub fn auto_load(
     playlist: &mut Playlist,
-) -> Result<ComponentEffect<Playlist>, Box<dyn std::error::Error>> {
+) -> Result<Effects<Playlist>, Box<dyn std::error::Error>> {
     debug!("Auto-loading queue from __autosave.json");
     match load_queue(playlist, AUTO_SAVE) {
         Ok(effect) => {
-            debug!("Auto-load succeeded, effect is_no_op={}", effect.is_no_op());
+            debug!("Auto-load succeeded, effect is_no_op={}", effect.is_empty());
             Ok(effect)
         }
         Err(e) => {
@@ -352,7 +351,7 @@ mod tests {
             "current_index=1 should set a playing song"
         );
         assert!(
-            !effect.is_no_op(),
+            !effect.is_empty(),
             "load with songs should produce a real effect"
         );
     }
@@ -369,7 +368,7 @@ mod tests {
         let effect = load_compact_queue(&mut playlist, saved).unwrap();
         assert_eq!(playlist.list.get_list_iter().count(), 0);
         assert!(playlist.get_cur_playing_index().is_none());
-        assert!(effect.is_no_op(), "empty load should produce no-op");
+        assert!(effect.is_empty(), "empty load should produce no-op");
     }
 
     #[test]

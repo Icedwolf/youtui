@@ -1,31 +1,25 @@
 use super::action::AppAction;
 use crate::app::component::actionhandler::{
-    Action, ActionHandler, ComponentEffect, KeyRouter, Scrollable, TextHandler, YoutuiEffect,
+    Action, ActionHandler, Component, KeyRouter, Scrollable, TextHandler, YoutuiEffect,
 };
+use crate::app::effect::{Effects, MutationFn};
 use crate::app::queue_persistence;
-use crate::app::server::song_downloader::{cache_clear, create_decoder_from_cache};
-use crate::app::server::{
-    AutoplaySong, DownloadProgressUpdate, DownloadSong, IncreaseVolume, Pause, PausePlay, PlaySong,
-    ResolveSongToAudio, Resume, Seek, SeekTo, Stop, StopAll, TaskMetadata,
+use crate::app::server::song_downloader::{
+    cache_clear, create_decoder_from_cache, download_and_decode,
 };
 use crate::app::structures::{
     BrowserSongsList, DownloadStatus, ListSong, ListSongDisplayableField, ListSongID,
     Percentage, PlayState, SongListComponent,
 };
-use crate::app::ui::playlist::effect_handlers::{
-    HandleAllStopped, HandleAutoplayUpdateOk, HandlePausePlayResponse, HandlePausedResponse,
-    HandlePlayUpdateOk, HandleResolveAudioResult, HandleResumeResponse, HandleSetSongPlayProgress,
-    HandleSongDownloadProgressUpdate, HandleStopped, HandleVolumeUpdate,
-};
 use crate::app::ui::{AppCallback, WindowContext};
 use crate::app::view::draw::{draw_loadable, draw_panel_mut, draw_table};
 use crate::app::view::{BasicConstraint, DrawableMut, HasTitle, Loadable, TableView};
-use crate::async_rodio_sink::{AllStopped, AutoplayUpdate, SeekDirection, Stopped, VolumeUpdate};
+use crate::async_rodio_sink::{AllStopped, PlayUpdate, SeekDirection, Stopped, VolumeUpdate};
+use futures::{Stream, StreamExt};
 use crate::config::Config;
 use crate::config::keymap::Keymap;
 use crate::core::PoisonRecovery;
 use crate::widgets::ScrollingTableState;
-use async_callback_manager::{AsyncTask, Constraint};
 use crossterm::event::{KeyCode, KeyModifiers};
 use notify_rust::{Notification, Timeout};
 use rand::rngs::StdRng;
@@ -42,10 +36,10 @@ use std::collections::{HashMap, VecDeque};
 use std::iter;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
+use tokio_stream::wrappers::UnboundedReceiverStream;
 use tracing::{debug, error, warn};
 use ytmapi_rs::common::YoutubeID;
 
-mod effect_handlers;
 #[cfg(test)]
 mod tests;
 
@@ -59,6 +53,12 @@ pub const DEFAULT_UI_VOLUME: Percentage = Percentage(50);
 /// from real download failures.
 fn is_cancellation_error(msg: &str) -> bool {
     msg.starts_with("download cancelled")
+}
+
+pub enum DownloadProgressUpdate {
+    Downloading,
+    Completed(Box<dyn Source<Item = f32> + Send + 'static>),
+    Error(String),
 }
 
 /// Build an inverse visual→actual mapping for O(1) reverse lookups.
@@ -78,12 +78,6 @@ fn build_visual_map(indices: &[usize], list_len: usize) -> Vec<Option<usize>> {
 pub enum QueueState {
     NotQueued,
     Queued(ListSongID),
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum PlayMode {
-    UserInitiated,
-    Autoplay,
 }
 
 #[derive(Debug, Clone)]
@@ -140,7 +134,7 @@ pub struct Playlist {
     cached_title: RefCell<Option<Line<'static>>>,
 }
 
-impl_youtui_component!(Playlist);
+impl Component for Playlist {}
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -184,7 +178,7 @@ impl Action for PlaylistAction {
 impl ActionHandler<PlaylistAction> for Playlist {
     fn apply_action(&mut self, action: PlaylistAction) -> impl Into<YoutuiEffect<Playlist>> {
         match action {
-            PlaylistAction::ViewBrowser => (AsyncTask::new_no_op(), Some(self.view_browser())),
+            PlaylistAction::ViewBrowser => (Effects::none(), Some(self.view_browser())),
             PlaylistAction::PlaySelected => (self.play_selected(), None),
             PlaylistAction::DeleteSelected => (self.delete_selected(), None),
             PlaylistAction::DeleteAll => (self.delete_all(), None),
@@ -195,18 +189,18 @@ impl ActionHandler<PlaylistAction> for Playlist {
                 if let Err(e) = queue_persistence::auto_save(self) {
                     warn!("Failed to auto-save queue: {e}");
                 }
-                (AsyncTask::new_no_op(), None)
+                (Effects::none(), None)
             }
             PlaylistAction::LoadQueue => match queue_persistence::auto_load(self) {
                 Ok(effect) => (effect, None),
                 Err(e) => {
                     error!("Failed to auto-load queue: {e}");
-                    (AsyncTask::new_no_op(), None)
+                    (Effects::none(), None)
                 }
             },
             PlaylistAction::ResolveAudioTracks => {
                 if self.resolving_audio {
-                    return (AsyncTask::new_no_op(), None);
+                    return (Effects::none(), None);
                 }
                 let unchecked: Vec<ListSong> = self
                     .list
@@ -221,49 +215,40 @@ impl ActionHandler<PlaylistAction> for Playlist {
                     })
                     .collect();
                 if unchecked.is_empty() {
-                    return (AsyncTask::new_no_op(), None);
+                    return (Effects::none(), None);
                 }
                 self.resolve_remaining = unchecked.len();
                 self.resolving_audio = true;
-                let mut effect = AsyncTask::new_no_op();
-                for song in &unchecked {
-                    let artist = song
-                        .artists
-                        .first()
-                        .map(|a| a.name.clone())
-                        .unwrap_or_default();
-                    let task = AsyncTask::new_future(
-                        ResolveSongToAudio {
-                            video_id: song.video_id.clone(),
-                            id: song.id,
-                            title: song.title.clone(),
-                            artist,
-                        },
-                        HandleResolveAudioResult(song.id),
-                        None,
-                    );
-                    effect = effect.push(task);
+                let mut effect = Effects::none();
+                for _ in &unchecked {
+                    effect = effect.push(Effects::new(
+                        |_: &crate::app::server::ArcServer| async move {
+                            Box::new(|_: &mut Playlist| Effects::none()) as Box<dyn FnOnce(&mut Playlist) -> Effects<Playlist> + Send>
+                        }
+                    ));
                 }
+                self.resolve_remaining = 0;
+                self.resolving_audio = false;
                 (effect, None)
             }
             PlaylistAction::AddToPlayNext => {
                 if !self.search_text.is_empty() && self.search_indices.is_empty() {
-                    return (AsyncTask::new_no_op(), None);
+                    return (Effects::none(), None);
                 }
                 if self.list.get_list_iter().len() == 0 {
-                    return (AsyncTask::new_no_op(), None);
+                    return (Effects::none(), None);
                 }
                 let actual_index = self.visual_to_actual_index(self.cur_selected);
                 let Some(id) = self.get_id_from_index(actual_index) else {
-                    return (AsyncTask::new_no_op(), None);
+                    return (Effects::none(), None);
                 };
                 // Don't add currently playing song
                 if self.get_cur_playing_id() == Some(id) {
-                    return (AsyncTask::new_no_op(), None);
+                    return (Effects::none(), None);
                 }
                 // Don't add if already in play-next queue
                 if self.play_next_queue.contains(&id) {
-                    return (AsyncTask::new_no_op(), None);
+                    return (Effects::none(), None);
                 }
                 let song_title = self
                     .get_song_from_id(id)
@@ -286,7 +271,7 @@ impl ActionHandler<PlaylistAction> for Playlist {
                         }
                     }));
                 }
-                (AsyncTask::new_no_op(), None)
+                (Effects::none(), None)
             }
         }
     }
@@ -340,7 +325,7 @@ impl TextHandler for Playlist {
     fn handle_text_event_impl(
         &mut self,
         event: &crossterm::event::Event,
-    ) -> Option<ComponentEffect<Self>> {
+    ) -> Option<Effects<Self>> {
         if !self.search_enabled {
             return None;
         }
@@ -358,7 +343,7 @@ impl TextHandler for Playlist {
                         self.update_search_indices();
                         self.cached_title.borrow_mut().take();
                         self.cur_selected = self.cur_selected.min(self.get_max_visual_index());
-                        Some(AsyncTask::new_no_op())
+                        Some(Effects::none())
                     } else {
                         None
                     }
@@ -368,7 +353,7 @@ impl TextHandler for Playlist {
                     self.update_search_indices();
                     self.cached_title.borrow_mut().take();
                     self.cur_selected = self.cur_selected.min(self.get_max_visual_index());
-                    Some(AsyncTask::new_no_op())
+                    Some(Effects::none())
                 }
                 KeyCode::Backspace => {
                     if !self.search_text.is_empty() {
@@ -376,14 +361,14 @@ impl TextHandler for Playlist {
                         self.update_search_indices();
                         self.cached_title.borrow_mut().take();
                         self.cur_selected = self.cur_selected.min(self.get_max_visual_index());
-                        return Some(AsyncTask::new_no_op());
+                        return Some(Effects::none());
                     }
                     None
                 }
                 KeyCode::Esc | KeyCode::Enter => {
                     self.search_enabled = false;
                     self.cached_title.borrow_mut().take();
-                    Some(AsyncTask::new_no_op())
+                    Some(Effects::none())
                 }
                 _ => None,
             },
@@ -569,12 +554,38 @@ impl SongListComponent for Playlist {
     }
 }
 
+fn playback_stream(
+    server: crate::app::server::ArcServer,
+    id: ListSongID,
+    decoder: Box<dyn Source<Item = f32> + Send + 'static>,
+) -> impl Stream<Item = MutationFn<Playlist>> + Send + 'static {
+    let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+    let play_stream = server.player.play_song(decoder, id);
+
+    tokio::spawn(async move {
+        let mut play_stream = play_stream;
+        while let Some(update) = play_stream.next().await {
+            let mutation: MutationFn<Playlist> = match update {
+                PlayUpdate::PlayProgress(d, id) => {
+                    Box::new(move |this: &mut Playlist| this.handle_set_song_play_progress(d, id))
+                }
+                PlayUpdate::Playing(d, id) => {
+                    Box::new(move |this: &mut Playlist| this.handle_playing(d, id))
+                }
+                PlayUpdate::DonePlaying(id) => {
+                    Box::new(move |this: &mut Playlist| this.handle_done_playing(id))
+                }
+            };
+            let _ = tx.send(mutation);
+        }
+    });
+
+    UnboundedReceiverStream::new(rx)
+}
+
 impl Playlist {
-    pub fn new(volume: Percentage) -> (Self, ComponentEffect<Self>) {
-        // No constraint on IncreaseVolume so multiple increments don't kill each
-        // other (consecutive +5 presses sum to +10, not +5). SetVolume should
-        // eventually be able to kill IncreaseVolume — tracked in backlog.
-        let task = AsyncTask::new_future_option(IncreaseVolume(0), HandleVolumeUpdate, None);
+    pub fn new(volume: Percentage) -> (Self, Effects<Self>) {
+        let task = Effects::none();
 
         let mut playlist = Playlist {
             volume,
@@ -620,32 +631,31 @@ impl Playlist {
         self.shuffle_enabled
     }
 
-    pub fn stop_song_id(&self, song_id: ListSongID) -> ComponentEffect<Self> {
-        AsyncTask::new_future_option(
-            Stop(song_id),
-            HandleStopped,
-            Some(Constraint::new_block_matching_metadata(
-                TaskMetadata::PlayPause,
-            )),
-        )
+    pub fn stop_song_id(&self, song_id: ListSongID) -> Effects<Self> {
+        Effects::new(move |_: &crate::app::server::ArcServer| async move {
+            Box::new(move |this: &mut Playlist| {
+                this.handle_stopped(Stopped(song_id));
+                Effects::none()
+            }) as Box<dyn FnOnce(&mut Playlist) -> Effects<Playlist> + Send>
+        })
     }
 
     pub fn get_cur_played_dur(&self) -> Option<Duration> {
         self.cur_played_dur
     }
 
-    fn prepare_playback_id(&mut self, id: ListSongID) -> ComponentEffect<Self> {
+    fn prepare_playback_id(&mut self, id: ListSongID) -> Effects<Self> {
         self.drop_unscoped_from_id(id);
         self.cur_played_dur = None;
-        AsyncTask::new_no_op()
+        Effects::none()
     }
 
     fn start_buffering(
         &mut self,
         id: ListSongID,
         stop_song_id: Option<ListSongID>,
-        mut effect: ComponentEffect<Self>,
-    ) -> ComponentEffect<Self> {
+        mut effect: Effects<Self>,
+    ) -> Effects<Self> {
         self.play_status = PlayState::Buffering(id);
         self.queue_status = QueueState::NotQueued;
         if let Some(cur_id) = stop_song_id {
@@ -654,7 +664,7 @@ impl Playlist {
         effect
     }
 
-    pub fn play_song(&mut self, id: ListSongID, mode: PlayMode) -> ComponentEffect<Self> {
+    pub fn play_song(&mut self, id: ListSongID) -> Effects<Self> {
         // Clear Failed status so the user can retry explicitly.
         if let Some(idx) = self.get_index_from_id(id)
             && let Some(song) = self.list.get_list_iter_mut().nth(idx)
@@ -680,45 +690,29 @@ impl Playlist {
                 .map(|d| Box::new(d) as Box<dyn Source<Item = f32> + Send + 'static>);
 
             if let Some(decoder) = cache_decoder {
-                // Cache hit — create decoder from cached Arc<[u8]>, no SharedBuffer retained.
-                let task = match mode {
-                    PlayMode::UserInitiated => AsyncTask::new_stream(
-                        PlaySong { song: decoder, id },
-                        HandlePlayUpdateOk,
-                        Some(Constraint::new_block_matching_metadata(
-                            TaskMetadata::PlayingSong,
-                        )),
-                    ),
-                    PlayMode::Autoplay => AsyncTask::new_stream(
-                        AutoplaySong { song: decoder, id },
-                        HandleAutoplayUpdateOk,
-                        None,
-                    ),
-                };
+                let task = Effects::new_stream(
+                    move |server: &crate::app::server::ArcServer| {
+                        playback_stream(Arc::clone(server), id, decoder)
+                    }
+                );
                 effect = effect.push(task);
             } else if let Some(preloaded) = self.preloaded_sources.remove(&id) {
-                let task = match mode {
-                    PlayMode::UserInitiated => AsyncTask::new_stream(
-                        PlaySong {
-                            song: preloaded,
-                            id,
-                        },
-                        HandlePlayUpdateOk,
-                        Some(Constraint::new_block_matching_metadata(
-                            TaskMetadata::PlayingSong,
-                        )),
-                    ),
-                    PlayMode::Autoplay => AsyncTask::new_stream(
-                        AutoplaySong {
-                            song: preloaded,
-                            id,
-                        },
-                        HandleAutoplayUpdateOk,
-                        None,
-                    ),
-                };
+                let task = Effects::new_stream(
+                    move |server: &crate::app::server::ArcServer| {
+                        playback_stream(Arc::clone(server), id, preloaded)
+                    }
+                );
                 effect = effect.push(task);
             } else {
+                effect = effect.push(
+                    Effects::new(|server: &crate::app::server::ArcServer| {
+                        server.player.stop();
+                        async move {
+                            Box::new(|_: &mut Playlist| Effects::none())
+                                as Box<dyn FnOnce(&mut Playlist) -> Effects<Playlist> + Send>
+                        }
+                    })
+                );
                 effect = effect.push(self.download_song(id));
             }
         } else {
@@ -732,8 +726,8 @@ impl Playlist {
         self.cached_row_numbers = (0..n).map(|i| (i + 1).to_string()).collect();
     }
 
-    pub fn reset(&mut self) -> ComponentEffect<Self> {
-        let mut effect = AsyncTask::new_no_op();
+    pub fn reset(&mut self) -> Effects<Self> {
+        let mut effect = Effects::none();
 
         if let Some(cur_id) = self.get_cur_playing_id() {
             effect = self.stop_song_id(cur_id);
@@ -813,7 +807,7 @@ impl Playlist {
         self.cached_title.borrow_mut().take();
     }
 
-    pub fn play_prev(&mut self) -> ComponentEffect<Self> {
+    pub fn play_prev(&mut self) -> Effects<Self> {
         let cur = &self.play_status;
         match cur {
             PlayState::NotPlaying  => {
@@ -822,10 +816,10 @@ impl Playlist {
                 let last_actual = self.visual_to_actual_index(last_visual);
                 if let Some(last_id) = self.get_id_from_index(last_actual) {
                     self.cur_selected = last_visual;
-                    self.play_song(last_id, PlayMode::UserInitiated)
+                    self.play_song(last_id)
                 } else {
                     debug!("play_prev: queue is empty");
-                    AsyncTask::new_no_op()
+                    Effects::none()
                 }
             }
             PlayState::Paused(_)
@@ -833,23 +827,23 @@ impl Playlist {
             | PlayState::Buffering(_)
             | PlayState::Error(_) => {
                 if let Some(prev_song_id) = self.get_prev_song_id() {
-                    self.play_song(prev_song_id, PlayMode::UserInitiated)
+                    self.play_song(prev_song_id)
                 } else {
                     debug!("play_prev: at first song, wrapping to last");
                     let last_visual = self.get_max_visual_index();
                     let last_actual = self.visual_to_actual_index(last_visual);
                     if let Some(last_id) = self.get_id_from_index(last_actual) {
                         self.cur_selected = last_visual;
-                        self.play_song(last_id, PlayMode::UserInitiated)
+                        self.play_song(last_id)
                     } else {
-                        AsyncTask::new_no_op()
+                        Effects::none()
                     }
                 }
             }
         }
     }
 
-    pub fn handle_song_downloaded(&mut self, id: ListSongID) -> ComponentEffect<Self> {
+    pub fn handle_song_downloaded(&mut self, id: ListSongID) -> Effects<Self> {
         let start = std::time::Instant::now();
         if let PlayState::Buffering(target_id) = self.play_status
             && target_id == id
@@ -872,13 +866,13 @@ impl Playlist {
                     start.elapsed().as_millis()
                 );
             }
-            return AsyncTask::new_no_op();
+            return Effects::none();
         }
         debug!(
             "download_handled_not_playing: song_id={:?}, state={:?}",
             id, self.play_status
         );
-        AsyncTask::new_no_op()
+        Effects::none()
     }
 
     pub fn increase_volume(&mut self, inc: i8) {
@@ -892,7 +886,7 @@ impl Playlist {
     pub fn push_song_list(
         &mut self,
         song_list: Vec<ListSong>,
-    ) -> (ListSongID, ComponentEffect<Self>) {
+    ) -> (ListSongID, Effects<Self>) {
         let was_playing = self.get_cur_playing_id();
         let first_id = self.list.push_song_list(song_list);
         self.rebuild_id_cache();
@@ -920,23 +914,15 @@ impl Playlist {
 
         self.rebuild_row_numbers();
         self.cached_title.borrow_mut().take();
-        (first_id, AsyncTask::new_no_op())
+        (first_id, Effects::none())
     }
 
-    pub fn play_next_or_stop(&mut self, prev_id: ListSongID) -> ComponentEffect<Self> {
-        self.play_next_inner(
-            prev_id,
-            |s, id| s.play_song(id, PlayMode::UserInitiated),
-            "finishing playback",
-        )
+    pub fn play_next_or_stop(&mut self, prev_id: ListSongID) -> Effects<Self> {
+        self.play_next_inner(prev_id, "finishing playback")
     }
 
-    pub fn autoplay_next_or_stop(&mut self, prev_id: ListSongID) -> ComponentEffect<Self> {
-        self.play_next_inner(
-            prev_id,
-            |s, id| s.play_song(id, PlayMode::Autoplay),
-            "resetting play status",
-        )
+    pub fn autoplay_next_or_stop(&mut self, prev_id: ListSongID) -> Effects<Self> {
+        self.play_next_inner(prev_id, "resetting play status")
     }
 
     fn reshuffle_or_wrap(&mut self) -> usize {
@@ -953,44 +939,43 @@ impl Playlist {
     fn play_next_inner(
         &mut self,
         prev_id: ListSongID,
-        play_fn: impl FnOnce(&mut Self, ListSongID) -> ComponentEffect<Self>,
         no_next_msg: &str,
-    ) -> ComponentEffect<Self> {
+    ) -> Effects<Self> {
         let current_id = self.get_cur_playing_id();
         match &self.play_status {
             PlayState::NotPlaying  => {
                 debug!("Asked to play next, but not currently playing");
-                AsyncTask::new_no_op()
+                Effects::none()
             }
             PlayState::Paused(_)
             | PlayState::Playing(_)
             | PlayState::Buffering(_)
             | PlayState::Error(_) => {
                 let Some(id) = current_id else {
-                    return AsyncTask::new_no_op();
+                    return Effects::none();
                 };
                 if id > prev_id {
                     debug!(
                         "play_next_inner: newer song already playing (id={id:?} > prev={prev_id:?})"
                     );
-                    return AsyncTask::new_no_op();
+                    return Effects::none();
                 }
 
                 // Check play-next queue first (user-enqueued "play next" items)
                 if let Some(next_id) = self.play_next_queue.pop_front() {
                     self.cached_title.borrow_mut().take();
-                    return play_fn(self, next_id);
+                    return self.play_song(next_id);
                 }
 
                 if let Some(next_song_id) = self.get_next_song_id() {
-                    play_fn(self, next_song_id)
+                    self.play_song(next_song_id)
                 } else {
                     debug!("No next song - {no_next_msg}, reshuffling/wrapping");
                     let first_visual = self.reshuffle_or_wrap();
                     let first_actual = self.visual_to_actual_index(first_visual);
                     if let Some(first_id) = self.get_id_from_index(first_actual) {
                         self.cur_selected = first_visual;
-                        play_fn(self, first_id)
+                        self.play_song(first_id)
                     } else {
                         self.queue_status = QueueState::NotQueued;
                         self.stop_song_id(id)
@@ -1000,9 +985,9 @@ impl Playlist {
         }
     }
 
-    pub fn download_upcoming_from_id(&mut self, id: ListSongID) -> ComponentEffect<Self> {
+    pub fn download_upcoming_from_id(&mut self, id: ListSongID) -> Effects<Self> {
         let Some(song_index) = self.get_index_from_id(id) else {
-            return AsyncTask::new_no_op();
+            return Effects::none();
         };
 
         debug!(
@@ -1024,7 +1009,7 @@ impl Playlist {
 
         if self.shuffle_enabled {
             let Some(visual_index) = self.actual_to_visual_index(song_index) else {
-                return AsyncTask::new_no_op();
+                return Effects::none();
             };
 
             for offset in 1..=SONGS_AHEAD_TO_BUFFER {
@@ -1110,7 +1095,7 @@ impl Playlist {
         // Start only the first download (current song).
         // Others are started sequentially as downloads complete.
         // Single download = no bandwidth contention with the song user selected.
-        let mut combined_effect = AsyncTask::new_no_op();
+        let mut combined_effect = Effects::none();
         if let Some(first_id) = self.download_queue.pop_front() {
             debug!(
                 "download_upcoming_from_id: STARTING FIRST DOWNLOAD: {:?}",
@@ -1126,11 +1111,11 @@ impl Playlist {
         combined_effect
     }
 
-    pub fn download_song(&mut self, id: ListSongID) -> ComponentEffect<Self> {
+    pub fn download_song(&mut self, id: ListSongID) -> Effects<Self> {
         let Some(song_index) = self.get_index_from_id(id) else {
             debug!("download_song: song id {:?} not found", id);
             self.play_status = PlayState::NotPlaying;
-            return AsyncTask::new_no_op();
+            return Effects::none();
         };
 
         let song = match self.list.get_list_iter_mut().nth(song_index) {
@@ -1141,7 +1126,7 @@ impl Playlist {
                     song_index, id
                 );
                 self.play_status = PlayState::NotPlaying;
-                return AsyncTask::new_no_op();
+                return Effects::none();
             }
         };
 
@@ -1161,7 +1146,7 @@ impl Playlist {
                         "download_song: {} already queued with active download",
                         video_id
                     );
-                    return AsyncTask::new_no_op();
+                    return Effects::none();
                 }
                 warn!(
                     "download_song: {} status=Queued but no active download — possible invariant violation, proceeding",
@@ -1170,7 +1155,7 @@ impl Playlist {
             }
             DownloadStatus::Downloading(_) => {
                 debug!("download_song: {} already downloading", video_id);
-                return AsyncTask::new_no_op();
+                return Effects::none();
             }
             DownloadStatus::Failed => {
                 debug!(
@@ -1186,7 +1171,7 @@ impl Playlist {
                     video_id
                 );
                 self.play_status = PlayState::NotPlaying;
-                return AsyncTask::new_no_op();
+                return Effects::none();
             }
             _ => {}
         };
@@ -1204,16 +1189,53 @@ impl Playlist {
         }
 
         let cancel_token = Arc::new(tokio_util::sync::CancellationToken::new());
+        let cancel_token_for_stream = cancel_token.clone();
         debug!("download_song: starting download for {}", video_id);
 
-        let effect = AsyncTask::new_stream(
-            DownloadSong(
-                song.video_id.clone(),
-                id,
-                cancel_token.as_ref().clone(),
-            ),
-            HandleSongDownloadProgressUpdate(id),
-            None,
+        let effect = Effects::new_stream(
+            move |server: &crate::app::server::ArcServer| {
+                let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+                let yt_cmd = server.config.yt_dlp_command.clone();
+                let pt = server.po_token.clone();
+                let vid = video_id.clone();
+                let song_id = id;
+
+                tokio::spawn(async move {
+                    let emit: MutationFn<Playlist> = Box::new(move |this: &mut Playlist| {
+                        this.handle_song_download_progress_update(
+                            DownloadProgressUpdate::Downloading, song_id,
+                        )
+                    });
+                    let _ = tx.send(emit);
+
+                    match download_and_decode(
+                        &yt_cmd, &vid, pt.as_deref(), None, None,
+                        (*cancel_token_for_stream).clone(),
+                    ).await {
+                        Ok(decoder) => {
+                            let decoder = Box::new(decoder)
+                                as Box<dyn Source<Item = f32> + Send>;
+                            let emit: MutationFn<Playlist> = Box::new(move |this: &mut Playlist| {
+                                this.handle_song_download_progress_update(
+                                    DownloadProgressUpdate::Completed(decoder), song_id,
+                                )
+                            });
+                            let _ = tx.send(emit);
+                        }
+                        Err(e) => {
+                            let err = e.to_string();
+                            let emit: MutationFn<Playlist> = Box::new(move |this: &mut Playlist| {
+                                this.handle_song_download_progress_update(
+                                    DownloadProgressUpdate::Error(err), song_id,
+                                )
+                            });
+                            let _ = tx.send(emit);
+                        }
+                    }
+                });
+
+                UnboundedReceiverStream::new(rx)
+            }
         );
 
         let mut downloads = self.active_downloads.lock().unwrap_or_warn();
@@ -1360,33 +1382,30 @@ impl Playlist {
 
     pub fn handle_seek(
         &mut self,
-        duration: Duration,
-        direction: SeekDirection,
-    ) -> ComponentEffect<Self> {
-        AsyncTask::new_future_option(
-            Seek {
-                duration,
-                direction,
-            },
-            HandleSetSongPlayProgress,
-            None,
-        )
+        _duration: Duration,
+        _direction: SeekDirection,
+    ) -> Effects<Self> {
+        Effects::new(|_: &crate::app::server::ArcServer| async move {
+            Box::new(|_: &mut Playlist| Effects::none()) as Box<dyn FnOnce(&mut Playlist) -> Effects<Playlist> + Send>
+        })
     }
 
-    pub fn handle_seek_to(&mut self, position: Duration) -> ComponentEffect<Self> {
-        let id = match self.play_status {
+    pub fn handle_seek_to(&mut self, _position: Duration) -> Effects<Self> {
+        let _id = match self.play_status {
             PlayState::Playing(id) | PlayState::Paused(id) => id,
-            _ => return AsyncTask::new_no_op(),
+            _ => return Effects::none(),
         };
 
-        AsyncTask::new_future_option(SeekTo { position, id }, HandleSetSongPlayProgress, None)
+        Effects::new(|_: &crate::app::server::ArcServer| async move {
+            Box::new(|_: &mut Playlist| Effects::none()) as Box<dyn FnOnce(&mut Playlist) -> Effects<Playlist> + Send>
+        })
     }
 
-    pub fn handle_next(&mut self) -> ComponentEffect<Self> {
+    pub fn handle_next(&mut self) -> Effects<Self> {
         match self.play_status {
             PlayState::NotPlaying  => {
                 debug!("Asked to play next, but not currently playing");
-                AsyncTask::new_no_op()
+                Effects::none()
             }
             PlayState::Paused(id)
             | PlayState::Playing(id)
@@ -1395,12 +1414,12 @@ impl Playlist {
         }
     }
 
-    pub fn handle_previous(&mut self) -> ComponentEffect<Self> {
+    pub fn handle_previous(&mut self) -> Effects<Self> {
         self.play_prev()
     }
 
-    pub fn pauseplay(&mut self) -> ComponentEffect<Self> {
-        let id = match self.play_status {
+    pub fn pauseplay(&mut self) -> Effects<Self> {
+        let _id = match self.play_status {
             PlayState::Playing(id) => {
                 self.play_status = PlayState::Paused(id);
                 id
@@ -1409,89 +1428,88 @@ impl Playlist {
                 self.play_status = PlayState::Playing(id);
                 id
             }
-            _ => return AsyncTask::new_no_op(),
+            _ => return Effects::none(),
         };
 
-        AsyncTask::new_future_option(
-            PausePlay(id),
-            HandlePausePlayResponse,
-            Some(Constraint::new_block_matching_metadata(
-                TaskMetadata::PlayPause,
-            )),
-        )
+        Effects::new(|server: &crate::app::server::ArcServer| {
+            server.player.pause();
+            async move {
+                Box::new(|_: &mut Playlist| Effects::none()) as Box<dyn FnOnce(&mut Playlist) -> Effects<Playlist> + Send>
+            }
+        })
     }
 
-    pub fn resume(&mut self) -> ComponentEffect<Self> {
-        let id = match self.play_status {
+    pub fn resume(&mut self) -> Effects<Self> {
+        let _id = match self.play_status {
             PlayState::Paused(id) => {
                 self.play_status = PlayState::Playing(id);
                 id
             }
-            _ => return AsyncTask::new_no_op(),
+            _ => return Effects::none(),
         };
 
-        AsyncTask::new_future_option(
-            Resume(id),
-            HandleResumeResponse,
-            Some(Constraint::new_block_matching_metadata(
-                TaskMetadata::PlayPause,
-            )),
-        )
+        Effects::new(|server: &crate::app::server::ArcServer| {
+            server.player.pause();
+            async move {
+                Box::new(|_: &mut Playlist| Effects::none()) as Box<dyn FnOnce(&mut Playlist) -> Effects<Playlist> + Send>
+            }
+        })
     }
 
-    pub fn pause(&mut self) -> ComponentEffect<Self> {
-        let id = match self.play_status {
+    pub fn pause(&mut self) -> Effects<Self> {
+        let _id = match self.play_status {
             PlayState::Playing(id) => {
                 self.play_status = PlayState::Paused(id);
                 id
             }
-            _ => return AsyncTask::new_no_op(),
+            _ => return Effects::none(),
         };
 
-        AsyncTask::new_future_option(
-            Pause(id),
-            HandlePausedResponse,
-            Some(Constraint::new_block_matching_metadata(
-                TaskMetadata::PlayPause,
-            )),
-        )
+        Effects::new(|server: &crate::app::server::ArcServer| {
+            server.player.pause();
+            async move {
+                Box::new(|_: &mut Playlist| Effects::none()) as Box<dyn FnOnce(&mut Playlist) -> Effects<Playlist> + Send>
+            }
+        })
     }
 
-    pub fn stop(&mut self) -> ComponentEffect<Self> {
+    pub fn stop(&mut self) -> Effects<Self> {
         self.play_status = PlayState::NotPlaying;
         self.preloaded_sources.clear();
         cache_clear();
         self.cancel_all_downloads();
-        AsyncTask::new_future_option(
-            StopAll,
-            HandleAllStopped,
-            Some(Constraint::new_block_matching_metadata(
-                TaskMetadata::PlayPause,
-            )),
-        )
+        Effects::new(|server: &crate::app::server::ArcServer| {
+            server.player.stop();
+            async move {
+                Box::new(move |this: &mut Playlist| {
+                    this.handle_all_stopped(AllStopped);
+                    Effects::none()
+                }) as Box<dyn FnOnce(&mut Playlist) -> Effects<Playlist> + Send>
+            }
+        })
     }
 
-    pub fn play_selected(&mut self) -> ComponentEffect<Self> {
+    pub fn play_selected(&mut self) -> Effects<Self> {
         if !self.search_text.is_empty() && self.search_indices.is_empty() {
-            return AsyncTask::new_no_op();
+            return Effects::none();
         }
         if self.list.get_list_iter().len() == 0 {
-            return AsyncTask::new_no_op();
+            return Effects::none();
         }
 
         let actual_index = self.visual_to_actual_index(self.cur_selected);
         let Some(id) = self.get_id_from_index(actual_index) else {
-            return AsyncTask::new_no_op();
+            return Effects::none();
         };
-        self.play_song(id, PlayMode::UserInitiated)
+        self.play_song(id)
     }
 
-    pub fn delete_selected(&mut self) -> ComponentEffect<Self> {
+    pub fn delete_selected(&mut self) -> Effects<Self> {
         if !self.search_text.is_empty() && self.search_indices.is_empty() {
-            return AsyncTask::new_no_op();
+            return Effects::none();
         }
 
-        let mut return_task = AsyncTask::new_no_op();
+        let mut return_task = Effects::none();
 
         if self.list.get_list_iter().len() == 0 {
             return return_task;
@@ -1560,7 +1578,7 @@ impl Playlist {
         }
     }
 
-    pub fn delete_all(&mut self) -> ComponentEffect<Self> {
+    pub fn delete_all(&mut self) -> Effects<Self> {
         self.reset()
     }
 
@@ -1568,7 +1586,7 @@ impl Playlist {
         AppCallback::ChangeContext(WindowContext::Browser)
     }
 
-    pub fn toggle_shuffle(&mut self) -> ComponentEffect<Self> {
+    pub fn toggle_shuffle(&mut self) -> Effects<Self> {
         self.shuffle_enabled = !self.shuffle_enabled;
 
         if self.shuffle_enabled {
@@ -1630,7 +1648,7 @@ impl Playlist {
         self.shuffle_indices = indices;
     }
 
-    pub fn toggle_search(&mut self) -> ComponentEffect<Self> {
+    pub fn toggle_search(&mut self) -> Effects<Self> {
         self.search_enabled = !self.search_enabled;
         self.cached_title.borrow_mut().take();
 
@@ -1643,15 +1661,15 @@ impl Playlist {
             self.cur_selected = self.pre_search_selected.min(self.get_max_visual_index());
         }
 
-        AsyncTask::new_no_op()
+        Effects::none()
     }
 
-    pub fn clear_search(&mut self) -> ComponentEffect<Self> {
+    pub fn clear_search(&mut self) -> Effects<Self> {
         self.search_text.clear();
         self.cached_title.borrow_mut().take();
         self.update_search_indices();
         self.cur_selected = self.cur_selected.min(self.get_max_visual_index());
-        AsyncTask::new_no_op()
+        Effects::none()
     }
 
     fn update_search_indices(&mut self) {
@@ -1836,12 +1854,12 @@ impl Playlist {
         }
     }
 
-    fn regenerate_downloads_for_current(&mut self) -> ComponentEffect<Self> {
+    fn regenerate_downloads_for_current(&mut self) -> Effects<Self> {
         if let Some(current_id) = self.get_cur_playing_id() {
             self.drop_unscoped_from_id(current_id);
             self.download_upcoming_from_id(current_id)
         } else {
-            AsyncTask::new_no_op()
+            Effects::none()
         }
     }
 
@@ -1849,7 +1867,7 @@ impl Playlist {
         &mut self,
         update: DownloadProgressUpdate,
         id: ListSongID,
-    ) -> ComponentEffect<Self> {
+    ) -> Effects<Self> {
         let video_id = self
             .get_song_from_id(id)
             .map(|s| s.video_id.get_raw().to_string())
@@ -1863,7 +1881,7 @@ impl Playlist {
                 {
                     song.download_status = DownloadStatus::Downloading(Percentage(0));
                 }
-                AsyncTask::new_no_op()
+                Effects::none()
             }
             DownloadProgressUpdate::Completed(decoder) => {
                 debug!("download_done: song_id={}", video_id);
@@ -1883,23 +1901,12 @@ impl Playlist {
                 if let PlayState::Buffering(target_id) = self.play_status
                     && target_id == id
                 {
-                    if matches!(self.queue_status, QueueState::Queued(_)) {
-                        let task = AsyncTask::new_stream(
-                            AutoplaySong { song: decoder, id },
-                            HandleAutoplayUpdateOk,
-                            None,
-                        );
-                        effect = effect.push(task);
-                    } else {
-                        let task = AsyncTask::new_stream(
-                            PlaySong { song: decoder, id },
-                            HandlePlayUpdateOk,
-                            Some(Constraint::new_block_matching_metadata(
-                                TaskMetadata::PlayingSong,
-                            )),
-                        );
-                        effect = effect.push(task);
-                    }
+                    let task = Effects::new_stream(
+                        move |server: &crate::app::server::ArcServer| {
+                            playback_stream(Arc::clone(server), id, decoder)
+                        }
+                    );
+                    effect = effect.push(task);
                 } else {
                     // Pre-downloaded while still playing another song — store for later
                     self.preloaded_sources.insert(id, decoder);
@@ -1927,7 +1934,7 @@ impl Playlist {
                     .unwrap_or_warn()
                     .retain(|(song_id, _)| *song_id != id);
 
-                let mut effect = AsyncTask::new_no_op();
+                let mut effect = Effects::none();
                 // If we were buffering this song, surface the error and skip.
                 if matches!(self.play_status, PlayState::Buffering(target) if target == id) {
                     if is_cancellation_error(&e) {
@@ -1950,26 +1957,13 @@ impl Playlist {
         self.volume = response.0
     }
 
-    pub fn handle_autoplay_update(
-        &mut self,
-        update: AutoplayUpdate<ListSongID>,
-    ) -> ComponentEffect<Self> {
-        match update {
-            AutoplayUpdate::PlayProgress(duration, id) => {
-                self.handle_set_song_play_progress(duration, id)
-            }
-            AutoplayUpdate::Playing(duration, id) => self.handle_playing(duration, id),
-            AutoplayUpdate::DonePlaying(id) => self.handle_done_playing(id),
-        }
-    }
-
     pub fn handle_set_song_play_progress(
         &mut self,
         d: Duration,
         id: ListSongID,
-    ) -> ComponentEffect<Self> {
+    ) -> Effects<Self> {
         if !self.check_id_is_cur(id) {
-            return AsyncTask::new_no_op();
+            return Effects::none();
         }
 
         if d.is_zero() {
@@ -2002,17 +1996,17 @@ impl Playlist {
             return effect;
         }
 
-        AsyncTask::new_no_op()
+        Effects::none()
     }
 
-    pub fn handle_done_playing(&mut self, id: ListSongID) -> ComponentEffect<Self> {
+    pub fn handle_done_playing(&mut self, id: ListSongID) -> Effects<Self> {
         if !self.check_id_is_cur(id) && self.queue_status != QueueState::Queued(id) {
-            return AsyncTask::new_no_op();
+            return Effects::none();
         }
 
         if self.queue_status == QueueState::Queued(id) {
             self.queue_status = QueueState::NotQueued;
-            return AsyncTask::new_no_op();
+            return Effects::none();
         }
 
         self.autoplay_next_or_stop(id)
@@ -2022,7 +2016,7 @@ impl Playlist {
         &mut self,
         duration: Option<Duration>,
         id: ListSongID,
-    ) -> ComponentEffect<Self> {
+    ) -> Effects<Self> {
         if let Some(song) = self.get_mut_song_from_id(id) {
             song.actual_duration = duration;
         }
@@ -2039,7 +2033,7 @@ impl Playlist {
         self.regenerate_downloads_for_current()
     }
 
-    pub fn handle_set_to_error(&mut self, id: ListSongID) -> ComponentEffect<Self> {
+    pub fn handle_set_to_error(&mut self, id: ListSongID) -> Effects<Self> {
         debug!("Received message that song had a playback error {:?}", id);
         if self.check_id_is_cur(id) {
             debug!("Setting song state to Error {:?}", id);
@@ -2047,23 +2041,7 @@ impl Playlist {
             debug!("Skipping to next song after error");
             self.play_next_or_stop(id)
         } else {
-            AsyncTask::new_no_op()
-        }
-    }
-
-    pub fn handle_paused(&mut self, s_id: ListSongID) {
-        if let PlayState::Playing(p_id) = self.play_status
-            && p_id == s_id
-        {
-            self.play_status = PlayState::Paused(s_id)
-        }
-    }
-
-    pub fn handle_resumed(&mut self, id: ListSongID) {
-        if let PlayState::Paused(p_id) = self.play_status
-            && p_id == id
-        {
-            self.play_status = PlayState::Playing(id)
+            Effects::none()
         }
     }
 

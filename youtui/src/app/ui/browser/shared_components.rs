@@ -1,11 +1,10 @@
 use crate::app::AppCallback;
 use crate::app::component::actionhandler::{
-    Action, Component, ComponentEffect, Suggestable, TextHandler,
+    Action, Component, Suggestable, TextHandler,
 };
-use crate::app::server::{GetSearchSuggestions, HandleApiError};
+use crate::app::effect::Effects;
 use crate::app::structures::ListSong;
 use crate::app::view::{TableFilterCommand, TableSortCommand};
-use async_callback_manager::{AsyncTask, Constraint, NoOpHandler};
 use rat_text::text_input::{TextInputState, handle_events};
 use ratatui::widgets::{ListItem, ListState};
 use serde::{Deserialize, Serialize};
@@ -17,43 +16,43 @@ use ytmapi_rs::common::SearchSuggestion;
 pub(crate) fn play_song_impl<C: Component>(
     cur_song_idx: usize,
     get_song: impl FnOnce(usize) -> Option<ListSong>,
-) -> (ComponentEffect<C>, Option<AppCallback>) {
+) -> (Effects<C>, Option<AppCallback>) {
     if let Some(cur_song) = get_song(cur_song_idx) {
         return (
-            AsyncTask::new_no_op(),
+            Effects::none(),
             Some(AppCallback::AddSongsToPlaylistAndPlay(vec![cur_song])),
         );
     }
-    (AsyncTask::new_no_op(), None)
+    (Effects::none(), None)
 }
 
 pub(crate) fn add_song_to_playlist_impl<C: Component>(
     cur_song_idx: usize,
     get_song: impl FnOnce(usize) -> Option<ListSong>,
-) -> (ComponentEffect<C>, Option<AppCallback>) {
+) -> (Effects<C>, Option<AppCallback>) {
     if let Some(cur_song) = get_song(cur_song_idx) {
         return (
-            AsyncTask::new_no_op(),
+            Effects::none(),
             Some(AppCallback::AddSongsToPlaylist(vec![cur_song])),
         );
     }
-    (AsyncTask::new_no_op(), None)
+    (Effects::none(), None)
 }
 
 pub(crate) fn play_songs_impl<C: Component>(
     song_list: Vec<ListSong>,
-) -> (ComponentEffect<C>, Option<AppCallback>) {
+) -> (Effects<C>, Option<AppCallback>) {
     (
-        AsyncTask::new_no_op(),
+        Effects::none(),
         Some(AppCallback::AddSongsToPlaylistAndPlay(song_list)),
     )
 }
 
 pub(crate) fn add_songs_to_playlist_impl<C: Component>(
     song_list: Vec<ListSong>,
-) -> (ComponentEffect<C>, Option<AppCallback>) {
+) -> (Effects<C>, Option<AppCallback>) {
     (
-        AsyncTask::new_no_op(),
+        Effects::none(),
         Some(AppCallback::AddSongsToPlaylist(song_list)),
     )
 }
@@ -67,7 +66,7 @@ pub struct SearchBlock {
     #[allow(dead_code)]
     cached_items: RefCell<Option<Vec<ListItem<'static>>>>,
 }
-impl_youtui_component!(SearchBlock);
+impl Component for SearchBlock {}
 
 #[derive(Clone)]
 pub struct FilterManager {
@@ -75,7 +74,7 @@ pub struct FilterManager {
     pub filter_text: TextInputState,
     pub shown: bool,
 }
-impl_youtui_component!(FilterManager);
+impl Component for FilterManager {}
 
 impl Default for FilterManager {
     fn default() -> Self {
@@ -94,7 +93,7 @@ pub struct SortManager {
     pub cur: usize,
     pub state: ListState,
 }
-impl_youtui_component!(SortManager);
+impl Component for SortManager {}
 
 #[derive(PartialEq, Clone, Copy, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -197,12 +196,12 @@ impl TextHandler for FilterManager {
     fn handle_text_event_impl(
         &mut self,
         event: &crossterm::event::Event,
-    ) -> Option<ComponentEffect<Self>> {
+    ) -> Option<Effects<Self>> {
         match handle_events(&mut self.filter_text, true, event) {
             rat_text::event::TextOutcome::Continue => None,
             rat_text::event::TextOutcome::Unchanged => None,
-            rat_text::event::TextOutcome::Changed => Some(AsyncTask::new_no_op()),
-            rat_text::event::TextOutcome::TextChanged => Some(AsyncTask::new_no_op()),
+            rat_text::event::TextOutcome::Changed => Some(Effects::none()),
+            rat_text::event::TextOutcome::TextChanged => Some(Effects::none()),
         }
     }
 }
@@ -225,11 +224,11 @@ impl TextHandler for SearchBlock {
     fn handle_text_event_impl(
         &mut self,
         event: &crossterm::event::Event,
-    ) -> Option<ComponentEffect<Self>> {
+    ) -> Option<Effects<Self>> {
         match handle_events(&mut self.search_contents, true, event) {
             rat_text::event::TextOutcome::Continue => None,
-            rat_text::event::TextOutcome::Unchanged => Some(AsyncTask::new_no_op()),
-            rat_text::event::TextOutcome::Changed => Some(AsyncTask::new_no_op()),
+            rat_text::event::TextOutcome::Unchanged => Some(Effects::none()),
+            rat_text::event::TextOutcome::Changed => Some(Effects::none()),
             rat_text::event::TextOutcome::TextChanged => Some(self.fetch_search_suggestions()),
         }
     }
@@ -252,35 +251,20 @@ impl SearchBlock {
     }
 
     // Ask the UI for search suggestions for the current query
-    fn fetch_search_suggestions(&mut self) -> ComponentEffect<Self> {
+    fn fetch_search_suggestions(&mut self) -> Effects<Self> {
         // No need to fetch search suggestions if contents is empty.
         if self.search_contents.is_empty() {
             self.search_suggestions.clear();
             self.last_fetched_text = None;
-            return AsyncTask::new_no_op();
+            return Effects::none();
         }
         let text = self.search_contents.text().to_owned();
         // Skip if text hasn't changed since last fetch (debounce).
         if self.last_fetched_text.as_deref() == Some(&text) {
-            return AsyncTask::new_no_op();
+            return Effects::none();
         }
         self.last_fetched_text = Some(text.clone());
-        AsyncTask::new_future_try(
-            GetSearchSuggestions(text),
-            HandleSearchSuggestionsOk,
-            HandleSearchSuggestionsErr,
-            Some(Constraint::new_kill_same_type()),
-        )
-    }
-    fn replace_search_suggestions(
-        &mut self,
-        search_suggestions: Vec<SearchSuggestion>,
-        search: String,
-    ) {
-        if self.get_text() == Some(&search) {
-            self.search_suggestions = search_suggestions;
-            self.suggestions_cur = None;
-        }
+        Effects::none()
     }
     pub fn increment_list(&mut self, amount: isize) {
         if !self.search_suggestions.is_empty() {
@@ -302,32 +286,7 @@ impl SearchBlock {
     }
 }
 
-#[derive(PartialEq, Debug)]
-struct HandleSearchSuggestionsOk;
-#[derive(PartialEq, Debug)]
-struct HandleSearchSuggestionsErr;
-impl_youtui_task_handler!(
-    HandleSearchSuggestionsOk,
-    (Vec<SearchSuggestion>, String),
-    SearchBlock,
-    |_, (suggestions, text)| |this: &mut SearchBlock| this
-        .replace_search_suggestions(suggestions, text)
-);
-impl_youtui_task_handler!(
-    HandleSearchSuggestionsErr,
-    anyhow::Error,
-    SearchBlock,
-    |_, error| |_: &mut SearchBlock| AsyncTask::new_future(
-        HandleApiError {
-            error,
-            // To avoid needing to clone search query to use in the error message, this
-            // error message is minimal.
-            message: "Error received getting search suggestions".to_string(),
-        },
-        NoOpHandler,
-        None,
-    )
-);
+
 
 #[macro_export]
 macro_rules! define_browser_songs_action {
@@ -386,10 +345,7 @@ macro_rules! define_search_results_browser {
             pub search_panel: $search_panel,
             pub songs_panel: $songs_panel,
         }
-        impl $crate::app::component::actionhandler::Component for $name {
-            type Bkend = $crate::app::server::ArcServer;
-            type Md = $crate::app::server::TaskMetadata;
-        }
+        impl $crate::app::component::actionhandler::Component for $name {}
 
         impl $crate::app::component::actionhandler::Scrollable for $name {
             fn increment_list(&mut self, amount: isize) {
@@ -440,7 +396,7 @@ macro_rules! define_search_results_browser {
             fn handle_text_event_impl(
                 &mut self,
                 event: &crossterm::event::Event,
-            ) -> std::option::Option<$crate::app::component::actionhandler::ComponentEffect<Self>>
+            ) -> std::option::Option<$crate::app::effect::Effects<Self>>
             {
                 use $crate::app::ui::browser::shared_components::SearchBrowserSide;
                 match self.side {
@@ -448,13 +404,13 @@ macro_rules! define_search_results_browser {
                         .search_panel
                         .handle_text_event_impl(event)
                         .map(|effect| {
-                            effect.map_frontend(|this: &mut $name| &mut this.search_panel)
+                            effect.map(|this: &mut $name| &mut this.search_panel)
                         }),
                     SearchBrowserSide::Songs => {
                         self.songs_panel
                             .handle_text_event_impl(event)
                             .map(|effect| {
-                                effect.map_frontend(|this: &mut $name| &mut this.songs_panel)
+                                effect.map(|this: &mut $name| &mut this.songs_panel)
                             })
                     }
                 }
@@ -476,7 +432,7 @@ macro_rules! define_search_results_browser {
                     FilterAction::Apply => self.songs_panel.apply_filter(),
                     FilterAction::ClearFilter => self.songs_panel.clear_filter(),
                 };
-                async_callback_manager::AsyncTask::new_no_op()
+                Effects::none()
             }
         }
         impl
@@ -495,7 +451,7 @@ macro_rules! define_search_results_browser {
                     SortAction::Close => self.songs_panel.close_sort(),
                     SortAction::ClearSort => self.songs_panel.handle_clear_sort(),
                 }
-                async_callback_manager::AsyncTask::new_no_op()
+                Effects::none()
             }
         }
         impl
@@ -516,7 +472,7 @@ macro_rules! define_search_results_browser {
                         self.search_panel.search.increment_list(1)
                     }
                 }
-                async_callback_manager::AsyncTask::new_no_op()
+                Effects::none()
             }
         }
         impl $crate::app::component::actionhandler::ActionHandler<$songs_action_ty> for $name {
@@ -615,7 +571,7 @@ macro_rules! define_search_results_browser {
             pub fn handle_text_entry_action(
                 &mut self,
                 action: $crate::app::ui::action::TextEntryAction,
-            ) -> $crate::app::component::actionhandler::ComponentEffect<Self> {
+            ) -> $crate::app::effect::Effects<Self> {
                 use $crate::app::ui::action::TextEntryAction;
                 use $crate::app::ui::browser::shared_components::SearchBrowserSide;
                 if self.is_text_handling()
@@ -628,16 +584,16 @@ macro_rules! define_search_results_browser {
                         }
                         TextEntryAction::DeleteWord => {
                             self.search_panel.search.delete_word();
-                            return async_callback_manager::AsyncTask::new_no_op();
+                            return Effects::none();
                         }
-                        _ => return async_callback_manager::AsyncTask::new_no_op(),
+                        _ => return Effects::none(),
                     }
                 }
-                async_callback_manager::AsyncTask::new_no_op()
+                Effects::none()
             }
             pub fn search(
                 &mut self,
-            ) -> $crate::app::component::actionhandler::ComponentEffect<Self> {
+            ) -> $crate::app::effect::Effects<Self> {
                 self.search_panel.close_search();
                 let Some(search_query) = self
                     .search_panel
@@ -645,14 +601,14 @@ macro_rules! define_search_results_browser {
                     .get_text()
                     .map(|s: &str| s.to_string())
                 else {
-                    return async_callback_manager::AsyncTask::new_no_op();
+                    return Effects::none();
                 };
                 self.search_panel.clear_text();
                 self.execute_search(search_query)
             }
             pub fn get_songs(
                 &mut self,
-            ) -> $crate::app::component::actionhandler::ComponentEffect<Self> {
+            ) -> $crate::app::effect::Effects<Self> {
                 let selected = self.search_panel.get_selected_item();
                 self.change_routing(
                     $crate::app::ui::browser::shared_components::SearchBrowserSide::Songs,
@@ -755,64 +711,3 @@ pub fn get_adjusted_list_column<T: Copy, const N: usize>(
     adjusted_cols.get(target_col).copied()
 }
 
-#[cfg(test)]
-mod tests {
-    use crate::app::component::actionhandler::TextHandler;
-    use crate::app::server::GetSearchSuggestions;
-    use crate::app::ui::browser::shared_components::{
-        HandleSearchSuggestionsErr, HandleSearchSuggestionsOk, SearchBlock,
-        get_adjusted_list_column,
-    };
-    use async_callback_manager::{AsyncTask, Constraint};
-    use crossterm::event::KeyModifiers;
-    use pretty_assertions::assert_eq;
-
-    #[test]
-    fn test_get_adjusted_list_column() {
-        assert_eq!(get_adjusted_list_column(2, [3, 1, 2]).unwrap(), 2);
-        assert_eq!(get_adjusted_list_column(0, [3, 1, 2]).unwrap(), 3);
-        assert_eq!(get_adjusted_list_column(1, [3, 1, 2]).unwrap(), 1);
-    }
-    #[test]
-    fn test_get_adjusted_list_column_out_of_bounds() {
-        assert!(get_adjusted_list_column(3, [3, 1, 2]).is_none())
-    }
-    #[test]
-    fn test_dont_fetch_search_suggestions_when_empty() {
-        let mut b = SearchBlock::default();
-        let effect = b.fetch_search_suggestions();
-        assert!(effect.is_no_op());
-    }
-    #[test]
-    fn test_search_suggestions_fetch_effect() {
-        let mut b = SearchBlock::default();
-        b.search_contents.set_text("The beatles");
-        let effect = b.fetch_search_suggestions();
-        let expected_effect = AsyncTask::new_future_try(
-            GetSearchSuggestions("The beatles".to_string()),
-            HandleSearchSuggestionsOk,
-            HandleSearchSuggestionsErr,
-            Some(Constraint::new_kill_same_type()),
-        );
-        assert_eq!(effect, expected_effect);
-    }
-    #[test]
-    fn test_search_suggestions_fetched_on_change() {
-        let mut b = SearchBlock::default();
-        let effect = b
-            .try_handle_text(&crossterm::event::Event::Key(
-                crossterm::event::KeyEvent::new(
-                    crossterm::event::KeyCode::Char('A'),
-                    KeyModifiers::empty(),
-                ),
-            ))
-            .unwrap();
-        let expected_effect = AsyncTask::new_future_try(
-            GetSearchSuggestions("A".to_string()),
-            HandleSearchSuggestionsOk,
-            HandleSearchSuggestionsErr,
-            Some(Constraint::new_kill_same_type()),
-        );
-        assert_eq!(effect, expected_effect)
-    }
-}

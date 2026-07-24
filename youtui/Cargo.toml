@@ -32,7 +32,6 @@ serde_json = "1.0.149"
 ytmapi-rs = { path = "../ytmapi-rs", version = "0.3.2", features = [ "reqwest", "rustls" ] }
 reqwest = { version = "0.13", default-features = false, features = [] }
 tokio = { version = "1.52.1", features = ["full"] }
-async-callback-manager = { path = "../async-callback-manager", version = "0.1.1" }
 tracing = "0.1.44"
 tracing-subscriber = "0.3.23"
 directories = "6.0.0"
@@ -72,7 +71,6 @@ winit = "0.30.13"
 [dev-dependencies]
 pretty_assertions = "1.4.1"
 tempfile = "3.27.0"
-async-callback-manager = { path = "../async-callback-manager", version = "0.1.1", features = ["task-equality", "task-debug"] }
 criterion = "0.5"
 
 [lints]

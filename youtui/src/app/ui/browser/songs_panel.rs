@@ -1,8 +1,7 @@
 use crate::app::component::actionhandler::{
-    Action, ComponentEffect, KeyRouter, Scrollable, TextHandler,
+    Action, KeyRouter, Scrollable, TextHandler,
 };
-use crate::app::server::ArcServer;
-use crate::app::server::TaskMetadata;
+use crate::app::effect::Effects;
 use crate::app::structures::{
     BrowserSongsList, ListSong, ListSongDisplayableField, ListStatus, Percentage, SongListComponent,
 };
@@ -249,10 +248,10 @@ impl<C: SongsPanelConfig> TextHandler for SongsPanel<C> {
     fn handle_text_event_impl(
         &mut self,
         event: &crossterm::event::Event,
-    ) -> Option<ComponentEffect<Self>> {
+    ) -> Option<Effects<Self>> {
         self.filter
             .handle_text_event_impl(event)
-            .map(|effect| effect.map_frontend(|this: &mut SongsPanel<C>| &mut this.filter))
+            .map(|effect| effect.map(|this: &mut SongsPanel<C>| &mut this.filter))
     }
 }
 
@@ -416,10 +415,7 @@ impl<C: SongsPanelConfig> HasTitle for SongsPanel<C> {
     }
 }
 
-impl<C: SongsPanelConfig> crate::app::component::actionhandler::Component for SongsPanel<C> {
-    type Bkend = ArcServer;
-    type Md = TaskMetadata;
-}
+impl<C: SongsPanelConfig> crate::app::component::actionhandler::Component for SongsPanel<C> {}
 
 // ── Config implementations ──────────────────────────────────────────────
 

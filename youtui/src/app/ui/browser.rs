@@ -2,9 +2,10 @@ use self::draw::draw_browser;
 use super::action::{AppAction, TextEntryAction};
 use super::{AppCallback, WindowContext};
 use crate::app::component::actionhandler::{
-    Action, ActionHandler, ComponentEffect, DelegateScrollable, DominantKeyRouter, KeyRouter,
+    Action, ActionHandler, Component, DelegateScrollable, DominantKeyRouter, KeyRouter,
     Scrollable, TextHandler, YoutuiEffect, apply_action_mapped,
 };
+use crate::app::effect::Effects;
 use crate::app::ui::browser::playlistsearch::PlaylistSearchBrowser;
 use crate::app::ui::browser::playlistsearch::search_panel::BrowserPlaylistsAction;
 use crate::app::ui::browser::playlistsearch::songs_panel::BrowserPlaylistSongsAction;
@@ -14,7 +15,6 @@ use crate::config::keymap::Keymap;
 use artistsearch::ArtistSearchBrowser;
 use artistsearch::search_panel::BrowserArtistsAction;
 use artistsearch::songs_panel::BrowserArtistSongsAction;
-use async_callback_manager::AsyncTask;
 use itertools::Either;
 use serde::{Deserialize, Serialize};
 use shared_components::{BrowserSearchAction, FilterAction, SortAction};
@@ -46,7 +46,7 @@ pub struct Browser {
     song_search_browser: SongSearchBrowser,
     playlist_search_browser: PlaylistSearchBrowser,
 }
-impl_youtui_component!(Browser);
+impl Component for Browser {}
 
 #[derive(PartialEq, Clone, Copy, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -195,14 +195,14 @@ impl ActionHandler<BrowserAction> for Browser {
             BrowserAction::Right => self.right(),
             BrowserAction::ViewPlaylist => {
                 return (
-                    AsyncTask::new_no_op(),
+                    Effects::none(),
                     Some(AppCallback::ChangeContext(WindowContext::Playlist)),
                 );
             }
             BrowserAction::Search => self.handle_toggle_search(),
             BrowserAction::ChangeSearchType => self.handle_change_search_type(),
         }
-        (AsyncTask::new_no_op(), None)
+        (Effects::none(), None)
     }
 }
 impl ActionHandler<FilterAction> for Browser {
@@ -279,7 +279,7 @@ impl TextHandler for Browser {
     fn handle_text_event_impl(
         &mut self,
         event: &crossterm::event::Event,
-    ) -> Option<ComponentEffect<Self>> {
+    ) -> Option<Effects<Self>> {
         // Let E (change search type) pass through to the keybind router
         // instead of being typed into the search input.
         if matches!(
@@ -296,19 +296,19 @@ impl TextHandler for Browser {
             BrowserVariant::Artist => self
                 .artist_search_browser
                 .handle_text_event_impl(event)
-                .map(|effect: ComponentEffect<ArtistSearchBrowser>| {
-                    effect.map_frontend(|this: &mut Self| &mut this.artist_search_browser)
+                .map(|effect: Effects<ArtistSearchBrowser>| {
+                    effect.map(|this: &mut Self| &mut this.artist_search_browser)
                 }),
             BrowserVariant::Song => self.song_search_browser.handle_text_event_impl(event).map(
-                |effect: ComponentEffect<SongSearchBrowser>| {
-                    effect.map_frontend(|this: &mut Self| &mut this.song_search_browser)
+                |effect: Effects<SongSearchBrowser>| {
+                    effect.map(|this: &mut Self| &mut this.song_search_browser)
                 },
             ),
             BrowserVariant::Playlist => self
                 .playlist_search_browser
                 .handle_text_event_impl(event)
-                .map(|effect: ComponentEffect<PlaylistSearchBrowser>| {
-                    effect.map_frontend(|this: &mut Self| &mut this.playlist_search_browser)
+                .map(|effect: Effects<PlaylistSearchBrowser>| {
+                    effect.map(|this: &mut Self| &mut this.playlist_search_browser)
                 }),
         }
     }
@@ -463,20 +463,20 @@ impl Browser {
             BrowserVariant::Song => (),
         }
     }
-    pub fn handle_text_entry_action(&mut self, action: TextEntryAction) -> ComponentEffect<Self> {
+    pub fn handle_text_entry_action(&mut self, action: TextEntryAction) -> Effects<Self> {
         match self.variant {
             BrowserVariant::Artist => self
                 .artist_search_browser
                 .handle_text_entry_action(action)
-                .map_frontend(|this: &mut Self| &mut this.artist_search_browser),
+                .map(|this: &mut Self| &mut this.artist_search_browser),
             BrowserVariant::Song => self
                 .song_search_browser
                 .handle_text_entry_action(action)
-                .map_frontend(|this: &mut Self| &mut this.song_search_browser),
+                .map(|this: &mut Self| &mut this.song_search_browser),
             BrowserVariant::Playlist => self
                 .playlist_search_browser
                 .handle_text_entry_action(action)
-                .map_frontend(|this: &mut Self| &mut this.playlist_search_browser),
+                .map(|this: &mut Self| &mut this.playlist_search_browser),
         }
     }
     pub fn handle_toggle_search(&mut self) {
