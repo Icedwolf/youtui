@@ -20,10 +20,10 @@ use ytmapi_rs::common::{
     AlbumID, ArtistChannelID, PlaylistID, VideoID, YoutubeID,
 };
 use ytmapi_rs::parse::{
-    AlbumSong, GetAlbum, GetArtistAlbums, GetArtistAlbumsAlbum, ParsedSongAlbum, ParsedSongArtist,
-    PlaylistItem, SearchResultArtist, SearchResultPlaylist, SearchResultSong,
+    AlbumSong, GetAlbum, GetArtist, GetArtistAlbums, GetArtistAlbumsAlbum, ParsedSongAlbum,
+    ParsedSongArtist, PlaylistItem, SearchResultArtist, SearchResultPlaylist, SearchResultSong,
 };
-use ytmapi_rs::query::{GetAlbumQuery, GetArtistAlbumsQuery};
+use ytmapi_rs::query::{GetAlbumQuery, GetArtistAlbumsQuery, GetArtistQuery, GetPlaylistTracksQuery};
 
 #[derive(Clone)]
 /// # Note
@@ -186,12 +186,78 @@ async fn search_playlists(api: ConcurrentApi, text: String) -> Result<Vec<Search
     query_api_with_retry(&api, query).await
 }
 
+fn resolve_channel_id_from_search(s: &str) -> Option<ArtistChannelID<'static>> {
+    let raw = s.trim();
+    if raw.starts_with("UC")
+        && raw.len() == 24
+        && raw.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    {
+        return Some(ArtistChannelID::from_raw(raw.to_string()));
+    }
+    for prefix in &[
+        "https://music.youtube.com/channel/",
+        "https://www.youtube.com/channel/",
+        "music.youtube.com/channel/",
+        "youtube.com/channel/",
+    ] {
+        if let Some(id) = raw.strip_prefix(prefix) {
+            let id = id.split('/').next().unwrap_or(id);
+            if id.starts_with("UC") && id.len() >= 20 {
+                return Some(ArtistChannelID::from_raw(id.to_string()));
+            }
+        }
+    }
+    None
+}
+
 async fn search_artists(api: ConcurrentApi, text: String) -> Result<Vec<SearchResultArtist>> {
     debug!("Searching artists for {text}");
-    let query =
-        ytmapi_rs::query::SearchQuery::new_filtered(text, ytmapi_rs::query::search::ArtistsFilter)
-            .with_spelling_mode(ytmapi_rs::query::search::SpellingMode::ExactMatch);
-    query_api_with_retry(&api, query).await
+    if let Some(channel_id) = resolve_channel_id_from_search(&text) {
+        match query_api_with_retry::<GetArtistQuery<'_>, GetArtist>(&api, GetArtistQuery::new(channel_id)).await {
+            Ok(artist) => {
+                debug!("Resolved channel ID to artist: {}", artist.name);
+                return Ok(vec![SearchResultArtist::new(
+                    artist.name,
+                    artist.subscribers,
+                    artist.channel_id,
+                    artist.thumbnails,
+                )]);
+            }
+            Err(e) => debug!("Channel ID lookup failed: {e}, falling back to text search"),
+        }
+    }
+    let exact_query =
+        ytmapi_rs::query::SearchQuery::new_filtered(text.clone(), ytmapi_rs::query::search::ArtistsFilter)
+            .with_spelling_mode(ytmapi_rs::query::search::SpellingMode::WithSuggestions);
+    let results: Vec<SearchResultArtist> = match query_api_with_retry(&api, exact_query).await {
+        Ok(r) => r,
+        Err(e) => {
+            debug!("Filtered artist search error: {e}, falling back to basic search");
+            Vec::new()
+        }
+    };
+    if !results.is_empty() {
+        return Ok(results);
+    }
+    debug!("Filtered artist search returned empty, trying basic search");
+    let basic: ytmapi_rs::parse::SearchResults = match query_api_with_retry(
+        &api,
+        Into::<ytmapi_rs::query::SearchQuery<'_, ytmapi_rs::query::search::BasicSearch>>::into(text),
+    )
+    .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            warn!("Basic artist search also failed: {e}");
+            return Ok(Vec::new());
+        }
+    };
+    if !basic.artists.is_empty() {
+        debug!("Falling back to {} artist results from basic search", basic.artists.len());
+        return Ok(basic.artists);
+    }
+    debug!("No artist results found in basic search either");
+    Ok(Vec::new())
 }
 
 async fn search_songs(api: ConcurrentApi, text: String) -> Result<Vec<SearchResultSong>> {
@@ -401,7 +467,54 @@ fn get_artist_songs(
             }
         }
 
-        if browse_id_list.is_empty() {
+        let top_songs_data: Option<AlbumSongsData> = match artist.top_releases.songs {
+            None => None,
+            Some(songs) => {
+                let first_page = songs.results;
+                let browse_id = songs.browse_id;
+                let tracks: Vec<AlbumSong> = if browse_id.get_raw().is_empty() {
+                    first_page.into_iter().map(AlbumSong::from).collect()
+                } else {
+                    let query = GetPlaylistTracksQuery::new(browse_id);
+                    let items = {
+                        let api_locked = api.read().await;
+                        api_locked
+                            .stream_browser_or_oauth::<GetPlaylistTracksQuery<'_>, Vec<PlaylistItem>>(
+                                &query, usize::MAX,
+                            )
+                            .await
+                    };
+                    match items {
+                        Ok(all_pages) => all_pages
+                            .into_iter()
+                            .flatten()
+                            .filter_map(|item| match item {
+                                PlaylistItem::Song(s) => Some(AlbumSong::from(s)),
+                                _ => None,
+                            })
+                            .collect(),
+                        Err(e) => {
+                            warn!("top songs pagination failed: {e}, falling back to first page");
+                            first_page.into_iter().map(AlbumSong::from).collect()
+                        }
+                    }
+                };
+                Some(AlbumSongsData {
+                    song_list: tracks,
+                    album: ParsedSongAlbum {
+                        name: "Top Songs".to_string(),
+                        id: AlbumID::from_raw(""),
+                    },
+                    year: String::new(),
+                    artists: vec![ParsedSongArtist {
+                        name: artist.name.clone(),
+                        id: None,
+                    }],
+                })
+            }
+        };
+
+        if browse_id_list.is_empty() && top_songs_data.is_none() {
             info!("No songs found for artist");
             send_or_error(&tx, GetArtistSongsProgressUpdate::NoSongsFound).await;
             return;
@@ -481,7 +594,10 @@ fn get_artist_songs(
         // Reorder by original index so albums appear in the same order as
         // browse_id_list, regardless of completion order.
         album_results.sort_by_key(|(idx, _)| *idx);
-        let all_albums: Vec<AlbumSongsData> = album_results.into_iter().map(|(_, a)| a).collect();
+        let mut all_albums: Vec<AlbumSongsData> = album_results.into_iter().map(|(_, a)| a).collect();
+        if let Some(top) = top_songs_data {
+            all_albums.insert(0, top);
+        }
         if all_albums.is_empty() {
             // All album fetches failed — send NoSongsFound so the UI shows
             // an error/empty state instead of a blank loaded list.
