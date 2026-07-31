@@ -8,7 +8,6 @@ A guide to understanding the youtui codebase for future development sessions.
 youtui/
 ├── youtui/           # Main TUI application
 ├── ytmapi-rs/       # YouTube Music API wrapper
-├── async-callback-manager/  # Task management framework
 ├── json-crawler/     # JSON traversal utilities
 └── justfile         # Task runner (just test, just clippy, etc.)
 ```

@@ -21,3 +21,5 @@ ytmapi-rs/tests/debug_dump.rs
 /async-callback-manager/target/
 /async-callback-manager/target/*
 AGENTS.md
+*.zst
+heaptrack*
