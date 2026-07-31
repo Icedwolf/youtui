@@ -63,12 +63,6 @@ pub enum ErrorKind {
     },
     MissingUploadUrl,
 }
-/// The type we were attempting to pass from the Json.
-#[derive(Debug, Clone)]
-pub enum ParseTarget {
-    Array,
-    Other(String),
-}
 impl Error {
     /// Extract the inner kind from the error for pattern matching.
     pub fn into_kind(self) -> ErrorKind {

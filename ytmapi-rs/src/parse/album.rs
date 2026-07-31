@@ -1,6 +1,7 @@
 use super::{
     ParseFrom, ParsedSongArtist, ProcessedResult, fixed_column_item_pointer,
     parse_flex_column_item, parse_library_management_items_from_menu, parse_song_artist,
+    artist::ArtistSong, playlist::PlaylistSong,
 };
 use crate::Result;
 use crate::common::{
@@ -45,6 +46,38 @@ impl AlbumSong {
     }
     pub fn music_video_type(&self) -> Option<&YoutubeMusicVideoType> {
         self.music_video_type.as_ref()
+    }
+}
+
+impl From<PlaylistSong> for AlbumSong {
+    fn from(song: PlaylistSong) -> Self {
+        AlbumSong {
+            video_id: song.video_id,
+            track_no: song.track_no,
+            duration: song.duration,
+            plays: String::new(),
+            library_management: song.library_management,
+            title: song.title,
+            like_status: song.like_status,
+            explicit: song.explicit,
+            music_video_type: None,
+        }
+    }
+}
+
+impl From<ArtistSong> for AlbumSong {
+    fn from(song: ArtistSong) -> Self {
+        AlbumSong {
+            video_id: song.video_id,
+            track_no: 0,
+            duration: String::new(),
+            plays: song.plays,
+            library_management: song.library_management,
+            title: song.title,
+            like_status: song.like_status,
+            explicit: song.explicit,
+            music_video_type: None,
+        }
     }
 }
 

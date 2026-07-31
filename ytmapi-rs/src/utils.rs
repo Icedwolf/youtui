@@ -18,7 +18,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 // TODO: Modify to be testable.
 // Consider if this should take origin from headers instead of using the
 // constant YTM_URL which I have modified.
-pub fn hash_sapisid(sapisid: &str) -> String {
+pub(crate) fn hash_sapisid(sapisid: &str) -> String {
     let elapsed = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
@@ -55,13 +55,8 @@ macro_rules! impl_youtube_id {
     };
 }
 
-/// Macro that will print a warning to stderr if this branch is taken and
-/// ab-warning feature is enabled.
 macro_rules! ab_warn {
-    () => {
-        #[cfg(feature = "ab-warning")]
-        eprintln!("WARNING: a/b test deprecated branch taken");
-    };
+    () => {};
 }
 
 /// Macro to generate a parsing test based on the following values:

@@ -6,7 +6,7 @@ use super::{
 use crate::Result;
 use crate::common::{
     AlbumID, AlbumType, ArtistChannelID, BrowseParams, ContinuationParams, Explicit,
-    LibraryManager, LibraryStatus, LikeStatus, PlaylistID, VideoID,
+    LibraryManager, LibraryStatus, LikeStatus, PlaylistID, VideoID, YoutubeID,
 };
 use crate::continuations::ParseFromContinuable;
 use crate::nav_consts::*;
@@ -261,8 +261,8 @@ fn parse_artist_song(mut json: impl JsonCrawler) -> Result<ArtistSong> {
     })
 }
 fn parse_artist_songs(mut json: impl JsonCrawler) -> Result<GetArtistSongs> {
-    // Unsure if this should be optional or not.
-    let browse_id = json.take_value_pointer(concatcp!(TITLE, NAVIGATION_BROWSE_ID))?;
+    let browse_id = json.take_value_pointer(concatcp!(TITLE, NAVIGATION_BROWSE_ID))
+        .unwrap_or_else(|_| PlaylistID::from_raw(""));
     let results = json
         .borrow_pointer("/contents")?
         .try_into_iter()?
@@ -270,45 +270,34 @@ fn parse_artist_songs(mut json: impl JsonCrawler) -> Result<GetArtistSongs> {
         .collect::<Result<Vec<ArtistSong>>>()?;
     Ok(GetArtistSongs { results, browse_id })
 }
-// While this function gets improved, we'll allow this lint for the creation of
-// GetArtistTopReleases.
-#[allow(clippy::field_reassign_with_default)]
 fn parse_artist_top_releases_from_section_list_contents(
     mut contents: impl JsonCrawler,
 ) -> Result<GetArtistTopReleases> {
-    let mut top_releases = GetArtistTopReleases::default();
-    top_releases.songs = contents
+    let songs = contents
         .borrow_pointer(concatcp!("/0", MUSIC_SHELF))
         .ok()
         .map(parse_artist_songs)
         .transpose()?;
-    // TODO: Check if Carousel Title is in list of categories.
-    // TODO: Actually pass these variables in the return
-    // XXX: Looks to be two loops over results here.
-    // XXX: if there are multiple results for each category we only want to look at
-    // the first one.
+    let mut albums = None;
+    let mut singles = None;
+    let videos = None;
+    let related = None;
     for mut r in contents
         .try_iter_mut()
         .into_iter()
         .flatten()
         .filter_map(|r| r.navigate_pointer("/musicCarouselShelfRenderer").ok())
     {
-        // XXX: Should this only be on the first result per category?
         let category = r.take_value_pointer(concatcp!(CAROUSEL_TITLE, "/text"))?;
-        // Likely optional, need to confirm.
-        // XXX: Errors here
         let browse_id: Option<ArtistChannelID> = r
             .take_value_pointer(concatcp!(CAROUSEL_TITLE, NAVIGATION_BROWSE_ID))
             .ok();
-        // XXX should only be mandatory for albums, singles, playlists
-        // as a result leaving as optional for now.
         let params = r
             .take_value_pointer(concatcp!(
                 CAROUSEL_TITLE,
                 "/navigationEndpoint/browseEndpoint/params"
             ))
             .ok();
-        // TODO: finish other categories
         match category {
             ArtistTopReleaseCategory::Related => (),
             ArtistTopReleaseCategory::Videos => (),
@@ -317,7 +306,7 @@ fn parse_artist_top_releases_from_section_list_contents(
                 for i in r.navigate_pointer("/contents")?.try_iter_mut()? {
                     results.push(parse_album_from_mtrir(i.navigate_pointer(MTRIR)?)?);
                 }
-                top_releases.singles = Some(GetArtistAlbums {
+                singles = Some(GetArtistAlbums {
                     browse_id,
                     params,
                     results,
@@ -328,18 +317,23 @@ fn parse_artist_top_releases_from_section_list_contents(
                 for i in r.navigate_pointer("/contents")?.try_iter_mut()? {
                     results.push(parse_album_from_mtrir(i.navigate_pointer(MTRIR)?)?);
                 }
-                let albums = GetArtistAlbums {
+                albums = Some(GetArtistAlbums {
                     browse_id,
                     params,
                     results,
-                };
-                top_releases.albums = Some(albums);
+                });
             }
             ArtistTopReleaseCategory::Playlists => (),
             ArtistTopReleaseCategory::None => (),
         }
     }
-    Ok(top_releases)
+    Ok(GetArtistTopReleases {
+        songs,
+        albums,
+        singles,
+        videos,
+        related,
+    })
 }
 
 /// Google A/B change pending

@@ -49,7 +49,7 @@ pub(crate) fn validate_upload_path(file_path: &Path) -> Result<(tokio::fs::File,
 }
 
 /// Upload a song to your YouTube Music Library.
-pub async fn upload_song(
+pub(crate) async fn upload_song(
     file_path: impl AsRef<Path>,
     token: &BrowserToken,
     client: &Client,

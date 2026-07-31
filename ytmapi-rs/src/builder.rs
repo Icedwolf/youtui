@@ -147,16 +147,19 @@ impl<P: AsRef<Path>> YtMusicBuilder<FromCookieFile<P>> {
     }
 }
 impl YtMusicBuilder<NoToken> {
-    // This lint is a little confusing in this case, as we do not want different
-    // default implementations for YtMusicBuilder<T> depending on T. There
-    // should only be one way to construct a YtMusicBuilder with T = NoToken.
-    #[allow(clippy::new_without_default)]
     pub fn new() -> YtMusicBuilder<NoToken> {
         YtMusicBuilder {
             client_options: ClientOptions::Default,
             token: NoToken,
         }
     }
+}
+impl Default for YtMusicBuilder<NoToken> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+impl YtMusicBuilder<NoToken> {
     pub fn new_with_client(client: Client) -> YtMusicBuilder<NoToken> {
         YtMusicBuilder {
             client_options: ClientOptions::Existing(client),

@@ -649,7 +649,6 @@ impl PathList {
     }
 }
 
-// I believe both implementations are required, due to orphan rules.
 impl From<&PathList> for String {
     fn from(value: &PathList) -> Self {
         let mut path = String::new();
@@ -661,10 +660,6 @@ impl From<&PathList> for String {
 }
 impl From<PathList> for String {
     fn from(value: PathList) -> Self {
-        let mut path = String::new();
-        for p in &value.list {
-            path.push_str(String::from(p).as_str());
-        }
-        path
+        String::from(&value)
     }
 }
