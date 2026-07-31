@@ -1,11 +1,12 @@
 use crate::core::PoisonRecovery;
 use std::io::{Read, Seek, SeekFrom};
-use std::sync::{Arc, Condvar, Mutex, RwLock};
+use std::sync::{Arc, Condvar, Mutex};
 
-struct SharedBufferMeta {
+struct SharedBufferInner {
     finished: bool,
     failed: bool,
     total_len: Option<u64>,
+    state: BufferState,
 }
 
 enum BufferState {
@@ -13,15 +14,19 @@ enum BufferState {
     Complete(Arc<[u8]>),
 }
 
-/// Single-RwLock state avoids the TOCTOU race where a reader sees the empty
-/// Vec from a concurrent `finalize` before the Complete Arc is stored.
-/// The state atomically transitions from Partial(Vec) → Complete(Arc) within
-/// one write-lock acquisition — no reader can observe the inconsistent
-/// intermediate state.
+/// Single-Mutex design avoids nested lock ordering issues between the old
+/// separate `meta: Mutex` + `state: RwLock` — all state transitions are
+/// atomic within one lock acquisition.
 pub struct SharedBuffer {
-    meta: Mutex<SharedBufferMeta>,
-    state: RwLock<BufferState>,
+    inner: Mutex<SharedBufferInner>,
     cvar: Condvar,
+}
+
+fn available_len(state: &BufferState) -> usize {
+    match state {
+        BufferState::Partial(v) => v.len(),
+        BufferState::Complete(a) => a.len(),
+    }
 }
 
 impl SharedBuffer {
@@ -33,26 +38,20 @@ impl SharedBuffer {
     #[must_use]
     pub fn with_capacity(cap: usize) -> Arc<Self> {
         Arc::new(Self {
-            meta: Mutex::new(SharedBufferMeta {
+            inner: Mutex::new(SharedBufferInner {
                 finished: false,
                 failed: false,
                 total_len: None,
+                state: BufferState::Partial(Vec::with_capacity(cap)),
             }),
-            state: RwLock::new(BufferState::Partial(Vec::with_capacity(cap))),
             cvar: Condvar::new(),
         })
     }
 
     #[must_use]
     pub fn len(&self) -> usize {
-        self.available_len()
-    }
-
-    fn available_len(&self) -> usize {
-        match *self.state.read().unwrap_or_warn() {
-            BufferState::Partial(ref v) => v.len(),
-            BufferState::Complete(ref a) => a.len(),
-        }
+        let guard = self.inner.lock().unwrap_or_warn();
+        available_len(&guard.state)
     }
 
     #[must_use]
@@ -64,9 +63,9 @@ impl SharedBuffer {
     }
 
     pub fn set_total_len(&self, len: u64) {
-        let mut meta = self.meta.lock().unwrap_or_warn();
-        meta.total_len = Some(len);
-        if let BufferState::Partial(ref mut v) = *self.state.write().unwrap_or_warn() {
+        let mut guard = self.inner.lock().unwrap_or_warn();
+        guard.total_len = Some(len);
+        if let BufferState::Partial(ref mut v) = guard.state {
             v.reserve(len as usize);
         }
         self.cvar.notify_all();
@@ -74,40 +73,39 @@ impl SharedBuffer {
 
     #[must_use]
     pub fn total_len(&self) -> Option<u64> {
-        self.meta.lock().unwrap_or_warn().total_len
+        self.inner.lock().unwrap_or_warn().total_len
     }
 
     #[must_use]
     pub fn finalize(&self) -> Arc<[u8]> {
-        let mut guard = self.state.write().unwrap_or_warn();
-        let old = std::mem::replace(&mut *guard, BufferState::Partial(Vec::new()));
-        match old {
-            BufferState::Complete(arc) => {
-                *guard = BufferState::Complete(arc.clone());
-                arc
-            }
+        let mut guard = self.inner.lock().unwrap_or_warn();
+        guard.finished = true;
+        let arc = match &mut guard.state {
+            BufferState::Complete(arc) => Arc::clone(arc),
             BufferState::Partial(vec) => {
-                let arc: Arc<[u8]> = Arc::from(vec);
-                *guard = BufferState::Complete(arc.clone());
+                let data = std::mem::take(vec);
+                let arc: Arc<[u8]> = Arc::from(data);
+                guard.state = BufferState::Complete(Arc::clone(&arc));
                 arc
             }
-        }
+        };
+        self.cvar.notify_all();
+        arc
     }
 
     #[must_use]
     pub fn is_failed(&self) -> bool {
-        self.meta.lock().unwrap_or_warn().failed
+        self.inner.lock().unwrap_or_warn().failed
     }
 
     pub fn fail(&self) {
-        let mut meta = self.meta.lock().unwrap_or_warn();
-        meta.failed = true;
-        meta.finished = true;
-        if meta.total_len.is_none() {
-            let guard = self.state.read().unwrap_or_warn();
-            if let BufferState::Partial(ref v) = *guard {
-                meta.total_len = Some(v.len() as u64);
-            }
+        let mut guard = self.inner.lock().unwrap_or_warn();
+        guard.failed = true;
+        guard.finished = true;
+        if let BufferState::Partial(ref v) = guard.state
+            && guard.total_len.is_none()
+        {
+            guard.total_len = Some(v.len() as u64);
         }
         self.cvar.notify_all();
     }
@@ -128,22 +126,22 @@ pub struct SharedBufferWriter {
 
 impl SharedBufferWriter {
     pub fn write(&mut self, data: &[u8]) {
-        if let BufferState::Partial(ref mut v) = *self.buffer.state.write().unwrap_or_warn() {
+        let mut guard = self.buffer.inner.lock().unwrap_or_warn();
+        if let BufferState::Partial(ref mut v) = guard.state {
             v.extend_from_slice(data);
         }
         self.buffer.cvar.notify_all();
     }
 
     pub fn finish(&mut self) {
-        let mut meta = self.buffer.meta.lock().unwrap_or_warn();
-        meta.finished = true;
-        if meta.total_len.is_none() {
-            let guard = self.buffer.state.read().unwrap_or_warn();
-            if let BufferState::Partial(ref v) = *guard {
-                meta.total_len = Some(v.len() as u64);
-            }
+        let mut guard = self.buffer.inner.lock().unwrap_or_warn();
+        guard.finished = true;
+        if let BufferState::Partial(ref v) = guard.state
+            && guard.total_len.is_none()
+        {
+            guard.total_len = Some(v.len() as u64);
         }
-        if let BufferState::Partial(ref mut v) = *self.buffer.state.write().unwrap_or_warn() {
+        if let BufferState::Partial(ref mut v) = guard.state {
             v.shrink_to_fit();
         }
         self.finished = true;
@@ -151,16 +149,15 @@ impl SharedBufferWriter {
     }
 
     pub fn fail(&mut self) {
-        let mut meta = self.buffer.meta.lock().unwrap_or_warn();
-        meta.failed = true;
-        meta.finished = true;
-        if meta.total_len.is_none() {
-            let guard = self.buffer.state.read().unwrap_or_warn();
-            if let BufferState::Partial(ref v) = *guard {
-                meta.total_len = Some(v.len() as u64);
-            }
+        let mut guard = self.buffer.inner.lock().unwrap_or_warn();
+        guard.failed = true;
+        guard.finished = true;
+        if let BufferState::Partial(ref v) = guard.state
+            && guard.total_len.is_none()
+        {
+            guard.total_len = Some(v.len() as u64);
         }
-        if let BufferState::Partial(ref mut v) = *self.buffer.state.write().unwrap_or_warn() {
+        if let BufferState::Partial(ref mut v) = guard.state {
             v.shrink_to_fit();
         }
         self.finished = true;
@@ -183,24 +180,23 @@ pub struct SharedBufferReader {
 
 impl Read for SharedBufferReader {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        let mut meta = self.buffer.meta.lock().unwrap_or_warn();
+        let mut guard = self.buffer.inner.lock().unwrap_or_warn();
         loop {
-            let avail = self.buffer.available_len();
-            if self.pos < avail || meta.finished || meta.failed {
+            let avail = available_len(&guard.state);
+            if self.pos < avail || guard.finished || guard.failed {
                 break;
             }
-            meta = self.buffer.cvar.wait(meta).unwrap_or_warn();
+            guard = self.buffer.cvar.wait(guard).unwrap_or_warn();
         }
-        let avail = self.buffer.available_len();
-        if meta.finished && self.pos >= avail {
+        let avail = available_len(&guard.state);
+        if guard.finished && self.pos >= avail {
             self.pos = avail;
         }
         if self.pos >= avail {
             return Ok(0);
         }
 
-        let guard = self.buffer.state.read().unwrap_or_warn();
-        match *guard {
+        match guard.state {
             BufferState::Complete(ref arc) => {
                 let to_read = buf.len().min(arc.len() - self.pos);
                 buf[..to_read].copy_from_slice(&arc[self.pos..self.pos + to_read]);
@@ -219,27 +215,27 @@ impl Read for SharedBufferReader {
 
 impl Seek for SharedBufferReader {
     fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
-        let mut meta = self.buffer.meta.lock().unwrap_or_warn();
+        let mut guard = self.buffer.inner.lock().unwrap_or_warn();
         let new_pos = match pos {
             SeekFrom::Start(offset) => offset as i64,
             SeekFrom::Current(delta) => self.pos as i64 + delta,
             SeekFrom::End(offset) => {
-                if meta.finished {
-                    self.buffer.available_len() as i64 + offset
-                } else if let Some(total_len) = meta.total_len {
+                if guard.finished {
+                    available_len(&guard.state) as i64 + offset
+                } else if let Some(total_len) = guard.total_len {
                     total_len as i64 + offset
                 } else {
-                    while !meta.finished && !meta.failed {
-                        meta = self.buffer.cvar.wait(meta).unwrap_or_warn();
+                    while !guard.finished && !guard.failed {
+                        guard = self.buffer.cvar.wait(guard).unwrap_or_warn();
                     }
-                    self.buffer.available_len() as i64 + offset
+                    available_len(&guard.state) as i64 + offset
                 }
             }
         };
-        let data_len = self.buffer.available_len() as u64;
-        let upper = meta
+        let data_len = available_len(&guard.state) as u64;
+        let upper = guard
             .total_len
-            .filter(|_| !meta.finished)
+            .filter(|_| !guard.finished)
             .unwrap_or(data_len) as usize;
         self.pos = (new_pos.max(0) as usize).min(upper);
         Ok(self.pos as u64)
@@ -462,7 +458,7 @@ mod tests {
 
     #[test]
     fn reader_never_sees_empty_vec_after_concurrent_finalize() {
-        // Stress test: finalize is racing with reader.  The single-RwLock
+        // Stress test: finalize is racing with reader.  The single-Mutex
         // approach should make it impossible for the reader to observe the
         // empty-Vec intermediate state.
         let buf = Arc::new(SharedBuffer::new());
