@@ -6,6 +6,14 @@
 
 ## Completed
 
+### Session 2026-07-31 — Dep pruning, module splits, Phase 8 close
+
+- **Dep feature pruning** — ratatui `all-widgets` dropped; tokio `full` → explicit features; ytmapi-rs `default-features = false` + `simplified-queries`; rodio `symphonia-all` → `{wav, pcm, isomp4, aac}`. Cargo.lock −80 lines; redundant decoder crates (claxon, minimp3, lewton, hound, rtrb, rand_distr) gone. TLS: rustls-only (native-tls/openssl absent from resolved graph, no system ssl linkage).
+- **Test fixture swap** — rodio lost `symphonia-mp3`, so `TEST_MP3` → `TEST_WAV` (`ytmapi-rs/test_json/test_silence.wav`, 1 MB, 12s 44100Hz mono); ffmpeg relay test now `-f wav`. Cache-test race fixed with `CACHE_TEST_LOCK` (serializes 3 shared-`BYTE_CACHE` tests).
+- **Module splits** — `song_downloader.rs` → `song_downloader/{mod, cache, resolve}.rs`; `playlist.rs` → `playlist/{mod, draw, playback}.rs`; `parse/search.rs` → `parse/search/{mod, types}.rs`.
+- **Seek removal** — dead `SeekForward/SeekBack`, `try_seek`, `SeekDirection`, MPRIS seek handlers stripped.
+- **Phase 8 — symphonia 0.6.0 investigated → ❌ rejected** — rodio 0.22.2 (latest) pins symphonia 0.5.5; a direct 0.6 bump creates a dual-symphonia tree duplicating the codec stack. 0.6's additions (video/subtitle groundwork, metadata, SIMD) irrelevant to a WAV/AAC-only player. See AGENTS.md + DECISIONS.md:21. All phases now ✅.
+
 ### P1 — Should Have (UX / Configurability)
 
 - **P1.1** — Configurable download cache size (`download_cache_size` in config.toml, `AtomicUsize`).

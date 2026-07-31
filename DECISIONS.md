@@ -28,7 +28,7 @@ Critical invariants and rationale. **Read before changing playback/download code
 
 10. **WebM/Opus → ffmpeg pipe to WAV.** Default path: `bestaudio[ext=webm]` piped through ffmpeg to raw PCM in RIFF/WAV container. No MP3 compression step saves ~300ms per song.
 
-11. **M4A/AAC works but cannot stream.** isomp4 format reader + aac codec enabled via rodio's `symphonia-all`. `byte_len` MUST be actual total file size because isomp4 seeks to end for moov atom. Full download-then-decode only.
+11. **M4A/AAC works but cannot stream.** isomp4 format reader + aac codec enabled via rodio's `symphonia-isomp4`/`symphonia-aac`. `byte_len` MUST be actual total file size because isomp4 seeks to end for moov atom. Full download-then-decode only.
 
 12. **WAV streams from partial buffer.** RIFF/WAV header (~78 bytes) is at the start, so symphonia's WAV reader can probe and init from the first few KB. `byte_len` can be `None` for WAV.
 
@@ -55,3 +55,5 @@ Critical invariants and rationale. **Read before changing playback/download code
 19. **`play_song_advances_download_status`** test verifies that `play_song` creates an active download entry. Would catch any regression where `download_song` bails without starting a download.
 
 20. **Defensive WARN in `download_song`.** If a song's status is `Queued` but no active download exists, logs a warning and falls through instead of silently returning no-op.
+
+21. **Stay on symphonia 0.5 until rodio supports 0.6.** symphonia 0.6.0 (2026-05-15) is a full rewrite; rodio 0.22.2 (latest) pins symphonia 0.5.5. A direct symphonia 0.6 bump would create a dual-version tree (0.6 direct + 0.5.5 via rodio), duplicating the entire codec stack in the binary. 0.6's additions (video/subtitle groundwork, metadata formats, SIMD) are irrelevant to a WAV/AAC-only streaming player. (Phase 8 closed 2026-07-31)
