@@ -19,39 +19,40 @@ default = []
 profile-render = []
 
 [dependencies]
-clap = { version = "4.6.1", features = ["derive"] }
+clap = { version = "4.6.4", features = ["derive"] }
 clap_complete = "4.6.3"
 crossterm = { version = "0.29.0", features = ["event-stream", "serde"] }
-futures = "0.3.32"
+futures = "0.3.33"
 
 rat-text = "3.1.0"
-ratatui = { version = "0.30.0", features = ["all-widgets"] }
+ratatui = "0.30.2"
 
-serde = { version = "1.0.228", features = ["rc"] }
-serde_json = "1.0.149"
-ytmapi-rs = { path = "../ytmapi-rs", version = "0.3.2", features = [ "reqwest", "rustls" ] }
+serde = { version = "1.0.229", features = ["rc"] }
+serde_json = "1.0.151"
+ytmapi-rs = { path = "../ytmapi-rs", version = "0.3.2", default-features = false, features = ["reqwest", "rustls", "simplified-queries"] }
 reqwest = { version = "0.13", default-features = false, features = [] }
-tokio = { version = "1.52.1", features = ["full"] }
+tokio = { version = "1.53.1", features = ["macros", "rt-multi-thread", "fs", "io-util", "process", "signal", "sync", "time"] }
 tracing = "0.1.44"
 tracing-subscriber = "0.3.23"
 directories = "6.0.0"
-toml = "1.1.2"
+toml = "1.1.3"
 itertools = "0.14.0"
-tokio-stream = { version = "0.1.18", features = ["fs"] }
+tokio-stream = { version = "0.1.19", features = ["fs"] }
 async_cell = "0.2.3"
-anyhow = "1.0.102"
+anyhow = "1.0.104"
 souvlaki = { version = "0.8.3", default-features = false, features = [
     "use_zbus",
   ] }
-notify-rust = "4.11.7"
-rand = "0.9"
-fs-err = { version = "3.3.0", features=["tokio"] }
-tokio-util = { version = "0.7.18", features = ["io"] }
+notify-rust = "4.18.0"
+rand = "0.10"
+fs-err = { version = "3.3.1", features=["tokio"] }
+tokio-util = { version = "0.7.19", features = ["io"] }
 
 # Audio playback library (rodio with symphonia-all codecs)
 [dependencies.rodio]
 version = "0.22.2"
-features = ["symphonia-all", "tracing"]
+default-features = false
+features = ["playback", "tracing", "symphonia-wav", "symphonia-pcm", "symphonia-isomp4", "symphonia-aac"]
 
 
 # Direct Symphonia usage (not through rodio, avoiding SeekError panic)
@@ -71,7 +72,7 @@ winit = "0.30.13"
 [dev-dependencies]
 pretty_assertions = "1.4.1"
 tempfile = "3.27.0"
-criterion = "0.5"
+criterion = "0.8"
 
 [lints]
 workspace = true
