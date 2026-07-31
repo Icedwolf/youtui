@@ -10,8 +10,6 @@ notifications_enabled = true
 "-" = "vol_down"
 ">" = "next_song"
 "<" = "prev_song"
-"]" = "seek_forward"
-"[" = "seek_back"
 "?" = {action = "toggle_help", visibility = "global"}
 q = {action = "quit", visibility = "global"}
 C-c = "quit"
@@ -25,8 +23,6 @@ s = {action = "playlist.toggle_shuffle", visibility = "global"}
 r = {action = "playlist.resolve_audio_tracks", visibility = "global"}
 "/" = {action = "playlist.toggle_search", visibility = "global"}
 esc = {action = "playlist.toggle_search", visibility = "hidden"}
-h = {action = "seek_back", visibility = "hidden"}
-l = {action = "seek_forward", visibility = "hidden"}
 d = {action = "playlist.delete_selected", visibility = "global"}
 enter.enter = "playlist.play_selected"
 enter.d = "playlist.delete_selected"

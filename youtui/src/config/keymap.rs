@@ -442,14 +442,6 @@ fn default_global_keybinds() -> BTreeMap<Keybind, KeyActionTree<AppAction>> {
             KeyActionTree::new_key(AppAction::PrevSong),
         ),
         (
-            Keybind::new_unmodified(crossterm::event::KeyCode::Char(']')),
-            KeyActionTree::new_key(AppAction::SeekForward),
-        ),
-        (
-            Keybind::new_unmodified(crossterm::event::KeyCode::Char('[')),
-            KeyActionTree::new_key(AppAction::SeekBack),
-        ),
-        (
             Keybind::new_unmodified(crossterm::event::KeyCode::Char('?')),
             KeyActionTree::new_key_with_visibility(
                 AppAction::ToggleHelp,
@@ -501,20 +493,6 @@ fn default_playlist_keybinds() -> BTreeMap<Keybind, KeyActionTree<AppAction>> {
             KeyActionTree::new_key_with_visibility(
                 AppAction::Playlist(PlaylistAction::ResolveAudioTracks),
                 KeyActionVisibility::Global,
-            ),
-        ),
-        (
-            Keybind::new_unmodified(crossterm::event::KeyCode::Char('h')),
-            KeyActionTree::new_key_with_visibility(
-                AppAction::SeekBack,
-                KeyActionVisibility::Hidden,
-            ),
-        ),
-        (
-            Keybind::new_unmodified(crossterm::event::KeyCode::Char('l')),
-            KeyActionTree::new_key_with_visibility(
-                AppAction::SeekForward,
-                KeyActionVisibility::Hidden,
             ),
         ),
         (

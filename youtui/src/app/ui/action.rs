@@ -12,10 +12,8 @@ use crate::app::ui::browser::playlistsearch::songs_panel::BrowserPlaylistSongsAc
 use anyhow::bail;
 use serde::de::{self};
 use serde::{Deserialize, Serialize};
-use std::time::Duration;
 
 pub const VOL_TICK: i8 = 5;
-pub const SEEK_AMOUNT: Duration = Duration::from_secs(5);
 pub const PAGE_KEY_LINES: isize = 10;
 
 #[derive(Clone, Copy, PartialEq, Default, Debug, Serialize, Deserialize)]
@@ -27,8 +25,6 @@ pub enum AppAction {
     VolDown,
     NextSong,
     PrevSong,
-    SeekForward,
-    SeekBack,
     ToggleHelp,
     PlayPause,
     NoOp,
@@ -111,8 +107,6 @@ impl Action for AppAction {
             | AppAction::VolDown
             | AppAction::NextSong
             | AppAction::PrevSong
-            | AppAction::SeekForward
-            | AppAction::SeekBack
             | AppAction::ToggleHelp
             | AppAction::Quit
             | AppAction::NoOp
@@ -141,8 +135,6 @@ impl Action for AppAction {
             AppAction::VolUp => format!("Vol Up {VOL_TICK}").into(),
             AppAction::VolDown => format!("Vol Down {VOL_TICK}").into(),
             AppAction::ToggleHelp => "Toggle Help".into(),
-            AppAction::SeekForward => format!("Seek Forward {}s", SEEK_AMOUNT.as_secs()).into(),
-            AppAction::SeekBack => format!("Seek Back {}s", SEEK_AMOUNT.as_secs()).into(),
             AppAction::NoOp => "No Operation".into(),
             AppAction::Playlist(a) => a.describe(),
             AppAction::Browser(a) => a.describe(),

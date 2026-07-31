@@ -6,7 +6,7 @@ use std::num::NonZero;
 use symphonia::core::audio::{Layout, SampleBuffer, SignalSpec};
 use symphonia::core::codecs::{CODEC_TYPE_NULL, CodecRegistry, Decoder, DecoderOptions};
 use symphonia::core::errors::Error;
-use symphonia::core::formats::{FormatOptions, FormatReader, SeekMode, SeekTo, Track};
+use symphonia::core::formats::{FormatOptions, FormatReader, Track};
 use symphonia::core::io::MediaSourceStream;
 use symphonia::core::meta::MetadataOptions;
 use symphonia::core::probe::Hint;
@@ -119,24 +119,6 @@ impl SymphoniaDecoder {
         })
     }
 
-    pub fn try_seek_to(&mut self, pos: Duration) -> Result<(), SymphoniaError> {
-        let time = Time::new(pos.as_secs(), pos.subsec_nanos() as f64 / 1_000_000_000.0);
-        match self.probed.0.seek(
-            SeekMode::Coarse,
-            SeekTo::Time {
-                time,
-                track_id: Some(self.track_id),
-            },
-        ) {
-            Ok(_) => {
-                self.current_frame_offset = 0;
-                self.buffer.clear();
-                self.eos = false;
-                Ok(())
-            }
-            Err(_) => Err(SymphoniaError::SeekFailed),
-        }
-    }
 }
 
 impl Iterator for SymphoniaDecoder {
@@ -220,13 +202,6 @@ impl Source for SymphoniaDecoder {
     fn total_duration(&self) -> Option<Duration> {
         self.duration
     }
-
-    fn try_seek(&mut self, pos: Duration) -> Result<(), rodio::source::SeekError> {
-        self.try_seek_to(pos)
-            .map_err(|_| rodio::source::SeekError::NotSupported {
-                underlying_source: "",
-            })
-    }
 }
 
 #[derive(Debug)]
@@ -237,7 +212,6 @@ pub enum SymphoniaError {
     LimitError(&'static str),
     ResetRequired,
     NoStreams,
-    SeekFailed,
 }
 
 impl std::fmt::Display for SymphoniaError {
@@ -248,7 +222,6 @@ impl std::fmt::Display for SymphoniaError {
             Self::DecodeError(msg) | Self::LimitError(msg) => write!(f, "{msg}"),
             Self::ResetRequired => write!(f, "Reset required"),
             Self::NoStreams => write!(f, "No audio streams found"),
-            Self::SeekFailed => write!(f, "Seek failed"),
         }
     }
 }
@@ -260,7 +233,7 @@ impl From<symphonia::core::errors::Error> for SymphoniaError {
         match value {
             Error::IoError(e) => Self::IoError(e.to_string()),
             Error::DecodeError(e) => Self::DecodeError(e),
-            Error::SeekError(_) => Self::SeekFailed,
+            Error::SeekError(_) => Self::DecodeError("seek error during decode"),
             Error::Unsupported(_) => Self::UnrecognizedFormat,
             Error::LimitError(e) => Self::LimitError(e),
             Error::ResetRequired => Self::ResetRequired,
@@ -297,7 +270,6 @@ mod tests {
         let cases: Vec<(SymphoniaError, &str)> = vec![
             (SymphoniaError::UnrecognizedFormat, "Unrecognized format"),
             (SymphoniaError::NoStreams, "No audio streams found"),
-            (SymphoniaError::SeekFailed, "Seek failed"),
             (SymphoniaError::DecodeError("bad"), "bad"),
             (SymphoniaError::IoError("eof".into()), "eof"),
         ];

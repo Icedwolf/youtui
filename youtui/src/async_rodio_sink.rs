@@ -86,12 +86,6 @@ impl<I: Debug + PartialEq + Copy> PlaybackState<I> {
 
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum SeekDirection {
-    Forward,
-    Back,
-}
-
 enum AsyncRodioRequest<I> {
     PlaySong(
         Box<dyn Source<Item = f32> + Send + 'static>,
@@ -330,13 +324,6 @@ impl Source for ProgressSource {
     fn total_duration(&self) -> Option<Duration> {
         self.inner.total_duration()
     }
-    fn try_seek(&mut self, pos: Duration) -> Result<(), rodio::source::SeekError> {
-        let res = self.inner.try_seek(pos);
-        if res.is_ok() {
-            self.samples = (pos.as_secs_f64() * self.samples_per_sec) as u64;
-        }
-        res
-    }
 }
 
 pub async fn send_or_error<T, S: Borrow<mpsc::Sender<T>>>(tx: S, msg: T) {
@@ -354,7 +341,6 @@ pub async fn std_send_or_error<T>(tx: &std::sync::mpsc::Sender<T>, msg: T) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::Duration;
 
     #[test]
     fn percentage_into_u8() {

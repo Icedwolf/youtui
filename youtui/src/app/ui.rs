@@ -9,16 +9,14 @@ use super::structures::{ListSong, Percentage};
 use crate::app::effect::Effects;
 use crate::app::ui::footer::FooterCache;
 use crate::app::server::ArcServer;
-use crate::async_rodio_sink::SeekDirection;
 use std::sync::Arc;
 use crate::config::Config;
 use crate::config::keymap::Keymap;
 use crate::keyaction::{DisplayableKeyAction, DisplayableMode, flatten_keybinds_as_readable};
 use crate::widgets::ScrollingTableState;
-use action::{AppAction, ListAction, PAGE_KEY_LINES, SEEK_AMOUNT, TextEntryAction};
+use action::{AppAction, ListAction, PAGE_KEY_LINES, TextEntryAction};
 use crossterm::event::{Event, KeyEvent};
 use itertools::Either;
-use std::time::Duration;
 
 pub mod action;
 pub mod browser;
@@ -219,12 +217,6 @@ impl ActionHandler<AppAction> for YoutuiWindow {
             AppAction::VolDown => return self.handle_increase_volume(-5).into(),
             AppAction::NextSong => return self.handle_next().into(),
             AppAction::PrevSong => return self.handle_prev().into(),
-            AppAction::SeekForward => {
-                return self.handle_seek(SEEK_AMOUNT, SeekDirection::Forward).into();
-            }
-            AppAction::SeekBack => {
-                return self.handle_seek(SEEK_AMOUNT, SeekDirection::Back).into();
-            }
             AppAction::ToggleHelp => self.toggle_help(),
             AppAction::Quit => return (Effects::none(), Some(AppCallback::Quit)).into(),
             AppAction::PlayPause => return self.pauseplay().into(),
@@ -324,12 +316,6 @@ impl YoutuiWindow {
         &mut self,
         event: souvlaki::MediaControlEvent,
     ) -> YoutuiEffect<Self> {
-        // This conversion function is written here as this is expected to be the only
-        // location it is used.
-        let convert_dir = |dir| match dir {
-            souvlaki::SeekDirection::Forward => SeekDirection::Forward,
-            souvlaki::SeekDirection::Backward => SeekDirection::Back,
-        };
         match event {
             souvlaki::MediaControlEvent::Play => return self.resume().into(),
             souvlaki::MediaControlEvent::Pause => return self.pause().into(),
@@ -337,29 +323,13 @@ impl YoutuiWindow {
             souvlaki::MediaControlEvent::Next => return self.handle_next().into(),
             souvlaki::MediaControlEvent::Previous => return self.handle_prev().into(),
             souvlaki::MediaControlEvent::Stop => return self.stop().into(),
-            souvlaki::MediaControlEvent::Seek(seek_direction) => {
-                return self
-                    .handle_seek(SEEK_AMOUNT, convert_dir(seek_direction))
-                    .into();
-            }
-            souvlaki::MediaControlEvent::SeekBy(seek_direction, duration) => {
-                return self
-                    .handle_seek(duration, convert_dir(seek_direction))
-                    .into();
-            }
-            souvlaki::MediaControlEvent::SetPosition(media_position) => {
-                return self.handle_seek_to(media_position.0).into();
-            }
             souvlaki::MediaControlEvent::SetVolume(v) => {
                 return self.handle_set_volume((v * 100.0) as u8).into();
             }
             souvlaki::MediaControlEvent::Quit => {
                 return (Effects::none(), Some(AppCallback::Quit)).into();
             }
-            souvlaki::MediaControlEvent::OpenUri(_) => {
-                tracing::debug!("Received intentionally unhandled event {:?}", event)
-            }
-            souvlaki::MediaControlEvent::Raise => {
+            _ => {
                 tracing::debug!("Received intentionally unhandled event {:?}", event)
             }
         }
@@ -490,20 +460,6 @@ impl YoutuiWindow {
         let e = self.playlist.reset();
         let (id, next_effect) = self.playlist.push_song_list(song_list);
         e.push(next_effect).push(self.playlist.play_song(id))
-    }
-    pub fn handle_seek(
-        &mut self,
-        duration: Duration,
-        direction: SeekDirection,
-    ) -> Effects<Self> {
-        self.playlist
-            .handle_seek(duration, direction)
-            .map(|this: &mut Self| &mut this.playlist)
-    }
-    pub fn handle_seek_to(&mut self, position: Duration) -> Effects<Self> {
-        self.playlist
-            .handle_seek_to(position)
-            .map(|this: &mut Self| &mut this.playlist)
     }
     pub fn handle_add_songs_to_playlist(
         &mut self,
