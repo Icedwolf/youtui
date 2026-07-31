@@ -1,18 +1,9 @@
 use super::{
     DISPLAY_POLICY, ParseFrom, ProcessedResult, flex_column_item_pointer, parse_flex_column_item,
 };
-use crate::common::{
-    AlbumID, AlbumType, ArtistChannelID, ContinuationParams, EpisodeID, Explicit, PlaylistID,
-    PodcastID, SearchSuggestion, SuggestionType, TextRun, Thumbnail, UserChannelID, VideoID,
-};
+use crate::common::{ContinuationParams, Explicit, SearchSuggestion, SuggestionType, TextRun, Thumbnail};
 use crate::continuations::ParseFromContinuable;
-use crate::nav_consts::{
-    BADGE_LABEL, CONTINUATION_PARAMS, MRLIR, MUSIC_CARD_SHELF, MUSIC_SHELF,
-    MUSIC_SHELF_CONTINUATION, NAVIGATION_BROWSE, NAVIGATION_BROWSE_ID, NAVIGATION_VIDEO_TYPE,
-    PAGE_TYPE, PLAY_BUTTON, PLAYLIST_ITEM_VIDEO_ID, SECTION_LIST, SUBTITLE, SUBTITLE2, TAB_CONTENT,
-    THUMBNAILS, TITLE_TEXT,
-};
-use crate::parse::{EpisodeDate, ParsedSongAlbum};
+use crate::nav_consts::*;
 use crate::query::search::UnfilteredSearchType;
 use crate::query::search::filteredsearch::{
     AlbumsFilter, ArtistsFilter, CommunityPlaylistsFilter, EpisodesFilter, FeaturedPlaylistsFilter,
@@ -20,241 +11,20 @@ use crate::query::search::filteredsearch::{
     SongsFilter, VideosFilter,
 };
 use crate::query::*;
+use crate::parse::{EpisodeDate, ParsedSongAlbum};
 use crate::youtube_enums::{PlaylistEndpointParams, YoutubeMusicPageType, YoutubeMusicVideoType};
 use crate::{Error, Result};
 use const_format::concatcp;
 use itertools::Itertools;
 use json_crawler::{JsonCrawler, JsonCrawlerBorrowed, JsonCrawlerIterator, JsonCrawlerOwned};
 use serde::de::IntoDeserializer;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
+
+mod types;
+pub use types::*;
 
 #[cfg(test)]
 mod tests;
-
-#[derive(Debug, Default, Clone, PartialEq, Serialize, Deserialize)]
-#[non_exhaustive]
-pub struct SearchResults {
-    pub top_results: Vec<TopResult>,
-    pub artists: Vec<SearchResultArtist>,
-    pub albums: Vec<SearchResultAlbum>,
-    pub featured_playlists: Vec<SearchResultFeaturedPlaylist>,
-    pub community_playlists: Vec<BasicSearchResultCommunityPlaylist>,
-    pub songs: Vec<SearchResultSong>,
-    pub videos: Vec<SearchResultVideo>,
-    pub podcasts: Vec<SearchResultPodcast>,
-    pub episodes: Vec<SearchResultEpisode>,
-    pub profiles: Vec<SearchResultProfile>,
-}
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-/// Each Top Result has it's own type.
-pub enum TopResultType {
-    Artist,
-    Playlist,
-    Song,
-    Video,
-    Station,
-    Podcast,
-    #[serde(untagged)]
-    Album(AlbumType),
-}
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-// Helper enum for parsing different search result types.
-enum SearchResultType {
-    #[serde(alias = "Top result")]
-    TopResult,
-    Artists,
-    Albums,
-    #[serde(alias = "Featured playlists")]
-    FeaturedPlaylists,
-    #[serde(alias = "Community playlists")]
-    CommunityPlaylists,
-    Songs,
-    Videos,
-    Podcasts,
-    Episodes,
-    Profiles,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[non_exhaustive]
-/// Dynamically defined top result.
-/// Some fields are optional as they are not defined for all result types.
-// In future, may be possible to make this type safe.
-// TODO: Add endpoint id.
-pub struct TopResult {
-    pub result_name: String,
-    /// Both Videos and Songs can have this left out.
-    pub result_type: Option<TopResultType>,
-    pub thumbnails: Vec<Thumbnail>,
-    pub artist: Option<String>,
-    pub album: Option<String>,
-    pub duration: Option<String>,
-    pub year: Option<String>,
-    pub subscribers: Option<String>,
-    pub plays: Option<String>,
-    /// Podcast publisher.
-    pub publisher: Option<String>,
-    /// Generic tagline that can appear on top results
-    pub byline: Option<String>,
-}
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[non_exhaustive]
-/// An artist search result.
-pub struct SearchResultArtist {
-    pub artist: String,
-    /// An artist with no subscribers won't contain this field.
-    pub subscribers: Option<String>,
-    pub browse_id: ArtistChannelID<'static>,
-    pub thumbnails: Vec<Thumbnail>,
-}
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[non_exhaustive]
-/// A podcast search result.
-pub struct SearchResultPodcast {
-    pub title: String,
-    pub publisher: String,
-    pub podcast_id: PodcastID<'static>,
-    pub thumbnails: Vec<Thumbnail>,
-}
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[non_exhaustive]
-/// A podcast episode search result.
-pub struct SearchResultEpisode {
-    pub title: String,
-    pub date: EpisodeDate,
-    pub channel_name: String,
-    pub episode_id: EpisodeID<'static>,
-    // Potentially can include link to channel.
-    pub thumbnails: Vec<Thumbnail>,
-}
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-/// A video search result. May be a video or a video episode of a podcast.
-pub enum SearchResultVideo {
-    #[non_exhaustive]
-    Video {
-        title: String,
-        /// Note: Either Youtube channel name, or artist name.
-        // Potentially can include link to channel.
-        channel_name: String,
-        video_id: VideoID<'static>,
-        views: String,
-        length: String,
-        thumbnails: Vec<Thumbnail>,
-    },
-    #[non_exhaustive]
-    VideoEpisode {
-        // Potentially asame as SearchResultEpisode
-        title: String,
-        date: EpisodeDate,
-        channel_name: String,
-        episode_id: EpisodeID<'static>,
-        // Potentially can include link to channel.
-        thumbnails: Vec<Thumbnail>,
-    },
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[non_exhaustive]
-/// A profile search result.
-pub struct SearchResultProfile {
-    pub title: String,
-    pub username: String,
-    pub profile_id: UserChannelID<'static>,
-    pub thumbnails: Vec<Thumbnail>,
-}
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[non_exhaustive]
-/// An album search result.
-pub struct SearchResultAlbum {
-    pub title: String,
-    pub artist: String,
-    pub year: String,
-    pub explicit: Explicit,
-    pub album_id: AlbumID<'static>,
-    pub album_type: AlbumType,
-    pub thumbnails: Vec<Thumbnail>,
-}
-#[derive(Clone, PartialEq, Serialize, Deserialize)]
-#[non_exhaustive]
-pub struct SearchResultSong {
-    // Potentially can include links to artist and album.
-    pub title: String,
-    pub artist: String,
-    // Album field can be optional - see https://github.com/nick42d/youtui/issues/174
-    pub album: Option<ParsedSongAlbum>,
-    pub duration: String,
-    pub plays: String,
-    pub explicit: Explicit,
-    pub video_id: VideoID<'static>,
-    pub thumbnails: Vec<Thumbnail>,
-    music_video_type: Option<YoutubeMusicVideoType>,
-}
-
-impl std::fmt::Debug for SearchResultSong {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut s = f.debug_struct("SearchResultSong");
-        s.field("title", &self.title);
-        s.field("artist", &self.artist);
-        s.field("album", &self.album);
-        s.field("duration", &self.duration);
-        s.field("plays", &self.plays);
-        s.field("explicit", &self.explicit);
-        s.field("video_id", &self.video_id);
-        s.field("thumbnails", &self.thumbnails);
-        s.field("music_video_type", &self.music_video_type);
-        s.finish()
-    }
-}
-
-impl SearchResultSong {
-    /// Returns `true` when the YouTube Music API classifies this item as an
-    /// audio-only track (`Atv`) rather than a music video (`Omv`, `Ugc`, etc.).
-    /// Prefer `Atv` items when multiple results match the same song.
-    pub fn is_audio_track(&self) -> bool {
-        self.music_video_type == Some(YoutubeMusicVideoType::Atv)
-    }
-    pub fn music_video_type(&self) -> Option<&YoutubeMusicVideoType> {
-        self.music_video_type.as_ref()
-    }
-}
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[non_exhaustive]
-// A playlist search result may be a featured or community playlist or even a
-// podcast.
-pub enum SearchResultPlaylist {
-    Featured(SearchResultFeaturedPlaylist),
-    Community(SearchResultCommunityPlaylist),
-    Podcast(SearchResultPodcast),
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[non_exhaustive]
-// When doing a basic search, community playlists might actually be podcasts.
-pub enum BasicSearchResultCommunityPlaylist {
-    Podcast(SearchResultPodcast),
-    Playlist(SearchResultCommunityPlaylist),
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[non_exhaustive]
-/// A community playlist search result.
-pub struct SearchResultCommunityPlaylist {
-    pub title: String,
-    pub author: String,
-    pub views: String,
-    pub playlist_id: PlaylistID<'static>,
-    pub thumbnails: Vec<Thumbnail>,
-}
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[non_exhaustive]
-/// A featured playlist search result.
-pub struct SearchResultFeaturedPlaylist {
-    pub title: String,
-    pub author: String,
-    pub songs: String,
-    pub playlist_id: PlaylistID<'static>,
-    pub thumbnails: Vec<Thumbnail>,
-}
 
 // TODO: Type safety
 fn parse_basic_search_result_from_section_list_contents(
@@ -299,8 +69,8 @@ fn parse_basic_search_result_from_section_list_contents(
                 artists = category
                     .navigate_pointer("/contents")?
                     .try_iter_mut()?
-                    .map(|r| parse_artist_search_result_from_music_shelf_contents(r))
-                    .collect::<Result<Vec<SearchResultArtist>>>()?;
+                    .filter_map(|r| parse_artist_search_result_from_music_shelf_contents(r).ok())
+                    .collect();
             }
             SearchResultType::Albums => {
                 albums = category
@@ -328,7 +98,8 @@ fn parse_basic_search_result_from_section_list_contents(
             | SearchResultType::Videos
             | SearchResultType::Podcasts
             | SearchResultType::Episodes
-            | SearchResultType::Profiles => {}
+            | SearchResultType::Profiles
+            | SearchResultType::Unknown => {}
         }
     }
     Ok(SearchResults {
@@ -850,10 +621,10 @@ struct BasicSearchSectionListContents(JsonCrawlerOwned);
 // See tests for an example.
 // TODO: Test this function itself.
 fn section_contents_is_empty(section_contents: &mut FilteredSearchSectionContents) -> Result<bool> {
-    Ok(section_contents
+    Ok(!section_contents
         .0
         .try_iter_mut()?
-        .any(|item| item.path_exists("/itemSectionRenderer/contents/0/didYouMeanRenderer")))
+        .any(|item| item.path_exists(MUSIC_SHELF)))
 }
 
 fn take_continuation_params_from_section_contents(
@@ -882,18 +653,13 @@ fn get_filtered_search_continuation_music_shelf_contents_and_params(
         continuation_params,
     ))
 }
-// TODO: Consolidate these two functions into single function.
-// TODO: This could be implemented with a non-mutable array also.
 fn section_list_contents_is_empty(
     section_contents: &mut BasicSearchSectionListContents,
 ) -> Result<bool> {
-    let is_empty = section_contents
+    Ok(!section_contents
         .0
         .try_iter_mut()?
-        .filter(|item| item.path_exists(MUSIC_CARD_SHELF) || item.path_exists(MUSIC_SHELF))
-        .count()
-        == 0;
-    Ok(is_empty)
+        .any(|item| item.path_exists(MUSIC_CARD_SHELF) || item.path_exists(MUSIC_SHELF)))
 }
 impl<'a, S: UnfilteredSearchType> TryFrom<ProcessedResult<'a, SearchQuery<'a, S>>>
     for BasicSearchSectionListContents
