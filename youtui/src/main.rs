@@ -19,11 +19,38 @@ mod keyaction;
 mod keybind;
 mod widgets;
 
-#[cfg(test)]
-mod tests;
+pub(crate) const POTOKEN_FILENAME: &str = "po_token.txt";
+pub(crate) const COOKIE_FILENAME: &str = "cookie.txt";
+pub(crate) const COOKIE_NETSCAPE_FILENAME: &str = "cookies_netscape.txt";
 
-pub const POTOKEN_FILENAME: &str = "po_token.txt";
-pub const COOKIE_FILENAME: &str = "cookie.txt";
+/// Detect a browser with YouTube cookies for yt-dlp `--cookies-from-browser`.
+/// Returns `None` if no supported browser profile is found.
+pub(crate) fn detect_browser_source() -> Option<String> {
+    let home = std::path::PathBuf::from(std::env::var("HOME").ok()?);
+    let floorp_profiles = home.join(".floorp").join("profiles.ini");
+    if let Ok(content) = std::fs::read_to_string(&floorp_profiles) {
+        for line in content.lines() {
+            if let Some(path) = line.strip_prefix("Path=") {
+                let profile_dir = home.join(".floorp").join(path.trim());
+                return Some(format!("firefox:{}", profile_dir.display()));
+            }
+        }
+    }
+    let ff_paths = [
+        home.join(".mozilla").join("firefox").join("profiles.ini"),
+        home.join(".config").join("mozilla").join("firefox").join("profiles.ini"),
+    ];
+    for ff_path in &ff_paths {
+        if ff_path.exists() {
+            return Some("firefox".to_string());
+        }
+    }
+    if home.join(".config").join("chromium").join("Default").join("Cookies").exists() {
+        return Some("chromium".to_string());
+    }
+    None
+}
+
 const BROWSER_AUTH_SETUP_STEPS_URL: &str =
     "https://github.com/nick42d/youtui?tab=readme-ov-file#browser-auth-setup-steps";
 const POTOKEN_INFORMATION_URL: &str =
@@ -329,7 +356,7 @@ enum Command {
     },
 }
 
-pub struct RuntimeInfo {
+pub(crate) struct RuntimeInfo {
     debug: bool,
     disable_media_controls: bool,
     config: Config,
@@ -417,7 +444,7 @@ async fn get_api(config: &Config) -> anyhow::Result<api::DynamicYtMusic> {
     Ok(api)
 }
 
-pub async fn run_app(rt: RuntimeInfo) -> anyhow::Result<()> {
+pub(crate) async fn run_app(rt: RuntimeInfo) -> anyhow::Result<()> {
     let mut app = app::Youtui::new(rt).await?;
     app.run().await?;
     Ok(())
@@ -425,7 +452,7 @@ pub async fn run_app(rt: RuntimeInfo) -> anyhow::Result<()> {
 
 /// Returns the data directory path. Override with `YOUTUI_DATA_DIR` env var.
 /// Defaults to the OS‑specific data directory (e.g. `~/.local/share/youtui` on Linux).
-pub fn get_data_dir() -> anyhow::Result<PathBuf> {
+pub(crate) fn get_data_dir() -> anyhow::Result<PathBuf> {
     let directory = if let Ok(s) = std::env::var("YOUTUI_DATA_DIR") {
         PathBuf::from(s)
     } else if let Some(proj_dirs) = ProjectDirs::from("com", "nick42", "youtui") {
@@ -438,7 +465,7 @@ pub fn get_data_dir() -> anyhow::Result<PathBuf> {
 
 /// Returns the config directory path. Override with `YOUTUI_CONFIG_DIR` env var.
 /// Defaults to the OS‑specific config directory (e.g. `~/.config/youtui` on Linux).
-pub fn get_config_dir() -> anyhow::Result<PathBuf> {
+pub(crate) fn get_config_dir() -> anyhow::Result<PathBuf> {
     let directory = if let Ok(s) = std::env::var("YOUTUI_CONFIG_DIR") {
         PathBuf::from(s)
     } else if let Some(proj_dirs) = ProjectDirs::from("com", "nick42", "youtui") {

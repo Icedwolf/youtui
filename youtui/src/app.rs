@@ -1,7 +1,8 @@
 use super::appevent::{AppEvent, EventHandler};
 use crate::config::ApiKey;
 use crate::core::get_limited_sequential_file;
-use crate::{RuntimeInfo, get_data_dir};
+use crate::{RuntimeInfo, get_data_dir, detect_browser_source};
+use crate::{COOKIE_NETSCAPE_FILENAME, get_config_dir};
 use anyhow::{Context, Result, bail};
 use component::actionhandler::YoutuiEffect;
 use crossterm::event::{DisableMouseCapture, EnableMouseCapture};
@@ -121,14 +122,48 @@ impl Youtui {
                 );
             }
         }));
+        let js_runtime = if std::process::Command::new("node").arg("--version").stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).status().is_ok() {
+            Some("node".to_string())
+        } else {
+            None
+        };
+        let (cookie_path, did_export) = if let Some(browser) = detect_browser_source() {
+            let mut cp = get_config_dir()?;
+            cp.push(COOKIE_NETSCAPE_FILENAME);
+            let exported = if !cp.exists() {
+                debug!(browser = %browser, path = %cp.display(), "Exporting cookies from browser");
+                let export_ok = std::process::Command::new("yt-dlp")
+                    .args(["--cookies-from-browser", &browser, "--cookies"])
+                    .arg(&cp)
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
+                    .status()
+                    .is_ok();
+                if export_ok {
+                    info!("Exported cookies to {}", cp.display());
+                } else {
+                    warn!("Failed to export cookies from {browser}");
+                }
+                export_ok
+            } else {
+                false
+            };
+            (Some(cp), exported)
+        } else {
+            (None, false)
+        };
+
         // Setup components
         let task_manager = effect::TaskManager::<YoutuiWindow>::new();
         let t_server = std::time::Instant::now();
-        let server = Arc::new(server::Server::new(api_key, po_token, &config)?);
+        let server = Arc::new(server::Server::new(api_key, po_token, &config, cookie_path, js_runtime)?);
         debug!(
             "startup_timing: Server::new() = {}ms",
             t_server.elapsed().as_millis()
         );
+        if did_export {
+            debug!("startup_timing: cookie export included");
+        }
         let backend = CrosstermBackend::new(stdout);
         let terminal = Terminal::new(backend)?;
         let (media_controls, media_control_event_stream) = if disable_media_controls {
@@ -176,8 +211,11 @@ impl Youtui {
             let vid = first_song.video_id.get_raw().to_string();
             let yt_cmd = server.config.yt_dlp_command.clone();
             let pt = server.po_token.clone();
+            let cp = server.cookie_path.clone();
+            let jr = server.js_runtime.clone();
+            let ch = server.cookie_header.clone();
             tokio::spawn(async move {
-                song_downloader::resolve_url(&vid, &yt_cmd, pt.as_deref(), None).await;
+                song_downloader::resolve_url(&vid, &yt_cmd, pt.as_deref(), cp.as_deref(), ch.as_deref(), jr.as_deref(), None).await;
             });
         }
 

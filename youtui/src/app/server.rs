@@ -1,4 +1,5 @@
 use crate::config::Config;
+use std::path::PathBuf;
 use std::sync::Arc;
 use tracing::warn;
 
@@ -12,8 +13,11 @@ pub type ArcServer = Arc<Server>;
 pub struct Server {
     pub api: api::Api,
     pub player: player::Player,
-    pub config: Config,
+    pub config: Arc<Config>,
     pub po_token: Option<String>,
+    pub cookie_path: Option<PathBuf>,
+    pub cookie_header: Option<String>,
+    pub js_runtime: Option<String>,
 }
 
 impl Server {
@@ -21,11 +25,14 @@ impl Server {
         api_key: crate::config::ApiKey,
         po_token: Option<String>,
         config: &Config,
+        cookie_path: Option<PathBuf>,
+        js_runtime: Option<String>,
     ) -> anyhow::Result<Server> {
+        let cookie_header = extract_cookie_header(&api_key);
         let downloader_client = {
             use reqwest::header::{COOKIE, HeaderMap, HeaderValue};
-            if let Some(cookie) = extract_cookie_header(&api_key) {
-                match HeaderValue::from_str(&cookie) {
+            if let Some(ref cookie) = cookie_header {
+                match HeaderValue::from_str(cookie) {
                     Ok(cookie_val) => {
                         let mut headers = HeaderMap::new();
                         headers.insert(COOKIE, cookie_val);
@@ -48,8 +55,11 @@ impl Server {
         Ok(Server {
             api,
             player,
-            config: config.clone(),
+            config: Arc::new(config.clone()),
             po_token,
+            cookie_path,
+            cookie_header,
+            js_runtime,
         })
     }
 }
