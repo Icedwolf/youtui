@@ -302,7 +302,7 @@ mod render_tests {
     fn render_shows_column_headings() {
         let songs = vec![make_test_song("Any", vec!["A"], Some("B"))];
         let output = render_playlist(songs);
-        for heading in &["p#", "t#", "Artist", "Album", "Song", "Duration", "Year"] {
+        for heading in &["Song", "Artists", "Album", "Year", "Duration"] {
             assert!(
                 output.contains(heading),
                 "Column heading '{heading}' should appear.\nGot:\n{output}"
@@ -1309,7 +1309,7 @@ mod state_transitions {
     }
 
     #[test]
-    fn play_next_queue_shows_plus_marker_in_list() {
+    fn play_next_queue_tracks_songs() {
         let mut p = downloaded_songs(3);
         p.play_next_queue.push_back(ListSongID(1));
 
@@ -1317,46 +1317,6 @@ mod state_transitions {
         assert!(p.play_next_queue.contains(&ListSongID(1)));
         assert!(!p.play_next_queue.contains(&ListSongID(0)));
         assert!(!p.play_next_queue.contains(&ListSongID(2)));
-
-        // get_items first field check: iterate via index
-        assert_eq!(first_field_of(&p, 1), " +");
-        assert_ne!(first_field_of(&p, 0), " +");
-    }
-
-    /// Helper: get the first field of a visible row via raw index.
-    fn first_field_of(p: &Playlist, visual_idx: usize) -> String {
-        // Build the indices manually (same logic as get_items)
-        let count: usize = if !p.search_text.is_empty() {
-            p.search_indices.len()
-        } else if p.shuffle_enabled {
-            p.shuffle_indices.len()
-        } else {
-            p.list.get_list_iter().count()
-        };
-        if visual_idx >= count {
-            return String::new();
-        }
-        let actual_i = p.visual_to_actual_index(visual_idx);
-        let ls = p.list.get_song_from_idx(actual_i).expect("valid index");
-
-        let cur_playing_visual = p
-            .get_cur_playing_index()
-            .and_then(|idx| p.actual_to_visual_index(idx));
-
-        if Some(visual_idx) == cur_playing_visual {
-            match p.play_status {
-                PlayState::NotPlaying | PlayState::NotPlaying | PlayState::Error(_) => {
-                    ">>>".to_string()
-                }
-                PlayState::Playing(_) | PlayState::Paused(_) | PlayState::Buffering(_) => {
-                    String::new()
-                }
-            }
-        } else if p.play_next_queue.contains(&ls.id) {
-            " +".to_string()
-        } else {
-            (visual_idx + 1).to_string()
-        }
     }
 
     #[test]
