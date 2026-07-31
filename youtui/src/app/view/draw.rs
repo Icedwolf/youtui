@@ -346,13 +346,11 @@ fn draw_sort_popup(f: &mut Frame, table: &mut impl AdvancedTableView, chunk: Rec
         .enumerate()
         .filter_map(|(i, h)| {
             if sortable_columns.contains(&i) {
-                // TODO: Remove allocation
                 Some(ListItem::new(h))
             } else {
                 None
             }
         })
-        // TODO: Remove allocation
         .collect();
     let max_header_len = headers.iter().fold(0, |acc, e| acc.max(e.width()));
     // List looks a bit nicer with a minimum width, so passing a hardcoded minimum

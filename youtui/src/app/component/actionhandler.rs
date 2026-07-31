@@ -273,7 +273,7 @@ mod tests {
     fn test_key_stack_shift_modifier() {
         let kb = test_keymap();
         let ks1 = KeyEvent::new(KeyCode::Enter, KeyModifiers::empty());
-        let ks2 = KeyEvent::new(KeyCode::Char('A'), KeyModifiers::SHIFT);
+        let ks2 = KeyEvent::new(KeyCode::Char('P'), KeyModifiers::SHIFT);
         let key_stack = [ks1, ks2];
         let expected = TestAction::TestStack;
         let output = handle_key_stack(std::iter::once(&kb), &key_stack);
@@ -286,7 +286,7 @@ mod tests {
     fn test_key_stack() {
         let kb = test_keymap();
         let ks1 = KeyEvent::new(KeyCode::Enter, KeyModifiers::empty());
-        let ks2 = KeyEvent::new(KeyCode::Char('A'), KeyModifiers::empty());
+        let ks2 = KeyEvent::new(KeyCode::Char('P'), KeyModifiers::empty());
         let key_stack = [ks1, ks2];
         let expected = TestAction::TestStack;
         let KeyHandleAction::Action(output) = handle_key_stack(std::iter::once(&kb), &key_stack)

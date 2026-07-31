@@ -7,19 +7,19 @@ use ratatui::style::{Color, Style};
 use ratatui::widgets::{Block, Borders};
 
 // Standard app colour scheme
-pub const SELECTED_BORDER_COLOUR: Color = Color::Cyan;
-pub const DESELECTED_BORDER_COLOUR: Color = Color::Reset;
+pub(crate) const SELECTED_BORDER_COLOUR: Color = Color::Cyan;
+pub(crate) const DESELECTED_BORDER_COLOUR: Color = Color::Reset;
 // TODO: Implement in all locations.
-pub const TEXT_COLOUR: Color = Color::Reset;
-pub const BUTTON_BG_COLOUR: Color = Color::Gray;
-pub const BUTTON_FG_COLOUR: Color = Color::Black;
-pub const PROGRESS_BG_COLOUR: Color = Color::DarkGray;
-pub const PROGRESS_FG_COLOUR: Color = Color::LightGreen;
-pub const TABLE_HEADINGS_COLOUR: Color = Color::LightGreen;
-pub const ROW_HIGHLIGHT_COLOUR: Color = Color::Blue;
+pub(crate) const TEXT_COLOUR: Color = Color::Reset;
+pub(crate) const BUTTON_BG_COLOUR: Color = Color::Gray;
+pub(crate) const BUTTON_FG_COLOUR: Color = Color::Black;
+pub(crate) const PROGRESS_BG_COLOUR: Color = Color::DarkGray;
+pub(crate) const PROGRESS_FG_COLOUR: Color = Color::LightGreen;
+pub(crate) const TABLE_HEADINGS_COLOUR: Color = Color::LightGreen;
+pub(crate) const ROW_HIGHLIGHT_COLOUR: Color = Color::Blue;
 
 /// Draw a text input box
-pub fn draw_text_box(
+pub(crate) fn draw_text_box(
     f: &mut Frame,
     title: impl AsRef<str>,
     contents: &mut TextInputState,
@@ -39,7 +39,7 @@ pub fn draw_text_box(
 }
 
 /// Helper function to create a popup at bottom corner of chunk.
-pub fn left_bottom_corner_rect(height: u16, width: u16, r: Rect) -> Rect {
+pub(crate) fn left_bottom_corner_rect(height: u16, width: u16, r: Rect) -> Rect {
     let r_x2 = r.x.saturating_add(r.width);
     let r_y2 = r.y.saturating_add(r.height);
     let x = r_x2.saturating_sub(width).max(r.x);
@@ -55,7 +55,7 @@ pub fn left_bottom_corner_rect(height: u16, width: u16, r: Rect) -> Rect {
 //  We pass in the max bounds that can be rendered by the application,
 //  to avoid returning a Rect that is not drawable.
 // TODO: Add a test to ensure this is returning correct area
-pub fn below_left_rect(height: u16, width: u16, r: Rect, max_bounds: Rect) -> Rect {
+pub(crate) fn below_left_rect(height: u16, width: u16, r: Rect, max_bounds: Rect) -> Rect {
     let y = r.y.saturating_add(r.height.saturating_sub(1));
     Rect {
         x: r.x,
@@ -65,7 +65,7 @@ pub fn below_left_rect(height: u16, width: u16, r: Rect, max_bounds: Rect) -> Re
     }
 }
 /// Helper function to create a popup in the center of a chunk.
-pub fn centered_rect(height: u16, width: u16, r: Rect) -> Rect {
+pub(crate) fn centered_rect(height: u16, width: u16, r: Rect) -> Rect {
     Rect {
         x: (r.x + r.width / 2).saturating_sub(width / 2).max(r.x),
         y: (r.y + r.height / 2).saturating_sub(height / 2).max(r.y),
@@ -74,7 +74,7 @@ pub fn centered_rect(height: u16, width: u16, r: Rect) -> Rect {
     }
 }
 /// Helper function to get the bottom line of a chunk, ignoring side borders.
-pub fn bottom_of_rect(r: Rect) -> Rect {
+pub(crate) fn bottom_of_rect(r: Rect) -> Rect {
     Rect {
         x: r.x.saturating_add(1),
         y: r.y.saturating_add(r.height.saturating_sub(1)),
@@ -82,7 +82,7 @@ pub fn bottom_of_rect(r: Rect) -> Rect {
         height: 1,
     }
 }
-pub fn get_offset_after_list_resize(
+pub(crate) fn get_offset_after_list_resize(
     prev_offset: usize,
     prev_cur: usize,
     prev_max_cur: usize,

@@ -278,9 +278,9 @@ fn draw_search_suggestions(f: &mut Frame, search: &SearchBlock, chunk: Rect, max
             if text.len() <= remaining {
                 spans.push(match run {
                     TextRun::Bold(str) => {
-                        Span::styled(str.clone(), Style::new().add_modifier(Modifier::BOLD))
+                        Span::styled(str.as_str(), Style::new().add_modifier(Modifier::BOLD))
                     }
-                    TextRun::Normal(str) => Span::raw(str.clone()),
+                    TextRun::Normal(str) => Span::raw(str.as_str()),
                 });
                 remaining = remaining.saturating_sub(text.len());
             } else {

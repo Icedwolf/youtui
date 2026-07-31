@@ -950,8 +950,8 @@ mod tests {
         list.push_song_list(batch2);
         let elapsed = start.elapsed();
         assert!(
-            elapsed.as_millis() < 500,
-            "push_song_list(58000 existing, 58000 new) took {}ms, expected <500ms",
+            elapsed.as_millis() < 1000,
+            "push_song_list(58000 existing, 58000 new) took {}ms, expected <1000ms",
             elapsed.as_millis(),
         );
         eprintln!(

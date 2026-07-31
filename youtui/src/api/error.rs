@@ -17,7 +17,9 @@ pub struct DynamicApiError(String);
 /// Strip Rust module paths to get just the type name (last segment after ::).
 fn short_type_name<T: ?Sized>() -> &'static str {
     let full = std::any::type_name::<T>();
-    full.rsplit("::").next().unwrap_or(full)
+    // rsplit always returns at least one element (the original string if no delimiter found).
+    #[allow(clippy::unwrap_used)]
+    full.rsplit("::").next().unwrap()
 }
 
 pub fn wrong_auth_token_error_message<Q>(

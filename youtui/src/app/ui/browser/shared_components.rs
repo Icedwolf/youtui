@@ -6,9 +6,8 @@ use crate::app::effect::Effects;
 use crate::app::structures::ListSong;
 use crate::app::view::{TableFilterCommand, TableSortCommand};
 use rat_text::text_input::{TextInputState, handle_events};
-use ratatui::widgets::{ListItem, ListState};
+use ratatui::widgets::ListState;
 use serde::{Deserialize, Serialize};
-use std::cell::RefCell;
 use ytmapi_rs::common::SearchSuggestion;
 
 // --- Song playback helpers (shared by songsearch, artistsearch, playlistsearch) ---
@@ -60,11 +59,9 @@ pub(crate) fn add_songs_to_playlist_impl<C: Component>(
 #[derive(Default)]
 pub struct SearchBlock {
     pub search_contents: TextInputState,
-    pub search_suggestions: Vec<SearchSuggestion>,
+    search_suggestions: Vec<SearchSuggestion>,
     pub suggestions_cur: Option<usize>,
     last_fetched_text: Option<String>,
-    #[allow(dead_code)]
-    cached_items: RefCell<Option<Vec<ListItem<'static>>>>,
 }
 impl Component for SearchBlock {}
 

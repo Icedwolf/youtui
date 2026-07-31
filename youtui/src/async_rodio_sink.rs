@@ -9,7 +9,7 @@ use std::fmt::Debug;
 use std::time::Duration;
 use tokio::sync::{mpsc, oneshot};
 use tokio_stream::wrappers::ReceiverStream;
-use tracing::{debug, error, trace};
+use tracing::{debug, error, trace, warn};
 
 pub mod rodio {
     pub use rodio::*;
@@ -240,7 +240,7 @@ where
         let (tx, rx) = oneshot::channel();
         std_send_or_error(&self.tx, AsyncRodioRequest::IncreaseVolume(vol_inc, tx)).await;
         let Ok(current_volume) = rx.await else {
-            error!("The player has been dropped while I was waiting for a volume update for",);
+            error!("The player has been dropped while I was waiting for a volume update",);
             return None;
         };
         Some(VolumeUpdate(current_volume))
@@ -250,7 +250,7 @@ where
         let (tx, rx) = oneshot::channel();
         std_send_or_error(&self.tx, AsyncRodioRequest::SetVolume(new_vol, tx)).await;
         let Ok(current_volume) = rx.await else {
-            error!("The player has been dropped while I was waiting for a volume update for",);
+            error!("The player has been dropped while I was waiting for a volume update",);
             return None;
         };
         Some(VolumeUpdate(current_volume))
@@ -326,16 +326,16 @@ impl Source for ProgressSource {
     }
 }
 
-pub async fn send_or_error<T, S: Borrow<mpsc::Sender<T>>>(tx: S, msg: T) {
+pub(crate) async fn send_or_error<T, S: Borrow<mpsc::Sender<T>>>(tx: S, msg: T) {
     tx.borrow()
         .send(msg)
         .await
-        .unwrap_or_else(|e| debug!("Error {e} received when sending message"));
+        .unwrap_or_else(|e| warn!("Error {e} received when sending message"));
 }
 
-pub async fn std_send_or_error<T>(tx: &std::sync::mpsc::Sender<T>, msg: T) {
+pub(crate) async fn std_send_or_error<T>(tx: &std::sync::mpsc::Sender<T>, msg: T) {
     tx.send(msg)
-        .unwrap_or_else(|e| debug!("Error {e} received when sending message"));
+        .unwrap_or_else(|e| warn!("Error {e} received when sending message"));
 }
 
 #[cfg(test)]

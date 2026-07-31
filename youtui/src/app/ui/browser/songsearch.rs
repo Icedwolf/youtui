@@ -207,7 +207,7 @@ impl KeyRouter<AppAction> for SongSearchBrowser {
 }
 impl SongListComponent for SongSearchBrowser {
     fn get_song_from_idx(&self, idx: usize) -> Option<&crate::app::structures::ListSong> {
-        self.get_filtered_list_iter().nth(idx)
+        self.filtered_indices.get(idx).and_then(|&i| self.song_list.get_song_from_idx(i))
     }
 }
 impl Loadable for SongSearchBrowser {
@@ -296,7 +296,9 @@ impl AdvancedTableView for SongSearchBrowser {
         self.sort.cur
     }
     fn get_filtered_items(&self) -> impl Iterator<Item = impl Iterator<Item = Cow<'_, str>> + '_> {
-        self.get_filtered_list_iter()
+        self.filtered_indices
+            .iter()
+            .filter_map(|&idx| self.song_list.get_song_from_idx(idx))
             .map(|ls| ls.get_fields(Self::subcolumns_of_vec()).into_iter())
     }
     fn sort_popup_shown(&self) -> bool {

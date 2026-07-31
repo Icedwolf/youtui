@@ -8,31 +8,31 @@ use ratatui::text::Line;
 use ratatui::widgets::ListState;
 use std::borrow::Cow;
 
-pub mod draw;
+pub(crate) mod draw;
 
 #[derive(Clone, Debug)]
-pub struct TableSortCommand {
+pub(crate) struct TableSortCommand {
     pub column: usize,
     pub direction: SortDirection,
 }
 
 #[derive(Default, Clone, Copy, Debug, PartialEq)]
-pub enum SortDirection {
+pub(crate) enum SortDirection {
     #[default]
     Asc,
     Desc,
 }
 
 #[derive(Clone, Debug)]
-pub enum TableFilterCommand {
+pub(crate) enum TableFilterCommand {
     All(Filter),
 }
 #[derive(Clone, Debug)]
-pub enum Filter {
+pub(crate) enum Filter {
     Contains(FilterString),
 }
 #[derive(Clone, Debug)]
-pub enum FilterString {
+pub(crate) enum FilterString {
     CaseInsensitive {
         original: String,
         lowercased: String,
@@ -95,14 +95,14 @@ impl FilterString {
 }
 
 /// Basic wrapper around constraint to allow mixing of percentage and length.
-pub enum BasicConstraint {
+pub(crate) enum BasicConstraint {
     Length(u16),
     Percentage(Percentage),
 }
 
 /// Use basic constraints to construct dynamic column widths for a table.
 #[must_use]
-pub fn basic_constraints_to_table_constraints(
+pub(crate) fn basic_constraints_to_table_constraints(
     basic_constraints: &[BasicConstraint],
     length: u16,
     margin: u16,
@@ -125,7 +125,7 @@ pub fn basic_constraints_to_table_constraints(
 }
 
 /// A struct that we are able to draw a table from using the underlying data.
-pub trait TableView {
+pub(crate) trait TableView {
     fn get_state(&self) -> &ScrollingTableState;
     fn get_mut_state(&mut self) -> &mut ScrollingTableState;
     /// An item will always be selected.
@@ -137,7 +137,7 @@ pub trait TableView {
     fn get_headings(&self) -> impl Iterator<Item = &'static str>;
 }
 /// TableView with built in filtering and sorting.
-pub trait AdvancedTableView: TableView {
+pub(crate) trait AdvancedTableView: TableView {
     fn get_mut_filter_state(&mut self) -> &mut TextInputState;
     fn filter_popup_shown(&self) -> bool;
     fn get_filterable_columns(&self) -> &[usize];
@@ -164,7 +164,7 @@ pub trait AdvancedTableView: TableView {
     fn get_sort_commands(&self) -> &[TableSortCommand];
 }
 // A struct that we are able to draw a list from using the underlying data.
-pub trait ListView {
+pub(crate) trait ListView {
     /// An item will always be selected.
     fn get_selected_item(&self) -> usize;
     fn get_state(&self) -> &ScrollingListState;
@@ -175,21 +175,21 @@ pub trait ListView {
     }
 }
 // A drawable part of the application that mutates its state on draw.
-pub trait DrawableMut {
+pub(crate) trait DrawableMut {
     // Helper function to draw.
     // TODO: Clean up function signature regarding mutable state.
     fn draw_mut_chunk(&mut self, f: &mut Frame, chunk: Rect, selected: bool, cur_tick: u64);
 }
 // A part of the application that can be in a Loading state.
-pub trait Loadable {
+pub(crate) trait Loadable {
     fn is_loading(&self) -> bool;
 }
 // A part of the application that has a title
-pub trait HasTitle {
+pub(crate) trait HasTitle {
     fn get_title(&self) -> Line<'static>;
 }
 // A part of the application that has a tabbed interface.
-pub trait HasTabs {
+pub(crate) trait HasTabs {
     fn tabs_block_title(&'_ self) -> Cow<'_, str>;
     fn tab_items(&'_ self) -> impl IntoIterator<Item = impl Into<Cow<'_, str>>> + '_;
     fn selected_tab_idx(&self) -> usize;

@@ -16,21 +16,21 @@ use tokio::fs::DirEntry;
 use tokio::sync::mpsc;
 use tokio_stream::StreamExt;
 use tokio_stream::wrappers::ReadDirStream;
-use tracing::{debug, warn};
+use tracing::warn;
 
 /// Send a message to the specified Tokio mpsc::Sender, and if sending fails,
 /// log an error with Tracing.
-pub fn blocking_send_or_error<T, S: Borrow<mpsc::Sender<T>>>(tx: S, msg: T) {
+pub(crate) fn blocking_send_or_error<T, S: Borrow<mpsc::Sender<T>>>(tx: S, msg: T) {
     tx.borrow()
         .blocking_send(msg)
-        .unwrap_or_else(|e| debug!("Error {e} received when sending message"));
+        .unwrap_or_else(|e| warn!("Error {e} received when sending message"));
 }
 
 /// Search directory for files matching the pattern {filename}{NUMBER}.{filext}
 /// and ext fileext, creating one at {filename}{NUMBER+1}.{filext}.
 /// If there are more than max_files with this pattern, delete the
 /// oldest surplus ones.
-pub async fn get_limited_sequential_file(
+pub(crate) async fn get_limited_sequential_file(
     dir: &Path,
     filename: impl AsRef<str>,
     fileext: impl AsRef<str>,
@@ -95,7 +95,7 @@ pub async fn get_limited_sequential_file(
 }
 
 /// From serde documentation: [<https://serde.rs/string-or-struct.html>]
-pub fn string_or_struct<'de, T, D>(deserializer: D) -> std::result::Result<T, D::Error>
+pub(crate) fn string_or_struct<'de, T, D>(deserializer: D) -> std::result::Result<T, D::Error>
 where
     T: Deserialize<'de> + FromStr<Err = Infallible>,
     D: Deserializer<'de>,
@@ -135,7 +135,7 @@ where
 }
 
 /// Extension trait for recovering from poisoned mutexes/RwLocks with a warning.
-pub trait PoisonRecovery {
+pub(crate) trait PoisonRecovery {
     type Inner;
     fn unwrap_or_warn(self) -> Self::Inner;
 }

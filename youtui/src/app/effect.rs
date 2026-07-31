@@ -1,4 +1,5 @@
 use crate::app::server::ArcServer;
+use crate::core::PoisonRecovery;
 use futures::{FutureExt, StreamExt};
 use std::any::TypeId;
 use std::collections::HashMap;
@@ -10,6 +11,7 @@ use tokio_util::sync::CancellationToken;
 use tracing::{debug, error};
 
 type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send>>;
+type Mutation<C> = Box<dyn FnOnce(&mut C) -> Effects<C> + Send>;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Discriminator {
@@ -135,7 +137,7 @@ impl<C: 'static> Effects<C> {
 }
 
 pub enum TaskResult<C> {
-    Mutation(Box<dyn FnOnce(&mut C) -> Effects<C> + Send>),
+    Mutation(Mutation<C>),
     StreamFinished,
     Panic(String),
 }
@@ -164,7 +166,7 @@ impl<C: 'static> TaskManager<C> {
             let tid_entry = match work.discriminator {
                 Discriminator::None => None,
                 Discriminator::Kill(tid) => {
-                    let mut map = tokens.lock().unwrap();
+                    let mut map = tokens.lock().unwrap_or_warn();
                     if let Some(old_token) = map.remove(&tid) {
                         old_token.cancel();
                     }
@@ -173,7 +175,7 @@ impl<C: 'static> TaskManager<C> {
                     Some(tid)
                 }
                 Discriminator::BlockConcurrent(tid) => {
-                    let mut map = tokens.lock().unwrap();
+                    let mut map = tokens.lock().unwrap_or_warn();
                     if map.contains_key(&tid) {
                         debug!("Blocked concurrent task for {:?}", tid);
                         continue;
@@ -222,7 +224,7 @@ fn spawn_stream<C: 'static>(
         }
         let _ = result_tx.send(TaskResult::StreamFinished);
         if let Some(tid) = tid {
-            tokens.lock().unwrap().remove(&tid);
+            tokens.lock().unwrap_or_warn().remove(&tid);
         }
     });
 }
@@ -253,7 +255,7 @@ fn spawn_work<C: 'static>(
             }
         }
         if let Some(tid) = tid {
-            tokens.lock().unwrap().remove(&tid);
+            tokens.lock().unwrap_or_warn().remove(&tid);
         }
     });
 }

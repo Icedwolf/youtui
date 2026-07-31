@@ -10,7 +10,7 @@ use crate::app::ui::browser::songsearch::BrowserSongsAction;
 use crate::app::ui::playlist::PlaylistAction::{self, ViewBrowser};
 use crate::keyaction::{KeyAction, KeyActionVisibility};
 use crate::keybind::Keybind;
-use anyhow::{Context, Error, Result};
+use anyhow::{Error, Result};
 use crossterm::event::KeyModifiers;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
@@ -185,16 +185,22 @@ impl YoutuiKeymap {
             browser_playlist_songs: mut browser_playlist_songs_mode_names,
         } = mode_names;
 
-        #[rustfmt::skip]
         macro_rules! parse_category {
             ($ir:ident, $names:ident, $label:literal) => {
                 $ir.into_iter()
-                    .map(|(k, v)| {
-                        let v = KeyActionTree::try_from_stringy(&k, v, Some(&mut $names))?;
-                        Ok((k, v))
+                    .filter_map(|(k, v)| {
+                        match KeyActionTree::try_from_stringy(&k, v, Some(&mut $names)) {
+                            Ok(v) => Some((k, v)),
+                            Err(e) => {
+                                eprintln!(
+                                    "Warning: skipping invalid {} keybind '{}': {}",
+                                    $label, k, e
+                                );
+                                None
+                            }
+                        }
                     })
-                    .collect::<Result<BTreeMap<_, _>>>()
-                    .context(concat!($label, " keybinds parse failed"))?
+                    .collect::<BTreeMap<_, _>>()
             };
         }
 
