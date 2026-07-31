@@ -95,7 +95,7 @@ where
     }
     fn params(&self) -> Vec<(&str, Cow<'_, str>)> {
         let params = self.continuation_params.get_raw();
-        vec![("ctoken", params.into()), ("continuation", params.into())]
+        vec![("continuation", params.into())]
     }
     fn path(&self) -> &str {
         self.query.path()

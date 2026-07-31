@@ -105,10 +105,26 @@ async fn try_streaming_init(
     }
 }
 
+async fn kill_and_reap(
+    main: &mut tokio::process::Child,
+    extra: &mut Option<tokio::process::Child>,
+) {
+    let _ = main.start_kill();
+    if let Some(extra) = extra.as_mut() {
+        let _ = extra.start_kill();
+    }
+    let _ = main.wait().await;
+    if let Some(extra) = extra.as_mut() {
+        let _ = extra.wait().await;
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 async fn spawn_bg_cache_task(
     vid: String,
     ct: tokio_util::sync::CancellationToken,
     mut child: tokio::process::Child,
+    mut yt_child: Option<tokio::process::Child>,
     write_handle: tokio::task::JoinHandle<()>,
     buf: Arc<SharedBuffer>,
     log_prefix: &'static str,
@@ -118,7 +134,7 @@ async fn spawn_bg_cache_task(
         biased;
         _ = ct.cancelled() => {
             debug!(%vid, "{log_prefix} background cancelled, killing child");
-            let _ = child.start_kill();
+            kill_and_reap(&mut child, &mut yt_child).await;
         }
         result = tokio::time::timeout(
             std::time::Duration::from_secs(DOWNLOAD_TIMEOUT_S),
@@ -128,15 +144,19 @@ async fn spawn_bg_cache_task(
                 Ok(Ok(())) => {}
                 Ok(Err(join_err)) => {
                     error!(%vid, error = %join_err, "{log_prefix} writer task panicked");
+                    kill_and_reap(&mut child, &mut yt_child).await;
                     return;
                 }
                 Err(_elapsed) => {
                     warn!(%vid, "{log_prefix} download timed out ({}s), killing", DOWNLOAD_TIMEOUT_S);
-                    let _ = child.start_kill();
+                    kill_and_reap(&mut child, &mut yt_child).await;
                     return;
                 }
             }
             let status = child.wait().await;
+            if let Some(yt) = yt_child.as_mut() {
+                let _ = yt.wait().await;
+            }
             match status {
                 Ok(s) if !s.success() => {
                     debug!(%vid, code = exit_code_string(&s),
@@ -249,7 +269,7 @@ async fn ytdlp_pipeline(
     let buffer = SharedBuffer::new();
     let writer = buffer.writer();
 
-    let (_stderr_handle, stdout_handle, mut child, _relay_handle) =
+    let (_stderr_handle, stdout_handle, mut child, _relay_handle, mut yt_child) =
         if let Some(url) = &stream_url {
             let mut ffmpeg = tokio::process::Command::new("ffmpeg");
             ffmpeg
@@ -274,7 +294,7 @@ async fn ytdlp_pipeline(
 
             let write_handle = spawn_stdout_writer(ffmpeg_stdout, writer, "ffmpeg (stream_url)");
 
-            (tokio::spawn(async {}), write_handle, child, None)
+            (tokio::spawn(async {}), write_handle, child, None, None)
         } else if ffmpeg_avail {
             let quality = "ba/bestaudio";
             let yt_dlp_cmd = if cfg.yt_dlp_command.is_empty() {
@@ -289,15 +309,14 @@ async fn ytdlp_pipeline(
             resolve::apply_ytdlp_auth_args(&mut yt_cmd, cfg.po_token.as_deref(), cfg.cookie_path.as_deref(), cfg.cookie_header.as_deref(), cfg.js_runtime.as_deref(), &cfg.video_id);
             yt_cmd.stdout(std::process::Stdio::piped());
             yt_cmd.stderr(std::process::Stdio::piped());
+            // yt_dlp_child is held for the whole pipeline (returned in the tuple)
+            // and moved into the bg cache task after streaming init, so kill_on_drop
+            // only fires on bail/timeout/cancel — killing yt-dlp directly instead of
+            // relying on pipe closure, which left orphans running for seconds.
+            yt_cmd.kill_on_drop(true);
             let mut yt_dlp_child = yt_cmd.spawn().context("spawn yt-dlp")?;
             let yt_stdout = yt_dlp_child.stdout.take().context("no stdout from yt-dlp")?;
             let yt_stderr = yt_dlp_child.stderr.take().context("no stderr from yt-dlp")?;
-
-            // CRITICAL: do NOT set kill_on_drop on yt_dlp_child. The child is
-            // dropped at the end of this if-block (not returned in the tuple).
-            // kill_on_drop would kill yt-dlp before it produces any audio data.
-            // Instead, rely on pipe closure: when the relay task finishes reading
-            // yt_stdout, the pipe closes → yt-dlp gets SIGPIPE on next write → exits.
 
             debug!(%cfg.video_id, elapsed = ?t0.elapsed(), "yt-dlp spawned");
 
@@ -346,7 +365,7 @@ async fn ytdlp_pipeline(
 
             let write_handle = spawn_stdout_writer(ffmpeg_stdout, writer, "ffmpeg");
 
-            (stderr_handle, write_handle, ffmpeg_child, Some(relay))
+            (stderr_handle, write_handle, ffmpeg_child, Some(relay), Some(yt_dlp_child))
         } else {
             let quality = "bestaudio[ext=m4a]/bestaudio/bestaudio*";
             let yt_dlp_cmd = if cfg.yt_dlp_command.is_empty() {
@@ -377,7 +396,7 @@ async fn ytdlp_pipeline(
 
             let write_handle = spawn_stdout_writer(yt_stdout, writer, "yt-dlp");
 
-            (stderr_handle, write_handle, yt_dlp_child, None)
+            (stderr_handle, write_handle, yt_dlp_child, None, None)
         };
 
     let (decoder, needs_cache) = if is_wav {
@@ -425,6 +444,7 @@ async fn ytdlp_pipeline(
                     cfg.video_id.clone(),
                     cfg.cancel_token.clone(),
                     child,
+                    yt_child,
                     stdout_handle,
                     buffer.clone(),
                     log_prefix,
@@ -439,12 +459,18 @@ async fn ytdlp_pipeline(
                     "Streaming decoder init failed, waiting for {} stream to complete",
                     if from_url_cache { "ffmpeg" } else { "ffmpeg relay" });
                 let pipe_label = if from_url_cache { "ffmpeg (stream_url)" } else { "ffmpeg" };
-                match tokio::time::timeout(
-                    std::time::Duration::from_secs(DOWNLOAD_TIMEOUT_S),
-                    stdout_handle,
-                )
-                .await
-                {
+                let wait_result = tokio::select! {
+                    biased;
+                    _ = cfg.cancel_token.cancelled() => {
+                        kill_and_reap(&mut child, &mut yt_child).await;
+                        bail!("{pipe_label} download cancelled during fallback wait");
+                    }
+                    res = tokio::time::timeout(
+                        std::time::Duration::from_secs(DOWNLOAD_TIMEOUT_S),
+                        stdout_handle,
+                    ) => res,
+                };
+                match wait_result {
                     Ok(Ok(())) => {}
                     Ok(Err(join_err)) => {
                         if from_url_cache {
@@ -453,7 +479,7 @@ async fn ytdlp_pipeline(
                         bail!("{pipe_label} writer task panicked: {join_err}");
                     }
                     Err(_elapsed) => {
-                        let _ = child.start_kill();
+                        kill_and_reap(&mut child, &mut yt_child).await;
                         if from_url_cache {
                             URL_CACHE.lock().unwrap_or_warn().remove(&cfg.video_id);
                         }
@@ -520,6 +546,7 @@ async fn ytdlp_pipeline(
                     cfg.video_id.clone(),
                     cfg.cancel_token.clone(),
                     child,
+                    None,
                     stdout_handle,
                     buffer.clone(),
                     pipe_name,
@@ -533,18 +560,24 @@ async fn ytdlp_pipeline(
                 drop(_permit);
                 debug!(%cfg.video_id, error = %stream_err,
                 "Streaming decoder init failed, waiting for yt-dlp stream to complete");
-                match tokio::time::timeout(
-                    std::time::Duration::from_secs(DOWNLOAD_TIMEOUT_S),
-                    stdout_handle,
-                )
-                .await
-                {
+                let wait_result = tokio::select! {
+                    biased;
+                    _ = cfg.cancel_token.cancelled() => {
+                        kill_and_reap(&mut child, &mut yt_child).await;
+                        bail!("yt-dlp download cancelled during fallback wait");
+                    }
+                    res = tokio::time::timeout(
+                        std::time::Duration::from_secs(DOWNLOAD_TIMEOUT_S),
+                        stdout_handle,
+                    ) => res,
+                };
+                match wait_result {
                     Ok(Ok(())) => {}
                     Ok(Err(join_err)) => {
                         bail!("yt-dlp writer task panicked: {join_err}");
                     }
                     Err(_elapsed) => {
-                        let _ = child.start_kill();
+                        kill_and_reap(&mut child, &mut yt_child).await;
                         bail!("yt-dlp download timed out ({}s)", DOWNLOAD_TIMEOUT_S);
                     }
                 }
@@ -1225,6 +1258,58 @@ mod tests {
                 .expect("kill -0 2");
             assert!(!alive2.success(), "process {pid2} must be DEAD after AbortHandle::abort");
             eprintln!("PASS: AbortHandle::abort -> child {pid2} dead (kill_on_drop fired)");
+        });
+    }
+
+    #[test]
+    fn bg_cache_task_cancel_kills_all_children() {
+        use std::time::Duration;
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            let ff_child = tokio::process::Command::new("sleep")
+                .arg("30")
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .spawn()
+                .expect("spawn sleep (primary)");
+            let ff_pid = ff_child.id().expect("primary pid");
+            let yt_child = tokio::process::Command::new("sleep")
+                .arg("30")
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .spawn()
+                .expect("spawn sleep (extra)");
+            let yt_pid = yt_child.id().expect("extra pid");
+
+            let ct = tokio_util::sync::CancellationToken::new();
+            let buf = SharedBuffer::new();
+            let done = tokio::task::spawn(std::future::pending::<()>());
+            let task = tokio::spawn(spawn_bg_cache_task(
+                "test-vid".to_string(),
+                ct.clone(),
+                ff_child,
+                Some(yt_child),
+                done,
+                buf,
+                "test",
+                None,
+            ));
+
+            tokio::time::sleep(Duration::from_millis(150)).await;
+            ct.cancel();
+            tokio::time::timeout(Duration::from_secs(5), task)
+                .await
+                .expect("bg cache task must finish after cancel")
+                .expect("bg cache task join");
+
+            for (label, pid) in [("primary", ff_pid), ("extra", yt_pid)] {
+                let alive = std::process::Command::new("kill")
+                    .args(["-0", &pid.to_string()])
+                    .stderr(std::process::Stdio::null())
+                    .status()
+                    .expect("kill -0");
+                assert!(!alive.success(), "{label} child {pid} must be dead after cancel");
+            }
         });
     }
 }

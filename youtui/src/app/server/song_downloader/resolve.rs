@@ -78,9 +78,19 @@ pub async fn resolve_url(
     cmd.arg("-f").arg("bestaudio[ext=webm]/bestaudio");
     cmd.arg("--no-warnings").arg("--no-playlist");
     apply_ytdlp_auth_args(&mut cmd, po_token, cookie_path, cookie_header, js_runtime, video_id);
+    cmd.stdout(std::process::Stdio::piped());
+    cmd.stderr(std::process::Stdio::null());
+    // kill_on_drop + child owned by the `resolve` future: when cancellation wins
+    // the select!, the future is dropped and the child is killed. Without this,
+    // a cancelled resolve left an orphan yt-dlp running for its full duration.
+    cmd.kill_on_drop(true);
+    let child = match cmd.spawn() {
+        Ok(child) => child,
+        Err(_) => return None,
+    };
 
     let resolve = async {
-        let output = cmd.output().await.ok()?;
+        let output = child.wait_with_output().await.ok()?;
         if !output.status.success() {
             return None;
         }
@@ -106,4 +116,85 @@ pub async fn resolve_url(
         url_cache_put(video_id.to_string(), url.clone());
     }
     url
+}
+
+#[cfg(test)]
+mod tests {
+    use super::resolve_url;
+    use std::time::Duration;
+
+    fn fake_ytdlp_script(pidfile: &std::path::Path, script: &std::path::Path) {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::write(script, format!("#!/bin/sh\necho $$ > '{}'\nsleep 30\n", pidfile.display()))
+            .expect("write fake yt-dlp script");
+        std::fs::set_permissions(script, std::fs::Permissions::from_mode(0o755))
+            .expect("chmod fake yt-dlp script");
+    }
+
+    fn unique_tmp(name: &str) -> std::path::PathBuf {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("system clock")
+            .as_nanos();
+        std::env::temp_dir().join(format!("{name}_{}_{}", std::process::id(), nanos))
+    }
+
+    #[test]
+    fn resolve_url_cancelled_kills_child() {
+        let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
+        rt.block_on(async {
+            let pidfile = unique_tmp("resolve_pid");
+            let script = unique_tmp("fake_ytdlp");
+            fake_ytdlp_script(&pidfile, &script);
+
+            let ct = tokio_util::sync::CancellationToken::new();
+            let cancel = ct.clone();
+            let canceller = tokio::spawn(async move {
+                tokio::time::sleep(Duration::from_millis(150)).await;
+                cancel.cancel();
+            });
+
+            let start = std::time::Instant::now();
+            let url = resolve_url(
+                &format!("fake-video-{}", std::process::id()),
+                script.to_str().expect("script path"),
+                None,
+                None,
+                None,
+                None,
+                Some(&ct),
+            )
+            .await;
+            let elapsed = start.elapsed();
+            let _ = canceller.await;
+
+            assert!(url.is_none(), "cancelled resolve must return None");
+            assert!(
+                elapsed < Duration::from_secs(5),
+                "cancel must return promptly, took {elapsed:?}"
+            );
+
+            let pid_str = std::fs::read_to_string(&pidfile).unwrap_or_default();
+            let pid: i32 = pid_str.trim().parse().unwrap_or(-1);
+            assert!(pid > 0, "pidfile should contain a pid, got {pid_str:?}");
+
+            let mut dead = false;
+            for _ in 0..40 {
+                let alive = std::process::Command::new("kill")
+                    .args(["-0", &pid.to_string()])
+                    .stderr(std::process::Stdio::null())
+                    .status()
+                    .expect("kill -0");
+                if !alive.success() {
+                    dead = true;
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(50)).await;
+            }
+            assert!(dead, "cancelled resolve child {pid} must be dead");
+
+            std::fs::remove_file(&script).ok();
+            std::fs::remove_file(&pidfile).ok();
+        });
+    }
 }
