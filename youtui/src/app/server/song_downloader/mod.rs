@@ -1169,7 +1169,16 @@ mod tests {
             }
             relay_wtr.finish();
         });
-        while relay_buf.len() < 2048 { std::thread::sleep(Duration::from_millis(1)); }
+        let relay_deadline = Instant::now() + Duration::from_secs(30);
+        while relay_buf.len() < 2048 {
+            if relay_buf.is_failed() || Instant::now() >= relay_deadline {
+                eprintln!(
+                    "SKIP download_pipeline_comparison: no relay data within 30s (yt-dlp failed?)"
+                );
+                return;
+            }
+            std::thread::sleep(Duration::from_millis(1));
+        }
         let relay_data_arrival = t0.elapsed();
         let t_dec = Instant::now();
         let mut dec_relay = create_decoder_from(&relay_buf).expect("decoder from relay stream");

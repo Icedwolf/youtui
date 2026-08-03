@@ -44,6 +44,10 @@ pub fn apply_ytdlp_auth_args(
     js_runtime: Option<&str>,
     video_id: &str,
 ) {
+    // Ignore yt-dlp's own config files (~/.config/yt-dlp/config etc). A
+    // zero-byte --cookies entry there hard-fails every download; youtui owns
+    // the full argument list and must not inherit broken host config.
+    cmd.arg("--ignore-config");
     let skip = "hls,translated_subs";
     let extractor_args = match po_token {
         Some(pt) => format!("youtube:po_token={pt};skip={skip}"),
@@ -133,7 +137,7 @@ pub async fn resolve_url(
 
 #[cfg(test)]
 mod tests {
-    use super::{is_nonempty_cookie_file, resolve_url};
+    use super::{apply_ytdlp_auth_args, is_nonempty_cookie_file, resolve_url};
     use std::time::Duration;
 
     fn fake_ytdlp_script(pidfile: &std::path::Path, script: &std::path::Path) {
@@ -225,5 +229,30 @@ mod tests {
 
         std::fs::remove_file(&empty).ok();
         std::fs::remove_file(&full).ok();
+    }
+
+    #[test]
+    fn ytdlp_args_always_ignore_global_config() {
+        use tokio::process::Command;
+        let mut cmd = Command::new("yt-dlp");
+        apply_ytdlp_auth_args(
+            &mut cmd,
+            Some("po"),
+            Some(std::path::Path::new("/nonexistent/cookies")),
+            Some("cookie=header"),
+            None,
+            "dQw4w9WgXcQ",
+        );
+        let args: Vec<String> = cmd
+            .as_std()
+            .get_args()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect();
+        // A stale/empty --cookies line in yt-dlp's own ~/.config must never
+        // cascade into our invocation.
+        assert!(
+            args.windows(2).any(|w| w[0] == "--ignore-config"),
+            "expected --ignore-config in args: {args:?}"
+        );
     }
 }
