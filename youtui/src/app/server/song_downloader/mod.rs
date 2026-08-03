@@ -192,6 +192,17 @@ fn is_permanently_unavailable(line: &str) -> bool {
             || line.contains("removed by the uploader"))
 }
 
+/// Classify a yt-dlp stderr line as an authentication/cookie problem: sign-in
+/// required, bot check, invalid cookies. These are a login/config issue, not a
+/// dead video — the song must be skipped and the user notified, never removed.
+fn is_auth_error_line(line: &str) -> bool {
+    let line = line.to_ascii_lowercase();
+    ["sign in", "not a bot", "authentication", "requires login", "signed-in", "http error 403"]
+        .iter()
+        .any(|needle| line.contains(needle))
+        || (line.contains("cookie") && line.contains("does not look like"))
+}
+
 fn spawn_stderr_handler(
     stderr: tokio::process::ChildStderr,
     cancel_token: tokio_util::sync::CancellationToken,
@@ -217,6 +228,8 @@ fn spawn_stderr_handler(
                     } else if line.contains("ERROR") {
                         if is_permanently_unavailable(&line) {
                             buffer.mark_dead_video();
+                        } else if is_auth_error_line(&line) {
+                            buffer.mark_auth_error();
                         }
                         warn!(stderr_line = %line.trim(), "yt-dlp stderr (error), failing buffer");
                         buffer.fail();
@@ -432,6 +445,10 @@ async fn ytdlp_pipeline(
                 debug!(%cfg.video_id, "Video unavailable (permanently dead), bailing early");
                 bail!("video unavailable (yt-dlp error)");
             }
+            if buffer.is_auth_error() {
+                warn!(%cfg.video_id, "Auth error before data arrived (stale cookies?), bailing early");
+                bail!("authentication error (stale cookies)");
+            }
             let reason = if from_url_cache { "ffmpeg" } else { "yt-dlp" };
             debug!(%cfg.video_id, elapsed = ?t0.elapsed(),
                 "{reason} failed before data arrived — bailing early");
@@ -530,6 +547,9 @@ async fn ytdlp_pipeline(
                 if buffer.is_failed() {
                     if buffer.is_dead_video() {
                         bail!("video unavailable (yt-dlp error)");
+                    }
+                    if buffer.is_auth_error() {
+                        bail!("authentication error (stale cookies)");
                     }
                     break None;
                 }
@@ -768,6 +788,30 @@ mod tests {
                 !is_permanently_unavailable(line),
                 "expected transient: {line}"
             );
+        }
+    }
+
+    #[test]
+    fn auth_error_classifier() {
+        let auth = [
+            "ERROR: [youtube] X: Sign in to confirm you're not a bot",
+            "ERROR: [youtube] X: Please sign in to view this content",
+            "ERROR: [youtube] X: This video is only available to signed-in users",
+            "ERROR: [youtube] X: HTTP Error 403: Forbidden",
+            "ERROR: '/home/.config/youtui/cookies_netscape.txt' does not look like a Netscape format cookies file",
+        ];
+        for line in auth {
+            assert!(is_auth_error_line(line), "expected auth error: {line}");
+        }
+
+        let not_auth = [
+            "ERROR: [youtube] NLkDhrzgrI8: Video unavailable. This video is not available",
+            "ERROR: [youtube] X: HTTP Error 429: Too Many Requests",
+            "ERROR: Requested format is not available",
+            "ERROR: [youtube] X: The uploader has not made this video available in your country",
+        ];
+        for line in not_auth {
+            assert!(!is_auth_error_line(line), "expected non-auth: {line}");
         }
     }
 

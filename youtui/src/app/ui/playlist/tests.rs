@@ -338,7 +338,8 @@ mod state_transitions {
         DownloadStatus, ListSong, ListSongID, ListStatus, Percentage, PlayState,
     };
     use crate::app::ui::playlist::{
-        DownloadProgressUpdate, Playlist, PlaylistAction, QueueState, is_dead_video_error,
+        DownloadProgressUpdate, Playlist, PlaylistAction, QueueState, is_auth_error,
+        is_dead_video_error,
     };
     use crate::app::view::HasTitle;
     use pretty_assertions::assert_eq;
@@ -439,6 +440,29 @@ mod state_transitions {
         assert!(is_dead_video_error("video unavailable (yt-dlp error)"));
         assert!(!is_dead_video_error("download cancelled"));
         assert!(!is_dead_video_error("HTTP Error 429: Too Many Requests"));
+    }
+
+    #[test]
+    fn auth_error_classifier() {
+        assert!(is_auth_error("authentication error (stale cookies)"));
+        assert!(!is_auth_error("video unavailable (yt-dlp error)"));
+        assert!(!is_auth_error("download cancelled"));
+        assert!(!is_auth_error("HTTP Error 429: Too Many Requests"));
+    }
+
+    #[test]
+    fn auth_error_skips_without_removing_song() {
+        let mut p = downloaded_songs(2);
+        p.set_notifications_enabled(false);
+        p.play_status = PlayState::Buffering(ListSongID(0));
+        let _effect = p.handle_song_download_progress_update(
+            DownloadProgressUpdate::Error("authentication error (stale cookies)".to_string()),
+            ListSongID(0),
+        );
+        // Auth failure skips playback but must never remove the song from the
+        // queue — it is a login problem, not a dead video.
+        assert_eq!(p.list.get_list_iter().count(), 2);
+        assert!(p.get_index_from_id(ListSongID(0)).is_some());
     }
 
     #[test]

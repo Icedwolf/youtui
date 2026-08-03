@@ -59,6 +59,17 @@ fn is_dead_video_error(msg: &str) -> bool {
     msg.starts_with("video unavailable")
 }
 
+/// True when a download failed because of an authentication/cookie problem
+/// (stale login, winter bot check). Such failures must notify the user and
+/// skip the song — they are a config/login issue, never a reason to remove it.
+fn is_auth_error(msg: &str) -> bool {
+    msg.starts_with("authentication error")
+}
+
+/// Cooldown between auth-error notifications so a queue of failed songs does
+/// not spam one popup per song.
+const AUTH_ERROR_NOTIF_COOLDOWN: Duration = Duration::from_secs(30);
+
 pub enum DownloadProgressUpdate {
     Downloading,
     Completed(Box<dyn Source<Item = f32> + Send + 'static>),
@@ -113,6 +124,7 @@ pub struct Playlist {
     resolve_remaining: usize,
     cached_title: RefCell<Option<Line<'static>>>,
     notifications_enabled: bool,
+    auth_notif_last: Option<std::time::Instant>,
 }
 
 impl Component for Playlist {}

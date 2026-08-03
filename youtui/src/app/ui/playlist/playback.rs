@@ -63,6 +63,7 @@ impl Playlist {
             resolve_remaining: 0,
             cached_title: RefCell::new(None),
             notifications_enabled: true,
+            auth_notif_last: None,
         };
 
         (playlist, task)
@@ -70,6 +71,37 @@ impl Playlist {
 
     pub fn set_notifications_enabled(&mut self, enabled: bool) {
         self.notifications_enabled = enabled;
+    }
+
+    /// Notify the user that songs are being skipped due to a stale YouTube
+    /// login, debounced by `AUTH_ERROR_NOTIF_COOLDOWN` so a queue of failed
+    /// songs produces one popup, not one per song.
+    fn notify_auth_error(&mut self) {
+        let now = std::time::Instant::now();
+        if let Some(last) = self.auth_notif_last
+            && now.duration_since(last) < AUTH_ERROR_NOTIF_COOLDOWN
+        {
+            return;
+        }
+        self.auth_notif_last = Some(now);
+        if !self.notifications_enabled {
+            return;
+        }
+        if let Ok(rt) = tokio::runtime::Handle::try_current() {
+            drop(rt.spawn(async move {
+                let body = "Your YouTube login looks stale and songs are being skipped. \
+Re-log into your browser, or refresh your cookie file, then restart.";
+                if let Err(e) = Notification::new()
+                    .summary("YouTube Authentication Issue")
+                    .body(body)
+                    .appname("youtui")
+                    .timeout(Timeout::Milliseconds(8000))
+                    .show()
+                {
+                    debug!("auth notification failed: {e}");
+                }
+            }));
+        }
     }
 
     pub fn volume(&self) -> Percentage {
@@ -1387,6 +1419,9 @@ impl Playlist {
                         debug!("download failed while buffering, skipping: {}", e);
                     } else {
                         warn!("download failed while buffering, skipping: {}", e);
+                        if is_auth_error(&e) {
+                            self.notify_auth_error();
+                        }
                     }
                     let is_dead = is_dead_video_error(&e);
                     effect = effect.push(self.handle_set_to_error(id));

@@ -6,6 +6,7 @@ struct SharedBufferInner {
     finished: bool,
     failed: bool,
     dead_video: bool,
+    auth_error: bool,
     total_len: Option<u64>,
     state: BufferState,
 }
@@ -43,6 +44,7 @@ impl SharedBuffer {
                 finished: false,
                 failed: false,
                 dead_video: false,
+                auth_error: false,
                 total_len: None,
                 state: BufferState::Partial(Vec::with_capacity(cap)),
             }),
@@ -110,6 +112,20 @@ impl SharedBuffer {
     pub fn mark_dead_video(&self) {
         let mut guard = self.inner.lock().unwrap_or_warn();
         guard.dead_video = true;
+    }
+
+    /// True when yt-dlp reported an authentication/cookie problem (Sign in
+    /// required, bot check, invalid cookies) rather than a dead video or a
+    /// generic transient error. Distinct from `is_dead_video`: auth failures
+    /// must never auto-remove the song — they are a config/login problem.
+    #[must_use]
+    pub fn is_auth_error(&self) -> bool {
+        self.inner.lock().unwrap_or_warn().auth_error
+    }
+
+    pub fn mark_auth_error(&self) {
+        let mut guard = self.inner.lock().unwrap_or_warn();
+        guard.auth_error = true;
     }
 
     pub fn fail(&self) {
