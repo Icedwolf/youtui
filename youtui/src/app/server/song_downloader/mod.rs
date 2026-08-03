@@ -195,7 +195,7 @@ fn is_permanently_unavailable(line: &str) -> bool {
 /// Classify a yt-dlp stderr line as an authentication/cookie problem: sign-in
 /// required, bot check, invalid cookies. These are a login/config issue, not a
 /// dead video — the song must be skipped and the user notified, never removed.
-fn is_auth_error_line(line: &str) -> bool {
+pub(crate) fn is_auth_error_line(line: &str) -> bool {
     let line = line.to_ascii_lowercase();
     ["sign in", "not a bot", "authentication", "requires login", "signed-in", "http error 403"]
         .iter()
@@ -668,10 +668,18 @@ pub async fn download_and_decode(cfg: DownloadConfig) -> anyhow::Result<Symphoni
     }
 
     let ffmpeg_avail = check_ffmpeg();
-    let cached_url = resolve_url(
+    let cached_url = match resolve_url(
         &cfg.video_id, &cfg.yt_dlp_command, cfg.po_token.as_deref(), cfg.cookie_path.as_deref(), cfg.cookie_header.as_deref(), cfg.js_runtime.as_deref(),
         Some(&cfg.cancel_token),
-    ).await;
+    ).await {
+        resolve::ResolveOutcome::Url(url) => Some(url),
+        resolve::ResolveOutcome::AuthError(line) => {
+            warn!(%cfg.video_id, error_line = %line,
+                "resolve failed with an auth error — failing fast, skipping redundant download");
+            anyhow::bail!("authentication error (stale cookies): {line}");
+        }
+        resolve::ResolveOutcome::Failed => None,
+    };
 
     if cfg.cancel_token.is_cancelled() {
         anyhow::bail!("download cancelled before semaphore");

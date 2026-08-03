@@ -75,8 +75,9 @@ impl Playlist {
 
     /// Notify the user that songs are being skipped due to a stale YouTube
     /// login, debounced by `AUTH_ERROR_NOTIF_COOLDOWN` so a queue of failed
-    /// songs produces one popup, not one per song.
-    fn notify_auth_error(&mut self) {
+    /// songs produces one popup, not one per song. `detail` is the underlying
+    /// yt-dlp error line, used to make the message diagnosable.
+    fn notify_auth_error(&mut self, detail: &str) {
         let now = std::time::Instant::now();
         if let Some(last) = self.auth_notif_last
             && now.duration_since(last) < AUTH_ERROR_NOTIF_COOLDOWN
@@ -87,13 +88,16 @@ impl Playlist {
         if !self.notifications_enabled {
             return;
         }
+        let clipped: String = detail.chars().take(200).collect();
+        let body = format!(
+            "{clipped} — your YouTube login looks stale and songs are being skipped. \
+Re-log into your browser, or refresh your cookie file, then restart."
+        );
         if let Ok(rt) = tokio::runtime::Handle::try_current() {
             drop(rt.spawn(async move {
-                let body = "Your YouTube login looks stale and songs are being skipped. \
-Re-log into your browser, or refresh your cookie file, then restart.";
                 if let Err(e) = Notification::new()
                     .summary("YouTube Authentication Issue")
-                    .body(body)
+                    .body(&body)
                     .appname("youtui")
                     .timeout(Timeout::Milliseconds(8000))
                     .show()
@@ -1420,7 +1424,7 @@ impl Playlist {
                     } else {
                         warn!("download failed while buffering, skipping: {}", e);
                         if is_auth_error(&e) {
-                            self.notify_auth_error();
+                            self.notify_auth_error(&e);
                         }
                     }
                     let is_dead = is_dead_video_error(&e);

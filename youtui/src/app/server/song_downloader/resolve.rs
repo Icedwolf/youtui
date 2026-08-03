@@ -26,6 +26,19 @@ fn url_cache_put(video_id: String, url: String) {
     cache.insert(video_id, (url, Instant::now()));
 }
 
+/// Outcome of a URL pre-resolution. Distinct from a shared Option so the
+/// caller can fail fast (skip the redundant download) and surface a
+/// diagnosable message when yt-dlp reports an authentication/cookie error.
+#[derive(Debug, PartialEq)]
+pub enum ResolveOutcome {
+    Url(String),
+    /// Authentication/cookie failure; carries the offending yt-dlp stderr
+    /// line for a user-facing notification.
+    AuthError(String),
+    /// Any other failure: cancellation, dead video, network, unavailable format.
+    Failed,
+}
+
 /// True only if `path` points to an existing, non-empty regular file. Passing a
 /// zero-byte (or absent) cookie file to yt-dlp aborts the whole download, so we
 /// treat such a file as "no auth" rather than as a hard failure.
@@ -80,13 +93,13 @@ pub async fn resolve_url(
     cookie_header: Option<&str>,
     js_runtime: Option<&str>,
     cancel_token: Option<&tokio_util::sync::CancellationToken>,
-) -> Option<String> {
+) -> ResolveOutcome {
     if let Some(url) = url_cache_get(video_id) {
-        return Some(url);
+        return ResolveOutcome::Url(url);
     }
 
     if let Some(ct) = cancel_token && ct.is_cancelled() {
-        return None;
+        return ResolveOutcome::Failed;
     }
 
     let cmd_name = if yt_dlp_cmd.is_empty() { "yt-dlp" } else { yt_dlp_cmd };
@@ -96,54 +109,71 @@ pub async fn resolve_url(
     cmd.arg("--no-warnings").arg("--no-playlist");
     apply_ytdlp_auth_args(&mut cmd, po_token, cookie_path, cookie_header, js_runtime, video_id);
     cmd.stdout(std::process::Stdio::piped());
-    cmd.stderr(std::process::Stdio::null());
+    cmd.stderr(std::process::Stdio::piped());
     // kill_on_drop + child owned by the `resolve` future: when cancellation wins
     // the select!, the future is dropped and the child is killed. Without this,
     // a cancelled resolve left an orphan yt-dlp running for its full duration.
     cmd.kill_on_drop(true);
     let child = match cmd.spawn() {
         Ok(child) => child,
-        Err(_) => return None,
+        Err(_) => return ResolveOutcome::Failed,
     };
 
     let resolve = async {
         let output = child.wait_with_output().await.ok()?;
         if !output.status.success() {
-            return None;
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            if let Some(line) = stderr.lines().find(|l| super::is_auth_error_line(l)) {
+                return Some(ResolveOutcome::AuthError(line.trim().to_string()));
+            }
+            return Some(ResolveOutcome::Failed);
         }
         let url = String::from_utf8(output.stdout).ok()?;
         let url = url.trim().to_string();
         if url.is_empty() {
-            return None;
+            return Some(ResolveOutcome::Failed);
         }
-        Some(url)
+        Some(ResolveOutcome::Url(url))
     };
 
-    let url = if let Some(ct) = cancel_token {
+    let outcome = if let Some(ct) = cancel_token {
         tokio::select! {
             biased;
-            _ = ct.cancelled() => None,
-            url = resolve => url,
+            _ = ct.cancelled() => ResolveOutcome::Failed,
+            outcome = resolve => outcome.unwrap_or(ResolveOutcome::Failed),
         }
     } else {
-        resolve.await
+        resolve.await.unwrap_or(ResolveOutcome::Failed)
     };
 
-    if let Some(ref url) = url {
+    if let ResolveOutcome::Url(ref url) = outcome {
         url_cache_put(video_id.to_string(), url.clone());
     }
-    url
+    outcome
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{apply_ytdlp_auth_args, is_nonempty_cookie_file, resolve_url};
+    use super::{ResolveOutcome, apply_ytdlp_auth_args, is_nonempty_cookie_file, resolve_url};
     use std::time::Duration;
 
     fn fake_ytdlp_script(pidfile: &std::path::Path, script: &std::path::Path) {
         use std::os::unix::fs::PermissionsExt;
         std::fs::write(script, format!("#!/bin/sh\necho $$ > '{}'\nsleep 30\n", pidfile.display()))
             .expect("write fake yt-dlp script");
+        std::fs::set_permissions(script, std::fs::Permissions::from_mode(0o755))
+            .expect("chmod fake yt-dlp script");
+    }
+
+    fn fake_fail_script(script: &std::path::Path, stderr_line: &str) {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::write(
+            script,
+            format!(
+                "#!/bin/sh\ncat >&2 <<'YOUTUIEOF'\n{stderr_line}\nYOUTUIEOF\nexit 1\n"
+            ),
+        )
+        .expect("write failing fake yt-dlp script");
         std::fs::set_permissions(script, std::fs::Permissions::from_mode(0o755))
             .expect("chmod fake yt-dlp script");
     }
@@ -185,7 +215,7 @@ mod tests {
             let elapsed = start.elapsed();
             let _ = canceller.await;
 
-            assert!(url.is_none(), "cancelled resolve must return None");
+            assert!(matches!(url, ResolveOutcome::Failed), "cancelled resolve must be Failed");
             assert!(
                 elapsed < Duration::from_secs(5),
                 "cancel must return promptly, took {elapsed:?}"
@@ -254,5 +284,93 @@ mod tests {
             args.windows(2).any(|w| w[0] == "--ignore-config"),
             "expected --ignore-config in args: {args:?}"
         );
+    }
+
+    #[test]
+    fn resolve_auth_error_reported() {
+        let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
+        rt.block_on(async {
+            let script = unique_tmp("fake_ytdlp_auth");
+            fake_fail_script(
+                &script,
+                "ERROR: [youtube] X: Sign in to confirm you're not a bot",
+            );
+            let outcome = resolve_url(
+                "auth-video",
+                script.to_str().expect("script path"),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await;
+            let ResolveOutcome::AuthError(line) = outcome else {
+                panic!("expected AuthError, got {outcome:?}");
+            };
+            assert!(
+                line.contains("not a bot"),
+                "must carry the offending stderr line, got: {line}"
+            );
+            std::fs::remove_file(&script).ok();
+        });
+    }
+
+    #[test]
+    fn resolve_non_auth_failure_is_failed() {
+        let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
+        rt.block_on(async {
+            let script = unique_tmp("youtui_resolve_failed");
+            fake_fail_script(
+                &script,
+                "ERROR: [youtube] X: HTTP Error 429: Too Many Requests",
+            );
+            let outcome = resolve_url(
+                "fail-video",
+                script.to_str().expect("script path"),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await;
+            assert!(
+                matches!(outcome, ResolveOutcome::Failed),
+                "non-auth failure must be Failed, got {outcome:?}"
+            );
+            std::fs::remove_file(&script).ok();
+        });
+    }
+
+    #[test]
+    fn resolve_success_returns_url() {
+        let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
+        rt.block_on(async {
+            let script = unique_tmp("youtui_resolve_ok");
+            std::fs::write(
+                &script,
+                "#!/bin/sh\necho 'https://example.com/stream'\nexit 0\n",
+            )
+            .expect("write succeeding fake yt-dlp script");
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755))
+                .expect("chmod fake yt-dlp script");
+            let outcome = resolve_url(
+                "ok-video",
+                script.to_str().expect("script path"),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await;
+            assert_eq!(
+                outcome,
+                ResolveOutcome::Url("https://example.com/stream".to_string())
+            );
+            std::fs::remove_file(&script).ok();
+        });
     }
 }
