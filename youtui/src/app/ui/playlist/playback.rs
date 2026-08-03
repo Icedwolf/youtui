@@ -1031,6 +1031,13 @@ impl Playlist {
                 build_visual_map(&self.shuffle_indices, self.list.get_list_iter().count());
         }
 
+        if self.list.get_list_iter().len() == 0 {
+            self.play_status = PlayState::NotPlaying;
+            self.queue_status = QueueState::NotQueued;
+            self.preloaded_sources.clear();
+            debug!("Removed the only remaining song — stopped playback");
+        }
+
         debug!("Removed permanently unavailable song id={:?}", id);
     }
 

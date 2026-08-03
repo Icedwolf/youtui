@@ -338,7 +338,7 @@ mod state_transitions {
         DownloadStatus, ListSong, ListSongID, ListStatus, Percentage, PlayState,
     };
     use crate::app::ui::playlist::{
-        DownloadProgressUpdate, Playlist, PlaylistAction, is_dead_video_error,
+        DownloadProgressUpdate, Playlist, PlaylistAction, QueueState, is_dead_video_error,
     };
     use crate::app::view::HasTitle;
     use pretty_assertions::assert_eq;
@@ -402,6 +402,22 @@ mod state_transitions {
             p.list.get_list_iter().next().unwrap().download_status,
             DownloadStatus::Queued
         );
+    }
+
+    #[test]
+    fn single_dead_song_stops_cleanly() {
+        let mut p = downloaded_songs(1);
+        p.set_notifications_enabled(false);
+        p.play_status = PlayState::Buffering(ListSongID(0));
+        let _effect = p.handle_song_download_progress_update(
+            DownloadProgressUpdate::Error("video unavailable (yt-dlp error)".to_string()),
+            ListSongID(0),
+        );
+        // Only song removed; playback must stop, not dangle in Buffering.
+        assert_eq!(p.list.get_list_iter().count(), 0);
+        assert_eq!(p.get_index_from_id(ListSongID(0)), None);
+        assert_eq!(p.play_status, PlayState::NotPlaying);
+        assert_eq!(p.queue_status, QueueState::NotQueued);
     }
 
     #[test]
