@@ -29,7 +29,7 @@ fn url_cache_put(video_id: String, url: String) {
 /// True only if `path` points to an existing, non-empty regular file. Passing a
 /// zero-byte (or absent) cookie file to yt-dlp aborts the whole download, so we
 /// treat such a file as "no auth" rather than as a hard failure.
-fn is_nonempty_cookie_file(path: &Path) -> bool {
+pub(crate) fn is_nonempty_cookie_file(path: &Path) -> bool {
     match std::fs::metadata(path) {
         Ok(md) => md.is_file() && md.len() > 0,
         Err(_) => false,

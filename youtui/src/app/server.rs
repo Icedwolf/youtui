@@ -1,5 +1,6 @@
 use crate::config::Config;
-use std::path::PathBuf;
+use self::song_downloader::resolve::is_nonempty_cookie_file;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tracing::warn;
 
@@ -28,7 +29,7 @@ impl Server {
         cookie_path: Option<PathBuf>,
         js_runtime: Option<String>,
     ) -> anyhow::Result<Server> {
-        let cookie_header = extract_cookie_header(&api_key);
+        let cookie_header = resolve_cookie_header(cookie_path.as_deref(), &api_key);
         let downloader_client = {
             use reqwest::header::{COOKIE, HeaderMap, HeaderValue};
             if let Some(ref cookie) = cookie_header {
@@ -76,37 +77,56 @@ fn new_reqwest_client_builder() -> reqwest::ClientBuilder {
 
 fn extract_cookie_header(api_key: &crate::config::ApiKey) -> Option<String> {
     match api_key {
-        crate::config::ApiKey::BrowserToken(cookie_str) => {
-            let mut cookies: Vec<String> = Vec::new();
-            for line in cookie_str.lines() {
-                let line = line.trim();
-                if line.starts_with('#') || line.is_empty() {
-                    continue;
-                }
-                let fields: Vec<&str> = line.split('\t').collect();
-                if fields.len() >= 7 {
-                    cookies.push(format!("{}={}", fields[5], fields[6]));
-                } else {
-                    let header = line.strip_prefix("Cookie:").unwrap_or(line).trim();
-                    for kv in header.split(';') {
-                        let kv = kv.trim();
-                        if let Some((name, value)) = kv.split_once('=') {
-                            let name = name.trim();
-                            let value = value.trim();
-                            if !name.is_empty() && !value.is_empty() {
-                                cookies.push(format!("{name}={value}"));
-                            }
-                        }
+        crate::config::ApiKey::BrowserToken(cookie_str) => extract_cookie_header_str(cookie_str),
+        _ => None,
+    }
+}
+
+/// Resolve the API's `Cookie` header from a single unified auth source. A
+/// non-empty exported browser cookie file wins (it is the freshest token); any
+/// other case falls back to the manual `api_key` header so auth degrades
+/// gracefully instead of vanishing when the export is stale or empty.
+fn resolve_cookie_header(
+    cookie_path: Option<&Path>,
+    api_key: &crate::config::ApiKey,
+) -> Option<String> {
+    if let Some(cp) = cookie_path.filter(|cp| is_nonempty_cookie_file(cp))
+        && let Ok(content) = std::fs::read_to_string(cp)
+        && let Some(header) = extract_cookie_header_str(&content)
+    {
+        return Some(header);
+    }
+    extract_cookie_header(api_key)
+}
+
+fn extract_cookie_header_str(cookie_str: &str) -> Option<String> {
+    let mut cookies: Vec<String> = Vec::new();
+    for line in cookie_str.lines() {
+        let line = line.trim();
+        if line.starts_with('#') || line.is_empty() {
+            continue;
+        }
+        let fields: Vec<&str> = line.split('\t').collect();
+        if fields.len() >= 7 {
+            cookies.push(format!("{}={}", fields[5], fields[6]));
+        } else {
+            let header = line.strip_prefix("Cookie:").unwrap_or(line).trim();
+            for kv in header.split(';') {
+                let kv = kv.trim();
+                if let Some((name, value)) = kv.split_once('=') {
+                    let name = name.trim();
+                    let value = value.trim();
+                    if !name.is_empty() && !value.is_empty() {
+                        cookies.push(format!("{name}={value}"));
                     }
                 }
             }
-            if cookies.is_empty() {
-                None
-            } else {
-                Some(cookies.join("; "))
-            }
         }
-        _ => None,
+    }
+    if cookies.is_empty() {
+        None
+    } else {
+        Some(cookies.join("; "))
     }
 }
 
@@ -213,5 +233,31 @@ Cookie: SAPISID=from_header";
         let header = result.unwrap();
         assert!(header.contains("SAPISID=from_netscape"));
         assert!(header.contains("SAPISID=from_header"));
+    }
+
+    #[test]
+    fn exported_cookie_file_preferred_over_api_key() {
+        let path = std::env::temp_dir().join(format!("youtui_cookie_hdr_{}.txt", std::process::id()));
+        std::fs::write(&path, ".youtube.com\tTRUE\t/\tTRUE\t1735689600\tSAPISID\tfrom_export\n")
+            .expect("write exported cookies");
+        let api_key = ApiKey::BrowserToken("SAPISID=from_manual".into());
+
+        // Non-empty exported file must win over the manual api_key header.
+        let header = resolve_cookie_header(Some(&path), &api_key).unwrap();
+        assert!(header.contains("SAPISID=from_export"), "exported cookies must win");
+
+        // Empty export -> fall back to the manual header.
+        std::fs::write(&path, b"").expect("write empty cookies");
+        let header = resolve_cookie_header(Some(&path), &api_key).unwrap();
+        assert!(header.contains("SAPISID=from_manual"), "empty export must fall back");
+
+        // Missing export -> fall back to the manual header.
+        let missing = std::env::temp_dir().join("youtui_missing_cookie_hdr.txt");
+        let _ = std::fs::remove_file(&missing);
+        let header = resolve_cookie_header(Some(&missing), &api_key).unwrap();
+        assert!(header.contains("SAPISID=from_manual"), "missing export must fall back");
+
+        std::fs::remove_file(&path).ok();
+        std::fs::remove_file(&missing).ok();
     }
 }

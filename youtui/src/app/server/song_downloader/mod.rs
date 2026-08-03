@@ -1,5 +1,5 @@
 mod cache;
-mod resolve;
+pub(crate) mod resolve;
 
 pub use cache::{cache_clear, create_decoder_from_cache, set_cache_max_entries};
 pub use resolve::resolve_url;
@@ -1139,7 +1139,15 @@ mod tests {
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::null());
-        let mut ff_child = ffmpeg.spawn().expect("spawn ffmpeg for relay test");
+        let mut ff_child = match ffmpeg.spawn() {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!("SKIP: cannot spawn ffmpeg for relay test: {e}");
+                let _ = yt_child.kill();
+                let _ = yt_child.wait();
+                return;
+            }
+        };
         let mut ff_stdin = ff_child.stdin.take().expect("ffmpeg stdin");
         let ff_stdout = ff_child.stdout.take().expect("ffmpeg stdout");
         let _ff_spawn_dur = t0.elapsed();
@@ -1175,6 +1183,10 @@ mod tests {
                 eprintln!(
                     "SKIP download_pipeline_comparison: no relay data within 30s (yt-dlp failed?)"
                 );
+                let _ = yt_child.kill();
+                let _ = ff_child.kill();
+                let _ = yt_child.wait();
+                let _ = ff_child.wait();
                 return;
             }
             std::thread::sleep(Duration::from_millis(1));

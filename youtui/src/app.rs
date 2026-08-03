@@ -19,7 +19,9 @@ use server::Server;
 use std::borrow::Cow;
 use std::fmt::Display;
 use std::io;
+use std::path::Path;
 use std::sync::Arc;
+use std::time::{Duration, SystemTime};
 use server::song_downloader;
 use structures::ListSong;
 use tracing::{debug, error, info, warn};
@@ -130,21 +132,9 @@ impl Youtui {
         let (cookie_path, did_export) = if let Some(browser) = detect_browser_source() {
             let mut cp = get_config_dir()?;
             cp.push(COOKIE_NETSCAPE_FILENAME);
-            let exported = if !cp.exists() {
+            let exported = if cookie_export_needed(&cp) {
                 debug!(browser = %browser, path = %cp.display(), "Exporting cookies from browser");
-                let export_ok = std::process::Command::new("yt-dlp")
-                    .args(["--cookies-from-browser", &browser, "--cookies"])
-                    .arg(&cp)
-                    .stdout(std::process::Stdio::null())
-                    .stderr(std::process::Stdio::null())
-                    .status()
-                    .is_ok();
-                if export_ok {
-                    info!("Exported cookies to {}", cp.display());
-                } else {
-                    warn!("Failed to export cookies from {browser}");
-                }
-                export_ok
+                export_browser_cookies(&browser, &cp)
             } else {
                 false
             };
@@ -386,4 +376,96 @@ async fn init_tracing(debug: bool, logging: bool) -> Result<()> {
             .init();
     }
     Ok(())
+}
+
+/// How long a browser cookie export is trusted before being refreshed. 7 days
+/// covers the common "works fine for a week, then songs skip" failure: the
+/// export is still present and non-empty, but the tokens it holds have been
+/// rotated or throttled by YouTube.
+const COOKIE_EXPORT_TTL: Duration = Duration::from_secs(7 * 24 * 60 * 60);
+
+/// True when the exported Netscape cookie file should be regenerated: it is
+/// missing, empty (the historical 0-byte export trap), or older than
+/// `COOKIE_EXPORT_TTL`. Self-heals a stale export on every startup.
+fn cookie_export_needed(path: &Path) -> bool {
+    let Ok(meta) = std::fs::metadata(path) else {
+        return true;
+    };
+    if meta.len() == 0 {
+        return true;
+    }
+    let Ok(modified) = meta.modified() else {
+        return true;
+    };
+    SystemTime::now()
+        .duration_since(modified)
+        .map_or(true, |age| age > COOKIE_EXPORT_TTL)
+}
+
+/// Export the browser's cookies to a Netscape file, reusing yt-dlp. Returns
+/// false (and warns) on any failure — a silent failed export is what left a
+/// 0-byte file that disabled downloads for weeks.
+fn export_browser_cookies(browser: &str, dest: &Path) -> bool {
+    let ok = std::process::Command::new("yt-dlp")
+        .args(["--ignore-config", "--cookies-from-browser", browser, "--cookies"])
+        .arg(dest)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
+        && std::fs::metadata(dest).map(|m| m.len() > 0).unwrap_or(false);
+    if ok {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = match std::fs::metadata(dest) {
+            Ok(m) => m.permissions(),
+            Err(_) => std::fs::Permissions::from_mode(0o600),
+        };
+        perms.set_mode(0o600);
+        let _ = std::fs::set_permissions(dest, perms);
+        info!("Exported cookies to {}", dest.display());
+    } else {
+        warn!("Failed to export cookies from {browser} to {}", dest.display());
+    }
+    ok
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cookie_export_needed_missing_is_true() {
+        let missing = std::env::temp_dir().join("youtui_export_missing.txt");
+        let _ = std::fs::remove_file(&missing);
+        assert!(cookie_export_needed(&missing));
+    }
+
+    #[test]
+    fn cookie_export_needed_empty_is_true() {
+        let path = std::env::temp_dir().join("youtui_export_empty.txt");
+        std::fs::write(&path, b"").unwrap();
+        assert!(cookie_export_needed(&path));
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn cookie_export_needed_fresh_is_false() {
+        let path = std::env::temp_dir().join("youtui_export_fresh.txt");
+        std::fs::write(&path, b".youtube.com\tTRUE\t/\tTRUE\t1735689600\tSAPISID\tabc\n").unwrap();
+        assert!(!cookie_export_needed(&path));
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn cookie_export_needed_old_mtime_is_true() {
+        let path = std::env::temp_dir().join("youtui_export_old.txt");
+        std::fs::write(&path, b".youtube.com\tTRUE\t/\tTRUE\t1735689600\tSAPISID\tabc\n").unwrap();
+        let old = std::time::SystemTime::now()
+            - Duration::from_secs(COOKIE_EXPORT_TTL.as_secs() + 3600);
+        let f = std::fs::File::open(&path).unwrap();
+        f.set_times(std::fs::FileTimes::new().set_modified(old)).unwrap();
+        assert!(cookie_export_needed(&path));
+        std::fs::remove_file(&path).ok();
+    }
 }
