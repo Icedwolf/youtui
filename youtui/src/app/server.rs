@@ -82,10 +82,31 @@ fn extract_cookie_header(api_key: &crate::config::ApiKey) -> Option<String> {
     }
 }
 
+/// Cookie names that mark a genuinely signed-in YouTube session. Guest
+/// exports carry only `VISITOR_INFO1_LIVE`/`__Secure-YEC` etc., which are not
+/// enough for authenticated API calls — an export without one of these must
+/// not shadow the manual login header.
+const AUTH_COOKIE_NAMES: [&str; 6] = [
+    "SID",
+    "__Secure-1PSID",
+    "__Secure-3PSID",
+    "SAPISID",
+    "APISID",
+    "__Secure-3PAPISID",
+];
+
+fn has_auth_cookie(header: &str) -> bool {
+    header.split(';').any(|seg| {
+        let name = seg.trim().split('=').next().unwrap_or_default();
+        AUTH_COOKIE_NAMES.contains(&name)
+    })
+}
+
 /// Resolve the API's `Cookie` header from a single unified auth source. A
-/// non-empty exported browser cookie file wins (it is the freshest token); any
-/// other case falls back to the manual `api_key` header so auth degrades
-/// gracefully instead of vanishing when the export is stale or empty.
+/// non-empty exported browser cookie file wins only if it carries a signed-in
+/// session (`has_auth_cookie`); any other case falls back to the manual
+/// `api_key` header so auth degrades gracefully instead of vanishing when the
+/// export is stale, empty, or holds only guest cookies.
 fn resolve_cookie_header(
     cookie_path: Option<&Path>,
     api_key: &crate::config::ApiKey,
@@ -93,6 +114,7 @@ fn resolve_cookie_header(
     if let Some(cp) = cookie_path.filter(|cp| is_nonempty_cookie_file(cp))
         && let Ok(content) = std::fs::read_to_string(cp)
         && let Some(header) = extract_cookie_header_str(&content)
+        && has_auth_cookie(&header)
     {
         return Some(header);
     }
@@ -259,5 +281,27 @@ Cookie: SAPISID=from_header";
 
         std::fs::remove_file(&path).ok();
         std::fs::remove_file(&missing).ok();
+    }
+
+    #[test]
+    fn exported_guest_cookies_fall_back_to_manual() {
+        let path = std::env::temp_dir().join(format!("youtui_cookie_guest_{}.txt", std::process::id()));
+        // Guest-only cookies: no SID/APISID family -> not a real login.
+        std::fs::write(
+            &path,
+            ".youtube.com\tTRUE\t/\tTRUE\t1735689600\tVISITOR_INFO1_LIVE\txyz\n",
+        )
+        .expect("write guest cookies");
+        let api_key = ApiKey::BrowserToken("SAPISID=from_manual".into());
+        let header = resolve_cookie_header(Some(&path), &api_key).unwrap();
+        assert!(
+            header.contains("from_manual"),
+            "guest-only export must fall back to the manual login header"
+        );
+        assert!(
+            !header.contains("VISITOR_INFO1_LIVE"),
+            "guest cookies must not win over the manual login"
+        );
+        std::fs::remove_file(&path).ok();
     }
 }
