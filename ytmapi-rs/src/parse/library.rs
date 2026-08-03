@@ -1,20 +1,20 @@
 use super::{
     BADGE_LABEL, CONTINUATION_PARAMS, GRID_CONTINUATION, MENU_LIKE_STATUS,
     MUSIC_SHELF_CONTINUATION, ParseFrom, ParsedPodcastChannel, ProcessedResult, SUBTITLE,
-    SUBTITLE_BADGE_LABEL, SUBTITLE2, SUBTITLE3, SearchResultAlbum, THUMBNAILS, TableListSong,
+    SUBTITLE_BADGE_LABEL, SUBTITLE2, SUBTITLE3, SearchResultAlbum, TableListSong,
     fixed_column_item_pointer, parse_flex_column_item, parse_library_management_items_from_menu,
     parse_podcast_channel,
 };
 use crate::Result;
 use crate::common::{
     ApiOutcome, ArtistChannelID, ContinuationParams, Explicit, PlaylistID, PodcastChannelID,
-    PodcastID, Thumbnail,
+    PodcastID,
 };
 use crate::continuations::ParseFromContinuable;
 use crate::nav_consts::{
     GRID, ITEM_SECTION, MENU_ITEMS, MRLIR, MTRIR, MUSIC_SHELF, NAVIGATION_BROWSE_ID,
     NAVIGATION_PLAYLIST_ID, PLAY_BUTTON, SECTION_LIST, SECTION_LIST_ITEM, SINGLE_COLUMN_TAB,
-    SUBTITLE_BADGE_ICON, THUMBNAIL_RENDERER, TITLE, TITLE_TEXT, WATCH_VIDEO_ID,
+    SUBTITLE_BADGE_ICON, TITLE, TITLE_TEXT, WATCH_VIDEO_ID,
 };
 use crate::query::library::{GetLibraryChannelsQuery, GetLibraryPodcastsQuery};
 use crate::query::{
@@ -34,7 +34,6 @@ pub struct GetLibraryArtistSubscription {
     pub name: String,
     pub subscribers: String,
     pub channel_id: ArtistChannelID<'static>,
-    pub thumbnails: Vec<Thumbnail>,
 }
 
 #[derive(PartialEq, Debug, Clone, Deserialize, Serialize)]
@@ -44,7 +43,6 @@ pub struct LibraryArtistSubscription {
     pub name: String,
     pub subscribers: String,
     pub channel_id: ArtistChannelID<'static>,
-    pub thumbnails: Vec<Thumbnail>,
 }
 
 #[derive(PartialEq, Debug, Clone, Deserialize, Serialize)]
@@ -52,7 +50,6 @@ pub struct LibraryArtistSubscription {
 pub struct LibraryPlaylist {
     pub playlist_id: PlaylistID<'static>,
     pub title: String,
-    pub thumbnails: Vec<Thumbnail>,
     pub tracks: String,
     pub author: String,
     // Authoer may be YouTube Music in some cases - no ChannelID
@@ -71,7 +68,6 @@ pub struct LibraryPodcast {
     pub title: String,
     pub channels: Vec<ParsedPodcastChannel>,
     pub podcast_id: PodcastID<'static>,
-    pub thumbnails: Vec<Thumbnail>,
     pub podcast_source: PodcastSource,
 }
 #[derive(PartialEq, Debug, Clone, Deserialize, Serialize)]
@@ -80,7 +76,6 @@ pub struct LibraryChannel {
     pub title: String,
     pub subscribers: String,
     pub channel_id: PodcastChannelID<'static>,
-    pub thumbnails: Vec<Thumbnail>,
 }
 
 #[derive(PartialEq, Debug, Clone, Deserialize, Serialize)]
@@ -374,7 +369,6 @@ fn process_library_contents_music_shelf(
 fn parse_item_list_album(mut json_crawler: JsonCrawlerOwned) -> Result<SearchResultAlbum> {
     let mut data = json_crawler.borrow_pointer("/musicTwoRowItemRenderer")?;
     let browse_id = data.take_value_pointer(NAVIGATION_BROWSE_ID)?;
-    let thumbnails = data.take_value_pointer(THUMBNAIL_RENDERER)?;
     let title = data.take_value_pointer(TITLE_TEXT)?;
     let artist = data.take_value_pointer(SUBTITLE2)?;
     let year = data.take_value_pointer(SUBTITLE3)?;
@@ -391,7 +385,6 @@ fn parse_item_list_album(mut json_crawler: JsonCrawlerOwned) -> Result<SearchRes
         explicit,
         album_id: browse_id,
         album_type,
-        thumbnails,
     })
 }
 
@@ -402,12 +395,10 @@ fn parse_content_list_artist_subscription(
     let channel_id = data.take_value_pointer(NAVIGATION_BROWSE_ID)?;
     let name = parse_flex_column_item(&mut data, 0, 0)?;
     let subscribers = parse_flex_column_item(&mut data, 1, 0)?;
-    let thumbnails = data.take_value_pointer(THUMBNAILS)?;
     Ok(LibraryArtistSubscription {
         name,
         subscribers,
         channel_id,
-        thumbnails,
     })
 }
 
@@ -445,12 +436,10 @@ fn parse_content_list_channels(
             let channel_id = data.take_value_pointer(NAVIGATION_BROWSE_ID)?;
             let title = parse_flex_column_item(&mut data, 0, 0)?;
             let subscribers = parse_flex_column_item(&mut data, 1, 0)?;
-            let thumbnails = data.take_value_pointer(THUMBNAILS)?;
             Ok(LibraryChannel {
                 title,
                 subscribers,
                 channel_id,
-                thumbnails,
             })
         })
         .collect::<Result<_>>()?;
@@ -471,7 +460,6 @@ fn parse_table_list_song(title: String, mut data: JsonCrawlerBorrowed) -> Result
     let duration = data
         .borrow_pointer(fixed_column_item_pointer(0))?
         .take_value_pointers(&["/text/simpleText", "/text/runs/0/text"])?;
-    let thumbnails = data.take_value_pointer(THUMBNAILS)?;
     let is_available = data
         .take_value_pointer::<String>("/musicItemRendererDisplayPolicy")
         .map(|m| m != "MUSIC_ITEM_RENDERER_DISPLAY_POLICY_GREY_OUT")
@@ -494,7 +482,6 @@ fn parse_table_list_song(title: String, mut data: JsonCrawlerBorrowed) -> Result
         title,
         artists,
         like_status,
-        thumbnails,
         explicit,
         album,
         playlist_id,
@@ -518,7 +505,6 @@ fn parse_content_list_playlist(item: JsonCrawlerOwned) -> Result<Option<LibraryP
         // ytmusicapi uses range index [2:] here but doesn't seem to be required.
         // Revisit later if we crash.
         .take_value()?;
-    let thumbnails: Vec<Thumbnail> = mtrir.take_value_pointer(THUMBNAIL_RENDERER)?;
     let mut subtitle = mtrir.navigate_pointer("/subtitle")?;
     let tracks = subtitle.take_value_pointer("/runs/2/text")?;
     let mut author_run = subtitle.navigate_pointer("/runs/0")?;
@@ -527,7 +513,6 @@ fn parse_content_list_playlist(item: JsonCrawlerOwned) -> Result<Option<LibraryP
     Ok(Some(LibraryPlaylist {
         playlist_id,
         title,
-        thumbnails,
         tracks,
         author_id,
         author,
@@ -550,7 +535,6 @@ fn parse_content_list_podcast(item: impl JsonCrawler) -> Result<Option<LibraryPo
         // ytmusicapi uses range index [2:] here but doesn't seem to be required.
         // Revisit later if we crash.
         .take_value()?;
-    let thumbnails: Vec<Thumbnail> = mtrir.take_value_pointer(THUMBNAIL_RENDERER)?;
     let maybe_badge_icon = mtrir
         .take_value_pointer::<YoutubeMusicBadgeRendererIcon>(SUBTITLE_BADGE_ICON)
         .ok();
@@ -565,7 +549,6 @@ fn parse_content_list_podcast(item: impl JsonCrawler) -> Result<Option<LibraryPo
         .collect::<Result<Vec<_>>>()?;
     Ok(Some(LibraryPodcast {
         title,
-        thumbnails,
         channels,
         podcast_id,
         podcast_source,

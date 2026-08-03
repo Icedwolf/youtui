@@ -1,6 +1,6 @@
 use super::search::SearchResultVideo;
 use super::{
-    ParseFrom, ParsedSongAlbum, ParsedSongArtist, ProcessedResult, Thumbnail,
+    ParseFrom, ParsedSongAlbum, ParsedSongArtist, ProcessedResult,
     parse_flex_column_item, parse_song_album, parse_song_artists,
 };
 use crate::Result;
@@ -26,7 +26,6 @@ pub struct GetArtist {
     pub radio_id: Option<String>,
     pub subscribers: Option<String>,
     pub subscribed: bool,
-    pub thumbnails: Vec<Thumbnail>,
     pub top_releases: GetArtistTopReleases,
 }
 
@@ -39,7 +38,6 @@ pub struct GetArtistAlbumsAlbum {
     // TODO: Use type system
     pub browse_id: AlbumID<'static>,
     pub category: Option<String>, // TODO change to enum
-    pub thumbnails: Vec<Thumbnail>,
     pub year: Option<String>,
 }
 
@@ -73,7 +71,6 @@ impl<'a> ParseFrom<GetArtistQuery<'a>> for GetArtist {
                 NAVIGATION_PLAYLIST_ID
             ))
             .ok();
-        let thumbnails = header.take_value_pointer(THUMBNAILS)?;
         let mut subscription_button =
             header.navigate_pointer("/subscriptionButton/subscribeButtonRenderer")?;
         let channel_id = subscription_button.take_value_pointer("/channelId")?;
@@ -86,7 +83,6 @@ impl<'a> ParseFrom<GetArtistQuery<'a>> for GetArtist {
             description,
             name,
             top_releases,
-            thumbnails,
             subscribed,
             radio_id,
             channel_id,
@@ -189,7 +185,6 @@ pub struct AlbumResult {
     pub year: String,
     pub album_id: AlbumID<'static>,
     pub library_status: LibraryStatus,
-    pub thumbnails: Vec<Thumbnail>,
     pub explicit: Explicit,
 }
 
@@ -209,7 +204,6 @@ pub struct TableListSong {
     pub artists: Vec<super::ParsedSongArtist>,
     // TODO: Song like feedback tokens.
     pub like_status: LikeStatus,
-    pub thumbnails: Vec<Thumbnail>,
     pub explicit: Explicit,
     pub is_available: bool,
     /// Id of the playlist that will get created when pressing 'Start Radio'.
@@ -350,7 +344,6 @@ pub(crate) fn parse_album_from_mtrir(mut navigator: impl JsonCrawler) -> Result<
     };
 
     let album_id = navigator.take_value_pointer(concatcp!(TITLE, NAVIGATION_BROWSE_ID))?;
-    let thumbnails = navigator.take_value_pointer(THUMBNAIL_RENDERER)?;
     let explicit = if navigator.path_exists(concatcp!(SUBTITLE_BADGE_LABEL)) {
         Explicit::IsExplicit
     } else {
@@ -367,7 +360,6 @@ pub(crate) fn parse_album_from_mtrir(mut navigator: impl JsonCrawler) -> Result<
         year,
         album_id,
         library_status,
-        thumbnails,
         explicit,
     })
 }
@@ -428,14 +420,12 @@ fn parse_artist_album_item(mut r: impl JsonCrawler) -> crate::Result<GetArtistAl
     let browse_id = r.take_value_pointer(concatcp!(TITLE, NAVIGATION_BROWSE_ID))?;
     let playlist_id = r.take_value_pointer(MENU_PLAYLIST_ID).ok();
     let title = r.take_value_pointer(TITLE_TEXT)?;
-    let thumbnails = r.take_value_pointer(THUMBNAIL_RENDERER)?;
     let category = r.take_value_pointer(SUBTITLE).ok();
     Ok(GetArtistAlbumsAlbum {
         browse_id,
         year: None,
         title,
         category,
-        thumbnails,
         playlist_id,
     })
 }

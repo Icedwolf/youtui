@@ -1,10 +1,10 @@
 use super::ParseFrom;
 use crate::Result;
-use crate::common::{PlaylistID, Thumbnail, UserPlaylistsParams, UserVideosParams, VideoID};
+use crate::common::{PlaylistID, UserPlaylistsParams, UserVideosParams, VideoID};
 use crate::nav_consts::{
-    CAROUSEL, CAROUSEL_TITLE, FOREGROUND_THUMBNAIL_RENDERER, GRID_ITEMS, MTRIR, NAVIGATION_BROWSE,
+    CAROUSEL, CAROUSEL_TITLE, GRID_ITEMS, MTRIR, NAVIGATION_BROWSE,
     NAVIGATION_BROWSE_ID, NAVIGATION_VIDEO_ID, SECTION_LIST, SECTION_LIST_ITEM, SINGLE_COLUMN_TAB,
-    SUBTITLE2, SUBTITLE3, THUMBNAIL_RENDERER, TITLE_TEXT, VISUAL_HEADER,
+    SUBTITLE2, SUBTITLE3, TITLE_TEXT, VISUAL_HEADER,
 };
 use crate::query::{GetUserPlaylistsQuery, GetUserQuery, GetUserVideosQuery};
 use const_format::concatcp;
@@ -17,7 +17,6 @@ use std::collections::HashMap;
 pub struct GetUser {
     pub name: String,
     pub videos: Vec<UserVideo>,
-    pub thumbnails: Vec<Thumbnail>,
     pub all_videos_params: Option<UserVideosParams<'static>>,
     pub playlists: Vec<UserPlaylist>,
     pub all_playlists_params: Option<UserPlaylistsParams<'static>>,
@@ -27,7 +26,6 @@ pub struct GetUser {
 pub struct UserVideo {
     pub title: String,
     pub views: String,
-    pub thumbnails: Vec<Thumbnail>,
     pub id: VideoID<'static>,
 }
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -35,7 +33,6 @@ pub struct UserVideo {
 pub struct UserPlaylist {
     pub title: String,
     pub views: String,
-    pub thumbnails: Vec<Thumbnail>,
     pub id: PlaylistID<'static>,
 }
 
@@ -44,7 +41,6 @@ impl ParseFrom<GetUserQuery<'_>> for GetUser {
         let mut json_crawler: JsonCrawlerOwned = p.into();
         let mut header = json_crawler.borrow_pointer(VISUAL_HEADER)?;
         let name = header.take_value_pointer(TITLE_TEXT)?;
-        let thumbnails = header.take_value_pointer(FOREGROUND_THUMBNAIL_RENDERER)?;
         let contents = json_crawler.navigate_pointer(concatcp!(SINGLE_COLUMN_TAB, SECTION_LIST))?;
         // TODO: i18n
         let mut carousels: HashMap<String, _> = contents
@@ -89,7 +85,6 @@ impl ParseFrom<GetUserQuery<'_>> for GetUser {
 
         Ok(Self {
             name,
-            thumbnails,
             all_videos_params,
             playlists,
             videos,
@@ -124,11 +119,9 @@ fn parse_user_video(c: impl JsonCrawler) -> Result<UserVideo> {
     let title = item.take_value_pointer(TITLE_TEXT)?;
     let views = item.take_value_pointer(SUBTITLE2)?;
     let id = item.take_value_pointer(NAVIGATION_VIDEO_ID)?;
-    let thumbnails = item.take_value_pointer(THUMBNAIL_RENDERER)?;
     Ok(UserVideo {
         title,
         views,
-        thumbnails,
         id,
     })
 }
@@ -137,11 +130,9 @@ fn parse_user_playlist(c: impl JsonCrawler) -> Result<UserPlaylist> {
     let title = item.take_value_pointer(TITLE_TEXT)?;
     let views = item.take_value_pointer(SUBTITLE3)?;
     let id = item.take_value_pointer(NAVIGATION_BROWSE_ID)?;
-    let thumbnails = item.take_value_pointer(THUMBNAIL_RENDERER)?;
     Ok(UserPlaylist {
         title,
         views,
-        thumbnails,
         id,
     })
 }

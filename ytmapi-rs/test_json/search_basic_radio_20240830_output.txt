@@ -3,28 +3,6 @@ SearchResults {
         TopResult {
             result_name: "Classical Radio",
             result_type: None,
-            thumbnails: [
-                Thumbnail {
-                    height: 200,
-                    width: 200,
-                    url: "https://music.youtube.com/image/radioart?r=CisKCC9tLzAyeHA5CggvbS8wM19mMAoJL20vMDExemYyCgovbS8wajdqZ3cxEMgBGMgB",
-                },
-                Thumbnail {
-                    height: 600,
-                    width: 600,
-                    url: "https://music.youtube.com/image/radioart?r=CisKCC9tLzAyeHA5CggvbS8wM19mMAoJL20vMDExemYyCgovbS8wajdqZ3cxENgEGNgE",
-                },
-                Thumbnail {
-                    height: 800,
-                    width: 800,
-                    url: "https://music.youtube.com/image/radioart?r=CisKCC9tLzAyeHA5CggvbS8wM19mMAoJL20vMDExemYyCgovbS8wajdqZ3cxEKAGGKAG",
-                },
-                Thumbnail {
-                    height: 1000,
-                    width: 1000,
-                    url: "https://music.youtube.com/image/radioart?r=CisKCC9tLzAyeHA5CggvbS8wM19mMAoJL20vMDExemYyCgovbS8wajdqZ3cxEOgHGOgH",
-                },
-            ],
             artist: None,
             album: None,
             duration: None,
@@ -46,18 +24,6 @@ SearchResults {
             browse_id: ArtistChannelID(
                 "UCFtSXTlIMFFkyJbHO3V5b7A",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/C5hLBPYdwgyQEKjwZXfOM-0MCgn619Ja_WgljDeIO-fjNHi-SsYzGr_c5piG46OaRj_ROZqhuCYhucmf=w60-h60-p-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/C5hLBPYdwgyQEKjwZXfOM-0MCgn619Ja_WgljDeIO-fjNHi-SsYzGr_c5piG46OaRj_ROZqhuCYhucmf=w120-h120-p-l90-rj",
-                },
-            ],
         },
         SearchResultArtist {
             artist: "Pyotr Ilyich Tchaikovsky",
@@ -67,18 +33,6 @@ SearchResults {
             browse_id: ArtistChannelID(
                 "UC6UJm5ElaATOPzXxNkuLDJg",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/3_9M4-XhFrLHVLLf-v6OPkWf-Ai2S1mwN91lLbxcZriVjmy80c011gc5O0nOQoi2O-IC50oCjUloRSRu=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/3_9M4-XhFrLHVLLf-v6OPkWf-Ai2S1mwN91lLbxcZriVjmy80c011gc5O0nOQoi2O-IC50oCjUloRSRu=w120-h120-l90-rj",
-                },
-            ],
         },
         SearchResultArtist {
             artist: "Claude Debussy",
@@ -88,18 +42,6 @@ SearchResults {
             browse_id: ArtistChannelID(
                 "UCDBe28OI2PycHdECfoaIWtA",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/GtlibpMRuI_NuSzSy_N-KGKXgr4OZg4TnVaX7VeGn5suKliSWH41BNZ34MGqQ9-FEarQCYLGwQtqhvE=w60-h60-p-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/GtlibpMRuI_NuSzSy_N-KGKXgr4OZg4TnVaX7VeGn5suKliSWH41BNZ34MGqQ9-FEarQCYLGwQtqhvE=w120-h120-p-l90-rj",
-                },
-            ],
         },
     ],
     albums: [
@@ -112,28 +54,6 @@ SearchResults {
                 "MPREb_waBHly97VR1",
             ),
             album_type: Album,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/XZF6zi3riatRmf0mAdtBbHdvIwxWJBInDbp2PfugO3vtgkNoMMNtaJnhnMDqqpzRQAiswrUTJ_TRnQw8=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/XZF6zi3riatRmf0mAdtBbHdvIwxWJBInDbp2PfugO3vtgkNoMMNtaJnhnMDqqpzRQAiswrUTJ_TRnQw8=w120-h120-l90-rj",
-                },
-                Thumbnail {
-                    height: 226,
-                    width: 226,
-                    url: "https://lh3.googleusercontent.com/XZF6zi3riatRmf0mAdtBbHdvIwxWJBInDbp2PfugO3vtgkNoMMNtaJnhnMDqqpzRQAiswrUTJ_TRnQw8=w226-h226-l90-rj",
-                },
-                Thumbnail {
-                    height: 544,
-                    width: 544,
-                    url: "https://lh3.googleusercontent.com/XZF6zi3riatRmf0mAdtBbHdvIwxWJBInDbp2PfugO3vtgkNoMMNtaJnhnMDqqpzRQAiswrUTJ_TRnQw8=w544-h544-l90-rj",
-                },
-            ],
         },
         SearchResultAlbum {
             title: "Vivaldi - Classical Music for Relaxation",
@@ -144,28 +64,6 @@ SearchResults {
                 "MPREb_t3RRcQYIlyB",
             ),
             album_type: Album,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/1cUNn7O2T8dHCIgn2BPos-QjPbEgNmycXO5TbQJvHwF-4XLtHrvkwiJczMD1FpwnRUGDYwEeGhcftlNe=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/1cUNn7O2T8dHCIgn2BPos-QjPbEgNmycXO5TbQJvHwF-4XLtHrvkwiJczMD1FpwnRUGDYwEeGhcftlNe=w120-h120-l90-rj",
-                },
-                Thumbnail {
-                    height: 226,
-                    width: 226,
-                    url: "https://lh3.googleusercontent.com/1cUNn7O2T8dHCIgn2BPos-QjPbEgNmycXO5TbQJvHwF-4XLtHrvkwiJczMD1FpwnRUGDYwEeGhcftlNe=w226-h226-l90-rj",
-                },
-                Thumbnail {
-                    height: 544,
-                    width: 544,
-                    url: "https://lh3.googleusercontent.com/1cUNn7O2T8dHCIgn2BPos-QjPbEgNmycXO5TbQJvHwF-4XLtHrvkwiJczMD1FpwnRUGDYwEeGhcftlNe=w544-h544-l90-rj",
-                },
-            ],
         },
         SearchResultAlbum {
             title: "classical music but it's lofi 30 (Bach)",
@@ -176,28 +74,6 @@ SearchResults {
                 "MPREb_MgMDqnhK9cm",
             ),
             album_type: EP,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/VFxtZwkKoKX_t2CGUwVfAI1irgTdR15mlX6vs9Iao8-QQ-lQdXHlNCFyF-LyTpqLo_nsvKVa1dzjeyeR=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/VFxtZwkKoKX_t2CGUwVfAI1irgTdR15mlX6vs9Iao8-QQ-lQdXHlNCFyF-LyTpqLo_nsvKVa1dzjeyeR=w120-h120-l90-rj",
-                },
-                Thumbnail {
-                    height: 226,
-                    width: 226,
-                    url: "https://lh3.googleusercontent.com/VFxtZwkKoKX_t2CGUwVfAI1irgTdR15mlX6vs9Iao8-QQ-lQdXHlNCFyF-LyTpqLo_nsvKVa1dzjeyeR=w226-h226-l90-rj",
-                },
-                Thumbnail {
-                    height: 544,
-                    width: 544,
-                    url: "https://lh3.googleusercontent.com/VFxtZwkKoKX_t2CGUwVfAI1irgTdR15mlX6vs9Iao8-QQ-lQdXHlNCFyF-LyTpqLo_nsvKVa1dzjeyeR=w544-h544-l90-rj",
-                },
-            ],
         },
     ],
     featured_playlists: [
@@ -208,28 +84,6 @@ SearchResults {
             playlist_id: PlaylistID(
                 "VLRDCLAK5uy_nBOvRANXhyfsK6oGe_wTHNwOW-0kSMB8w",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/D8mw4OfckbnyW2cu0nUHBmrDROUF1Iq7DNdDPHO8xNBGVxA0XbONCeeW5DLVs4sfT2o10EpoY66g8NM=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/D8mw4OfckbnyW2cu0nUHBmrDROUF1Iq7DNdDPHO8xNBGVxA0XbONCeeW5DLVs4sfT2o10EpoY66g8NM=w120-h120-l90-rj",
-                },
-                Thumbnail {
-                    height: 226,
-                    width: 226,
-                    url: "https://lh3.googleusercontent.com/D8mw4OfckbnyW2cu0nUHBmrDROUF1Iq7DNdDPHO8xNBGVxA0XbONCeeW5DLVs4sfT2o10EpoY66g8NM=w226-h226-l90-rj",
-                },
-                Thumbnail {
-                    height: 544,
-                    width: 544,
-                    url: "https://lh3.googleusercontent.com/D8mw4OfckbnyW2cu0nUHBmrDROUF1Iq7DNdDPHO8xNBGVxA0XbONCeeW5DLVs4sfT2o10EpoY66g8NM=w544-h544-l90-rj",
-                },
-            ],
         },
         SearchResultFeaturedPlaylist {
             title: "Classical Focus",
@@ -238,28 +92,6 @@ SearchResults {
             playlist_id: PlaylistID(
                 "VLRDCLAK5uy_n9hGvSNdO2TpX8jJuiThvnfrfIi1qNRnY",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/Jx8ayDHUoBH0ZDj87d2Jibuvd0nXxeVf3RAbYUAf3f2o3Sr9vWkMVVGfgMLjjAuFBXcp7Wl-JW3pVzw=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/Jx8ayDHUoBH0ZDj87d2Jibuvd0nXxeVf3RAbYUAf3f2o3Sr9vWkMVVGfgMLjjAuFBXcp7Wl-JW3pVzw=w120-h120-l90-rj",
-                },
-                Thumbnail {
-                    height: 226,
-                    width: 226,
-                    url: "https://lh3.googleusercontent.com/Jx8ayDHUoBH0ZDj87d2Jibuvd0nXxeVf3RAbYUAf3f2o3Sr9vWkMVVGfgMLjjAuFBXcp7Wl-JW3pVzw=w226-h226-l90-rj",
-                },
-                Thumbnail {
-                    height: 544,
-                    width: 544,
-                    url: "https://lh3.googleusercontent.com/Jx8ayDHUoBH0ZDj87d2Jibuvd0nXxeVf3RAbYUAf3f2o3Sr9vWkMVVGfgMLjjAuFBXcp7Wl-JW3pVzw=w544-h544-l90-rj",
-                },
-            ],
         },
         SearchResultFeaturedPlaylist {
             title: "Classical for Reading",
@@ -268,28 +100,6 @@ SearchResults {
             playlist_id: PlaylistID(
                 "VLRDCLAK5uy_kVXmNQjiBEKjCGifBWc3eTMg8Fwjc6K8M",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/6UkqmV45RBMOHzExO4xE2kNPr44n8OBeBdBd1TUMWblxhLm5QuZrWPXtN9Z1VXxFBs_FPvl6dKu6p9aL=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/6UkqmV45RBMOHzExO4xE2kNPr44n8OBeBdBd1TUMWblxhLm5QuZrWPXtN9Z1VXxFBs_FPvl6dKu6p9aL=w120-h120-l90-rj",
-                },
-                Thumbnail {
-                    height: 226,
-                    width: 226,
-                    url: "https://lh3.googleusercontent.com/6UkqmV45RBMOHzExO4xE2kNPr44n8OBeBdBd1TUMWblxhLm5QuZrWPXtN9Z1VXxFBs_FPvl6dKu6p9aL=w226-h226-l90-rj",
-                },
-                Thumbnail {
-                    height: 544,
-                    width: 544,
-                    url: "https://lh3.googleusercontent.com/6UkqmV45RBMOHzExO4xE2kNPr44n8OBeBdBd1TUMWblxhLm5QuZrWPXtN9Z1VXxFBs_FPvl6dKu6p9aL=w544-h544-l90-rj",
-                },
-            ],
         },
     ],
     community_playlists: [],
@@ -311,18 +121,6 @@ SearchResults {
             video_id: VideoID(
                 "XO6Zcrnopgw",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/1BdYjdWRV8lk8K0_CCSxZtuX1vlET7bafZttFNxcRe9UqOhkVSRNMOabzeV4OTSGSias3q39qT6wLsPvMQ=w60-h60-s-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/1BdYjdWRV8lk8K0_CCSxZtuX1vlET7bafZttFNxcRe9UqOhkVSRNMOabzeV4OTSGSias3q39qT6wLsPvMQ=w120-h120-s-l90-rj",
-                },
-            ],
             music_video_type: Some(
                 Atv,
             ),
@@ -344,18 +142,6 @@ SearchResults {
             video_id: VideoID(
                 "d0e3vAgVydA",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/17MQ5mgN5kxRMinQow0liEDP6HPyDxqafsl9iLP9ZMjBynMhrLbIoZfOcsTlaIdKzfiWfgb24YyBF5yaNg=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/17MQ5mgN5kxRMinQow0liEDP6HPyDxqafsl9iLP9ZMjBynMhrLbIoZfOcsTlaIdKzfiWfgb24YyBF5yaNg=w120-h120-l90-rj",
-                },
-            ],
             music_video_type: Some(
                 Atv,
             ),
@@ -377,18 +163,6 @@ SearchResults {
             video_id: VideoID(
                 "yGi1MePEN-k",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/izy-xwSTCCdIGhhIC-zIbatYKoQaIqf_lTHzscee2mvj5INnAPCEoqkPGBgcLjs4WSATb75kS8nECSv_=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/izy-xwSTCCdIGhhIC-zIbatYKoQaIqf_lTHzscee2mvj5INnAPCEoqkPGBgcLjs4WSATb75kS8nECSv_=w120-h120-l90-rj",
-                },
-            ],
             music_video_type: Some(
                 Atv,
             ),

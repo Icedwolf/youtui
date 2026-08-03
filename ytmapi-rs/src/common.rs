@@ -69,14 +69,6 @@ pub enum ApiOutcome {
     Failure,
 }
 
-#[derive(Debug, PartialEq, Clone, Deserialize, Serialize)]
-// Intentionally not marked non_exhaustive - not expecting this to change.
-pub struct Thumbnail {
-    pub height: u64,
-    pub width: u64,
-    pub url: String,
-}
-
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 /// Set of both taste tokens.
 // Intentionally not marked non_exhaustive - not expecting this to change.

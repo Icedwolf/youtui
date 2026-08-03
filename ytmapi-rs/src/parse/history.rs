@@ -1,13 +1,13 @@
 use super::{
     BADGE_LABEL, DELETION_ENTITY_ID, EpisodeDate, EpisodeDuration, MENU_ITEMS, MENU_LIKE_STATUS,
     MRLIR, MUSIC_SHELF, ParseFrom, ParsedSongAlbum, ParsedUploadArtist, ParsedUploadSongAlbum,
-    TEXT_RUN_TEXT, THUMBNAILS, TITLE_TEXT, fixed_column_item_pointer, flex_column_item_pointer,
+    TEXT_RUN_TEXT, TITLE_TEXT, fixed_column_item_pointer, flex_column_item_pointer,
     parse_library_management_items_from_menu, parse_upload_song_album, parse_upload_song_artists,
 };
 use crate::Result;
 use crate::common::{
     ApiOutcome, ArtistChannelID, EpisodeID, Explicit, FeedbackTokenRemoveFromHistory,
-    LibraryManager, LikeStatus, PlaylistID, Thumbnail, UploadEntityID, VideoID,
+    LibraryManager, LikeStatus, PlaylistID, UploadEntityID, VideoID,
 };
 use crate::nav_consts::{
     FEEDBACK_TOKEN, LIVE_BADGE_LABEL, MENU_SERVICE, NAVIGATION_BROWSE_ID, NAVIGATION_PLAYLIST_ID,
@@ -50,7 +50,6 @@ pub struct HistoryItemSong {
     pub artists: Vec<super::ParsedSongArtist>,
     // TODO: Song like feedback tokens.
     pub like_status: LikeStatus,
-    pub thumbnails: Vec<super::Thumbnail>,
     pub explicit: Explicit,
     pub is_available: bool,
     /// Id of the playlist that will get created when pressing 'Start Radio'.
@@ -69,7 +68,6 @@ pub struct HistoryItemVideo {
     pub channel_id: ArtistChannelID<'static>,
     // TODO: Song like feedback tokens.
     pub like_status: LikeStatus,
-    pub thumbnails: Vec<super::Thumbnail>,
     pub is_available: bool,
     /// Id of the playlist that will get created when pressing 'Start Radio'.
     pub playlist_id: PlaylistID<'static>,
@@ -88,7 +86,6 @@ pub struct HistoryItemEpisode {
     pub podcast_id: PlaylistID<'static>,
     // TODO: Song like feedback tokens.
     pub like_status: LikeStatus,
-    pub thumbnails: Vec<super::Thumbnail>,
     pub is_available: bool,
     pub feedback_token_remove: FeedbackTokenRemoveFromHistory<'static>,
 }
@@ -105,7 +102,6 @@ pub struct HistoryItemUploadSong {
     pub like_status: LikeStatus,
     pub title: String,
     pub artists: Vec<ParsedUploadArtist>,
-    pub thumbnails: Vec<Thumbnail>,
     pub feedback_token_remove: FeedbackTokenRemoveFromHistory<'static>,
 }
 
@@ -222,7 +218,6 @@ fn parse_history_item_episode(
     let podcast_id = data
         .borrow_pointer(flex_column_item_pointer(1))?
         .take_value_pointer(concatcp!(TEXT_RUN, NAVIGATION_BROWSE_ID))?;
-    let thumbnails = data.take_value_pointer(THUMBNAILS)?;
     let is_available = data
         .take_value_pointer::<String>("/musicItemRendererDisplayPolicy")
         .map(|m| m != "MUSIC_ITEM_RENDERER_DISPLAY_POLICY_GREY_OUT")
@@ -237,7 +232,6 @@ fn parse_history_item_episode(
         duration,
         title,
         like_status,
-        thumbnails,
         date,
         podcast_name,
         podcast_id,
@@ -262,7 +256,6 @@ fn parse_history_item_video(
     let duration = data
         .borrow_pointer(fixed_column_item_pointer(0))?
         .take_value_pointers(&["/text/simpleText", "/text/runs/0/text"])?;
-    let thumbnails = data.take_value_pointer(THUMBNAILS)?;
     let is_available = data
         .take_value_pointer::<String>("/musicItemRendererDisplayPolicy")
         .map(|m| m != "MUSIC_ITEM_RENDERER_DISPLAY_POLICY_GREY_OUT")
@@ -281,7 +274,6 @@ fn parse_history_item_video(
         duration,
         title,
         like_status,
-        thumbnails,
         playlist_id,
         is_available,
         channel_name,
@@ -301,7 +293,6 @@ fn parse_history_item_upload_song(
         PLAY_BUTTON,
         "/playNavigationEndpoint/watchEndpoint/videoId"
     ))?;
-    let thumbnails = data.take_value_pointer(THUMBNAILS)?;
     let artists = parse_upload_song_artists(data.borrow_mut(), 1)?;
     let album = parse_upload_song_album(data.borrow_mut(), 2)?;
     let mut menu = data.navigate_pointer(MENU_ITEMS)?;
@@ -321,7 +312,6 @@ fn parse_history_item_upload_song(
         like_status,
         title,
         artists,
-        thumbnails,
         feedback_token_remove,
     })
 }
@@ -342,7 +332,6 @@ fn parse_history_item_song(
     let duration = data
         .borrow_pointer(fixed_column_item_pointer(0))?
         .take_value_pointers(&["/text/simpleText", "/text/runs/0/text"])?;
-    let thumbnails = data.take_value_pointer(THUMBNAILS)?;
     let is_available = data
         .take_value_pointer::<String>("/musicItemRendererDisplayPolicy")
         .map(|m| m != "MUSIC_ITEM_RENDERER_DISPLAY_POLICY_GREY_OUT")
@@ -368,7 +357,6 @@ fn parse_history_item_song(
         title,
         artists,
         like_status,
-        thumbnails,
         explicit,
         album,
         playlist_id,

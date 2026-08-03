@@ -558,7 +558,6 @@ impl BrowserSongsList {
                 duration,
                 title,
                 artists,
-                thumbnails: _,
                 track_no,
                 explicit,
                 ..
@@ -575,7 +574,6 @@ impl BrowserSongsList {
                 video_id,
                 duration,
                 title,
-                thumbnails: _,
                 track_no,
                 ..
             }) => (
@@ -598,7 +596,6 @@ impl BrowserSongsList {
                 title,
                 artists,
                 album,
-                thumbnails: _,
                 track_no,
                 ..
             }) => (

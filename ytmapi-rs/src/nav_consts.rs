@@ -28,7 +28,6 @@ pub const TITLE: &str = "/title/runs/0";
 pub const TEXT_RUNS: &str = "/text/runs";
 pub const SUBTITLE_RUNS: &str = "/subtitle/runs";
 pub const SECOND_SUBTITLE_RUNS: &str = "/secondSubtitle/runs";
-pub const THUMBNAIL: &str = "/thumbnail/thumbnails";
 pub const THUMBNAIL_BADGE_ICON: &str = "/thumbnail/musicIconBadgeRenderer/icon/iconType";
 pub const THUMBNAIL_ANIMATED_ICON: &str =
     "/thumbnail/musicIconBadgeRenderer/animatedIcon/animatedIconType";
@@ -98,15 +97,6 @@ pub const TEXT_RUN_TEXT: &str = concatcp!(TEXT_RUN, "/text");
 pub const SUBTITLE: &str = concatcp!("/subtitle", RUN_TEXT);
 pub const SUBTITLE2: &str = concatcp!(SUBTITLE_RUNS, "/2/text");
 pub const SUBTITLE3: &str = concatcp!(SUBTITLE_RUNS, "/4/text");
-pub const THUMBNAILS: &str = concatcp!("/thumbnail/musicThumbnailRenderer", THUMBNAIL);
-pub const FOREGROUND_THUMBNAIL_RENDERER: &str =
-    concatcp!("/foregroundThumbnail/musicThumbnailRenderer", THUMBNAIL);
-pub const THUMBNAIL_RENDERER: &str =
-    concatcp!("/thumbnailRenderer/musicThumbnailRenderer", THUMBNAIL);
-pub const THUMBNAIL_CROPPED: &str =
-    concatcp!("/thumbnail/croppedSquareThumbnailRenderer", THUMBNAIL);
-pub const STRAPLINE_THUMBNAIL: &str =
-    concatcp!("/straplineThumbnail/musicThumbnailRenderer", THUMBNAIL);
 pub const BADGE_LABEL: &str = concatcp!("/badges", BADGE_PATH);
 pub const LIVE_BADGE_LABEL: &str = concatcp!("/badges", LIVE_BADGE_PATH);
 pub const SUBTITLE_BADGE_LABEL: &str = concatcp!("/subtitleBadges", BADGE_PATH);

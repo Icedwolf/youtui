@@ -5,18 +5,6 @@ SearchResults {
             result_type: Some(
                 Artist,
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/z8KZsHNKS-O1qYVyKlSErT_RLMSMwVht89USvSdFAd0EoRlBOppi9DOdRkv609Ye_tfq_Wp8WwhVJbw=w60-h60-p-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/z8KZsHNKS-O1qYVyKlSErT_RLMSMwVht89USvSdFAd0EoRlBOppi9DOdRkv609Ye_tfq_Wp8WwhVJbw=w120-h120-p-l90-rj",
-                },
-            ],
             artist: None,
             album: None,
             duration: None,
@@ -33,18 +21,6 @@ SearchResults {
             result_type: Some(
                 Song,
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/bmG1q9eu3ub2CtYcgArvzpiehqUpZGuLsOa_B0Bxkwxdfsk9r7nRzAQy1P5dTjqerODLxq3LycWGWW5m=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/bmG1q9eu3ub2CtYcgArvzpiehqUpZGuLsOa_B0Bxkwxdfsk9r7nRzAQy1P5dTjqerODLxq3LycWGWW5m=w120-h120-l90-rj",
-                },
-            ],
             artist: Some(
                 "The Beatles",
             ),
@@ -65,18 +41,6 @@ SearchResults {
             result_type: Some(
                 Song,
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/IjEb5kMRk7qimcH3BCJaK85pf79X383z5KNrAxJSNOHVWC41_e66Id233ZGj1AQhH1H5AiKxQMEbHPn0=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/IjEb5kMRk7qimcH3BCJaK85pf79X383z5KNrAxJSNOHVWC41_e66Id233ZGj1AQhH1H5AiKxQMEbHPn0=w120-h120-l90-rj",
-                },
-            ],
             artist: Some(
                 "The Beatles",
             ),
@@ -99,28 +63,6 @@ SearchResults {
                     Album,
                 ),
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/ZMbbfFua2T4giKdxPw32r1LAOqJit-yhjneipMCSl07-WCHmx6Gz5lENjMh7jZ_-0K3KVR7FLb5HUQ=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/ZMbbfFua2T4giKdxPw32r1LAOqJit-yhjneipMCSl07-WCHmx6Gz5lENjMh7jZ_-0K3KVR7FLb5HUQ=w120-h120-l90-rj",
-                },
-                Thumbnail {
-                    height: 226,
-                    width: 226,
-                    url: "https://lh3.googleusercontent.com/ZMbbfFua2T4giKdxPw32r1LAOqJit-yhjneipMCSl07-WCHmx6Gz5lENjMh7jZ_-0K3KVR7FLb5HUQ=w226-h226-l90-rj",
-                },
-                Thumbnail {
-                    height: 544,
-                    width: 544,
-                    url: "https://lh3.googleusercontent.com/ZMbbfFua2T4giKdxPw32r1LAOqJit-yhjneipMCSl07-WCHmx6Gz5lENjMh7jZ_-0K3KVR7FLb5HUQ=w544-h544-l90-rj",
-                },
-            ],
             artist: Some(
                 "The Beatles",
             ),
@@ -144,18 +86,6 @@ SearchResults {
             browse_id: ArtistChannelID(
                 "UCcSL2nYSJp_IgdzH0xBBdcg",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/rNwrmRbk3U19r6sBBarhK0GvBmOg8VFm935fc8J85HSU13cwSvVcGNNqUrG8ols56gYLwpEZu7qf-Q=w60-h60-p-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/rNwrmRbk3U19r6sBBarhK0GvBmOg8VFm935fc8J85HSU13cwSvVcGNNqUrG8ols56gYLwpEZu7qf-Q=w120-h120-p-l90-rj",
-                },
-            ],
         },
         SearchResultArtist {
             artist: "George Harrison",
@@ -165,18 +95,6 @@ SearchResults {
             browse_id: ArtistChannelID(
                 "UCGVnHHo1u7Xfyht_psktcUQ",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/a-/ALV-UjVjKbwkJvnfjYY0SLxOC3amOqjfqCyTbgqubc-JGo2q0sT8KhYi=w60-h60-l90-rj-dclZaASboF",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/a-/ALV-UjVjKbwkJvnfjYY0SLxOC3amOqjfqCyTbgqubc-JGo2q0sT8KhYi=w120-h120-l90-rj-dclZaASboF",
-                },
-            ],
         },
         SearchResultArtist {
             artist: "Paul McCartney",
@@ -186,18 +104,6 @@ SearchResults {
             browse_id: ArtistChannelID(
                 "UC0guXwTSf4hAOvCSgmViojw",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/2Z1KGtSXh-zHQbaH0wgnrSQe8cHk64dvxAyqgRaFCFviMLwms2ZdhKIFC5EgW36_GKKVI8yNUj6OQ_Of=w60-h60-p-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/2Z1KGtSXh-zHQbaH0wgnrSQe8cHk64dvxAyqgRaFCFviMLwms2ZdhKIFC5EgW36_GKKVI8yNUj6OQ_Of=w120-h120-p-l90-rj",
-                },
-            ],
         },
     ],
     albums: [
@@ -210,28 +116,6 @@ SearchResults {
                 "MPREb_S5TiUIYvI78",
             ),
             album_type: Album,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/8MFj-k2DNUXPKOw8BawKI291ty1Wh8V4M3J6fiq4itWkjw34ncAem60h80eMzsD2XjczahdZEF69CQ8=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/8MFj-k2DNUXPKOw8BawKI291ty1Wh8V4M3J6fiq4itWkjw34ncAem60h80eMzsD2XjczahdZEF69CQ8=w120-h120-l90-rj",
-                },
-                Thumbnail {
-                    height: 226,
-                    width: 226,
-                    url: "https://lh3.googleusercontent.com/8MFj-k2DNUXPKOw8BawKI291ty1Wh8V4M3J6fiq4itWkjw34ncAem60h80eMzsD2XjczahdZEF69CQ8=w226-h226-l90-rj",
-                },
-                Thumbnail {
-                    height: 544,
-                    width: 544,
-                    url: "https://lh3.googleusercontent.com/8MFj-k2DNUXPKOw8BawKI291ty1Wh8V4M3J6fiq4itWkjw34ncAem60h80eMzsD2XjczahdZEF69CQ8=w544-h544-l90-rj",
-                },
-            ],
         },
         SearchResultAlbum {
             title: "Abbey Road (Super Deluxe Edition)",
@@ -242,28 +126,6 @@ SearchResults {
                 "MPREb_tQfaWH32ovE",
             ),
             album_type: Album,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/g8bzAg2zxvdnm7ismLMYLA9-9azb4y6VP2uOF56A2G2rpsqLHT6mrJWXRKq_VttXQZ-o-jmVgTFIVgdj=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/g8bzAg2zxvdnm7ismLMYLA9-9azb4y6VP2uOF56A2G2rpsqLHT6mrJWXRKq_VttXQZ-o-jmVgTFIVgdj=w120-h120-l90-rj",
-                },
-                Thumbnail {
-                    height: 226,
-                    width: 226,
-                    url: "https://lh3.googleusercontent.com/g8bzAg2zxvdnm7ismLMYLA9-9azb4y6VP2uOF56A2G2rpsqLHT6mrJWXRKq_VttXQZ-o-jmVgTFIVgdj=w226-h226-l90-rj",
-                },
-                Thumbnail {
-                    height: 544,
-                    width: 544,
-                    url: "https://lh3.googleusercontent.com/g8bzAg2zxvdnm7ismLMYLA9-9azb4y6VP2uOF56A2G2rpsqLHT6mrJWXRKq_VttXQZ-o-jmVgTFIVgdj=w544-h544-l90-rj",
-                },
-            ],
         },
         SearchResultAlbum {
             title: "The Beatles 1967 - 1970",
@@ -274,28 +136,6 @@ SearchResults {
                 "MPREb_LAgCGKzQToD",
             ),
             album_type: Album,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/74ZlD_ClwO8pdKlooxk3BWjGe1NNGU2euQepXyaWilfxceXZj2Uxn4Uk4fOk2btprCSx1lFKH-QlvrbW=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/74ZlD_ClwO8pdKlooxk3BWjGe1NNGU2euQepXyaWilfxceXZj2Uxn4Uk4fOk2btprCSx1lFKH-QlvrbW=w120-h120-l90-rj",
-                },
-                Thumbnail {
-                    height: 226,
-                    width: 226,
-                    url: "https://lh3.googleusercontent.com/74ZlD_ClwO8pdKlooxk3BWjGe1NNGU2euQepXyaWilfxceXZj2Uxn4Uk4fOk2btprCSx1lFKH-QlvrbW=w226-h226-l90-rj",
-                },
-                Thumbnail {
-                    height: 544,
-                    width: 544,
-                    url: "https://lh3.googleusercontent.com/74ZlD_ClwO8pdKlooxk3BWjGe1NNGU2euQepXyaWilfxceXZj2Uxn4Uk4fOk2btprCSx1lFKH-QlvrbW=w544-h544-l90-rj",
-                },
-            ],
         },
     ],
     featured_playlists: [
@@ -306,28 +146,6 @@ SearchResults {
             playlist_id: PlaylistID(
                 "VLRDCLAK5uy_lHIiCEeknPkpJOowyykpfBu-ECJB9Q32I",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/Sc6_hFRZfgjOvyTBA1N71YkqV1W2hUhFB2AFn8YAIevj58tKZoeuDHU9eH32DYQz6qTUNnLRgZB4onOX=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/Sc6_hFRZfgjOvyTBA1N71YkqV1W2hUhFB2AFn8YAIevj58tKZoeuDHU9eH32DYQz6qTUNnLRgZB4onOX=w120-h120-l90-rj",
-                },
-                Thumbnail {
-                    height: 226,
-                    width: 226,
-                    url: "https://lh3.googleusercontent.com/Sc6_hFRZfgjOvyTBA1N71YkqV1W2hUhFB2AFn8YAIevj58tKZoeuDHU9eH32DYQz6qTUNnLRgZB4onOX=w226-h226-l90-rj",
-                },
-                Thumbnail {
-                    height: 544,
-                    width: 544,
-                    url: "https://lh3.googleusercontent.com/Sc6_hFRZfgjOvyTBA1N71YkqV1W2hUhFB2AFn8YAIevj58tKZoeuDHU9eH32DYQz6qTUNnLRgZB4onOX=w544-h544-l90-rj",
-                },
-            ],
         },
         SearchResultFeaturedPlaylist {
             title: "Presenting The Beatles",
@@ -336,28 +154,6 @@ SearchResults {
             playlist_id: PlaylistID(
                 "VLRDCLAK5uy_nhetVOKK6_8JKmkKrLcfiXZAVWhNEAPC4",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/jGf8Fhs5mcuymBGeSNt1XgIEo0yC9sBN7hwEBQ5x590ZO_dHu0XVtzTVBD_OkY5tYcwTywu9A9IZ4bI=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/jGf8Fhs5mcuymBGeSNt1XgIEo0yC9sBN7hwEBQ5x590ZO_dHu0XVtzTVBD_OkY5tYcwTywu9A9IZ4bI=w120-h120-l90-rj",
-                },
-                Thumbnail {
-                    height: 226,
-                    width: 226,
-                    url: "https://lh3.googleusercontent.com/jGf8Fhs5mcuymBGeSNt1XgIEo0yC9sBN7hwEBQ5x590ZO_dHu0XVtzTVBD_OkY5tYcwTywu9A9IZ4bI=w226-h226-l90-rj",
-                },
-                Thumbnail {
-                    height: 544,
-                    width: 544,
-                    url: "https://lh3.googleusercontent.com/jGf8Fhs5mcuymBGeSNt1XgIEo0yC9sBN7hwEBQ5x590ZO_dHu0XVtzTVBD_OkY5tYcwTywu9A9IZ4bI=w544-h544-l90-rj",
-                },
-            ],
         },
         SearchResultFeaturedPlaylist {
             title: "'70s Lite Hits",
@@ -366,28 +162,6 @@ SearchResults {
             playlist_id: PlaylistID(
                 "VLRDCLAK5uy_maC8_YA458CPC-VeeLpyPPJbj2mA9Y6lY",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/Fy78DamI5JWemzCYbJyTx8WJREjwPEyhbeQc0AxDjU3mZm8tBojsU75-1Rt2BM0SQa7VS7eQkdDYQA=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/Fy78DamI5JWemzCYbJyTx8WJREjwPEyhbeQc0AxDjU3mZm8tBojsU75-1Rt2BM0SQa7VS7eQkdDYQA=w120-h120-l90-rj",
-                },
-                Thumbnail {
-                    height: 226,
-                    width: 226,
-                    url: "https://lh3.googleusercontent.com/Fy78DamI5JWemzCYbJyTx8WJREjwPEyhbeQc0AxDjU3mZm8tBojsU75-1Rt2BM0SQa7VS7eQkdDYQA=w226-h226-l90-rj",
-                },
-                Thumbnail {
-                    height: 544,
-                    width: 544,
-                    url: "https://lh3.googleusercontent.com/Fy78DamI5JWemzCYbJyTx8WJREjwPEyhbeQc0AxDjU3mZm8tBojsU75-1Rt2BM0SQa7VS7eQkdDYQA=w544-h544-l90-rj",
-                },
-            ],
         },
     ],
     community_playlists: [],
@@ -409,18 +183,6 @@ SearchResults {
             video_id: VideoID(
                 "Man4Xw8Xypo",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/8MFj-k2DNUXPKOw8BawKI291ty1Wh8V4M3J6fiq4itWkjw34ncAem60h80eMzsD2XjczahdZEF69CQ8=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/8MFj-k2DNUXPKOw8BawKI291ty1Wh8V4M3J6fiq4itWkjw34ncAem60h80eMzsD2XjczahdZEF69CQ8=w120-h120-l90-rj",
-                },
-            ],
             music_video_type: Some(
                 Atv,
             ),
@@ -442,18 +204,6 @@ SearchResults {
             video_id: VideoID(
                 "fR4HjTH_fTM",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/octdAIhLRBSYd5JKOeTsF5zNhQ4C0L3JtOnjUYPvHLtJaxXr68NVW8gUfsE05aarfaDmZe_ibrVMxo-y4g=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/octdAIhLRBSYd5JKOeTsF5zNhQ4C0L3JtOnjUYPvHLtJaxXr68NVW8gUfsE05aarfaDmZe_ibrVMxo-y4g=w120-h120-l90-rj",
-                },
-            ],
             music_video_type: Some(
                 Atv,
             ),
@@ -475,18 +225,6 @@ SearchResults {
             video_id: VideoID(
                 "QDYfEBY9NM4",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/octdAIhLRBSYd5JKOeTsF5zNhQ4C0L3JtOnjUYPvHLtJaxXr68NVW8gUfsE05aarfaDmZe_ibrVMxo-y4g=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/octdAIhLRBSYd5JKOeTsF5zNhQ4C0L3JtOnjUYPvHLtJaxXr68NVW8gUfsE05aarfaDmZe_ibrVMxo-y4g=w120-h120-l90-rj",
-                },
-            ],
             music_video_type: Some(
                 Atv,
             ),

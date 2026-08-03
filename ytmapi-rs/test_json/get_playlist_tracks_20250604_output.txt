@@ -35,18 +35,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/bmG1q9eu3ub2CtYcgArvzpiehqUpZGuLsOa_B0Bxkwxdfsk9r7nRzAQy1P5dTjqerODLxq3LycWGWW5m=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/bmG1q9eu3ub2CtYcgArvzpiehqUpZGuLsOa_B0Bxkwxdfsk9r7nRzAQy1P5dTjqerODLxq3LycWGWW5m=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -90,18 +78,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/O0BM0qveWB40423x8L9AdJxuMcBhFg0x_UtCbFQ_pRwbF412bmnlKj420gEPx1wwwAVpyXHpHp35cAU=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/O0BM0qveWB40423x8L9AdJxuMcBhFg0x_UtCbFQ_pRwbF412bmnlKj420gEPx1wwwAVpyXHpHp35cAU=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -122,13 +98,6 @@
                 "UC2XdaAVUannpujzv32jcouQ",
             ),
             like_status: Liked,
-            thumbnails: [
-                Thumbnail {
-                    height: 225,
-                    width: 400,
-                    url: "https://i.ytimg.com/vi/A_MjCqQoLLA/sddefault.jpg?sqp=-oaymwEWCJADEOEBIAQqCghqEJQEGHgg6AJIWg&rs=AMzJL3lBbkuyY7UKcfsFCUDm1_xkAeo5Lw",
-                },
-            ],
             is_available: true,
             playlist_id: PlaylistID(
                 "RDAMVMA_MjCqQoLLA",
@@ -171,18 +140,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/bmG1q9eu3ub2CtYcgArvzpiehqUpZGuLsOa_B0Bxkwxdfsk9r7nRzAQy1P5dTjqerODLxq3LycWGWW5m=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/bmG1q9eu3ub2CtYcgArvzpiehqUpZGuLsOa_B0Bxkwxdfsk9r7nRzAQy1P5dTjqerODLxq3LycWGWW5m=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -203,13 +160,6 @@
                 "UC2XdaAVUannpujzv32jcouQ",
             ),
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 225,
-                    width: 400,
-                    url: "https://i.ytimg.com/vi/wXTJBr9tt8Q/sddefault.jpg?sqp=-oaymwEWCJADEOEBIAQqCghqEJQEGHgg6AJIWg&rs=AMzJL3k7jwKZgCyFFiXMzt-iTT7M8fv81w",
-                },
-            ],
             is_available: true,
             playlist_id: PlaylistID(
                 "RDAMVMwXTJBr9tt8Q",
@@ -229,13 +179,6 @@
                 "UCG8MvaPCa2ecKH3GZyFxduA",
             ),
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 225,
-                    width: 400,
-                    url: "https://i.ytimg.com/vi/YXe7GQnvzqY/sddefault.jpg?sqp=-oaymwEWCJADEOEBIAQqCghqEJQEGHgg6AJIWg&rs=AMzJL3nF095rwemtHbahxffp3icDCCBnng",
-                },
-            ],
             is_available: true,
             playlist_id: PlaylistID(
                 "RDAMVMYXe7GQnvzqY",
@@ -255,13 +198,6 @@
                 "UC2XdaAVUannpujzv32jcouQ",
             ),
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 225,
-                    width: 400,
-                    url: "https://i.ytimg.com/vi/jenWdylTtzs/sddefault.jpg?sqp=-oaymwEWCJADEOEBIAQqCghqEJQEGHgg6AJIWg&rs=AMzJL3mC-_5PNhUWpi35XcVoJNHh2al4Xg",
-                },
-            ],
             is_available: true,
             playlist_id: PlaylistID(
                 "RDAMVMjenWdylTtzs",
@@ -300,18 +236,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/fo8rv7ZVCPMGBXD2RsXMrakr9hq7J_i4ennaA5hOxc6UN8dDOqkzNie_rm6a1jRQAoJtO_feFyZWIvii=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/fo8rv7ZVCPMGBXD2RsXMrakr9hq7J_i4ennaA5hOxc6UN8dDOqkzNie_rm6a1jRQAoJtO_feFyZWIvii=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -355,18 +279,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/8MFj-k2DNUXPKOw8BawKI291ty1Wh8V4M3J6fiq4itWkjw34ncAem60h80eMzsD2XjczahdZEF69CQ8=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/8MFj-k2DNUXPKOw8BawKI291ty1Wh8V4M3J6fiq4itWkjw34ncAem60h80eMzsD2XjczahdZEF69CQ8=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -410,18 +322,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/cHaRyci2upQidmt3iHYeAzbkFJ_c1vXEJbpVh-RZpAnbyMNOtOAeZdNMoJnUrRMZnjipmxfxvuvBeFzhWw=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/cHaRyci2upQidmt3iHYeAzbkFJ_c1vXEJbpVh-RZpAnbyMNOtOAeZdNMoJnUrRMZnjipmxfxvuvBeFzhWw=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -465,18 +365,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/IjEb5kMRk7qimcH3BCJaK85pf79X383z5KNrAxJSNOHVWC41_e66Id233ZGj1AQhH1H5AiKxQMEbHPn0=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/IjEb5kMRk7qimcH3BCJaK85pf79X383z5KNrAxJSNOHVWC41_e66Id233ZGj1AQhH1H5AiKxQMEbHPn0=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -520,18 +408,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/RvX-sRBt7B1CPW2z0vIw7kGhq8xXf7FTFZIbOQscCYadjjErfZ4H0eM62m53ExzQTe1oMDma420HejwlVA=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/RvX-sRBt7B1CPW2z0vIw7kGhq8xXf7FTFZIbOQscCYadjjErfZ4H0eM62m53ExzQTe1oMDma420HejwlVA=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -575,18 +451,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/bmG1q9eu3ub2CtYcgArvzpiehqUpZGuLsOa_B0Bxkwxdfsk9r7nRzAQy1P5dTjqerODLxq3LycWGWW5m=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/bmG1q9eu3ub2CtYcgArvzpiehqUpZGuLsOa_B0Bxkwxdfsk9r7nRzAQy1P5dTjqerODLxq3LycWGWW5m=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -630,18 +494,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/8MFj-k2DNUXPKOw8BawKI291ty1Wh8V4M3J6fiq4itWkjw34ncAem60h80eMzsD2XjczahdZEF69CQ8=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/8MFj-k2DNUXPKOw8BawKI291ty1Wh8V4M3J6fiq4itWkjw34ncAem60h80eMzsD2XjczahdZEF69CQ8=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -685,18 +537,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/EO81br_-ABNZsAoWN24yJnsNfxHoo0KGB_XEXkW-PFFT74JlNDPZlO48yONoQiQ2bbXxtn184eez2zk=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/EO81br_-ABNZsAoWN24yJnsNfxHoo0KGB_XEXkW-PFFT74JlNDPZlO48yONoQiQ2bbXxtn184eez2zk=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -740,18 +580,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/r8_4I_rvh2kHa9Y-mSTH72Z84ncYx0SzPVLXXqaLEPYQrWqB03dizqePdZXBtAUa_La2woSY6czcx1U=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/r8_4I_rvh2kHa9Y-mSTH72Z84ncYx0SzPVLXXqaLEPYQrWqB03dizqePdZXBtAUa_La2woSY6czcx1U=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -795,18 +623,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/BfHLoMyzk389QwfEx3Ewr-J4g0nCbbrVzBt43qHtdfnX75veUIropjgAShejer3PzEG3yjSEZsLr-Q9a=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/BfHLoMyzk389QwfEx3Ewr-J4g0nCbbrVzBt43qHtdfnX75veUIropjgAShejer3PzEG3yjSEZsLr-Q9a=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -827,13 +643,6 @@
                 "UC2XdaAVUannpujzv32jcouQ",
             ),
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 225,
-                    width: 400,
-                    url: "https://i.ytimg.com/vi/BGLGzRXY5Bw/sddefault.jpg?sqp=-oaymwEWCJADEOEBIAQqCghqEJQEGHgg6AJIWg&rs=AMzJL3lxIMhgArFpozWXqx2lMEpLlLKz_Q",
-                },
-            ],
             is_available: true,
             playlist_id: PlaylistID(
                 "RDAMVMBGLGzRXY5Bw",
@@ -876,18 +685,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/N5RD4QtjBE8N8F-MjvETLJMFyGVJ8y8mNKXOWurFECyv9wJfMCHq5gm6riNXCkpvhUJ9NfDqb6h6vUUGcg=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/N5RD4QtjBE8N8F-MjvETLJMFyGVJ8y8mNKXOWurFECyv9wJfMCHq5gm6riNXCkpvhUJ9NfDqb6h6vUUGcg=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -931,18 +728,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/N5RD4QtjBE8N8F-MjvETLJMFyGVJ8y8mNKXOWurFECyv9wJfMCHq5gm6riNXCkpvhUJ9NfDqb6h6vUUGcg=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/N5RD4QtjBE8N8F-MjvETLJMFyGVJ8y8mNKXOWurFECyv9wJfMCHq5gm6riNXCkpvhUJ9NfDqb6h6vUUGcg=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -986,18 +771,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/dW7K-yzIJBcCw5qltu-8Yq_vtZfz4CWj-J1_PLDYsj5zPpL23Uw9GxE3PBKhkRlHF42ddIB-sDeBG9Vd=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/dW7K-yzIJBcCw5qltu-8Yq_vtZfz4CWj-J1_PLDYsj5zPpL23Uw9GxE3PBKhkRlHF42ddIB-sDeBG9Vd=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -1041,18 +814,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/r8_4I_rvh2kHa9Y-mSTH72Z84ncYx0SzPVLXXqaLEPYQrWqB03dizqePdZXBtAUa_La2woSY6czcx1U=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/r8_4I_rvh2kHa9Y-mSTH72Z84ncYx0SzPVLXXqaLEPYQrWqB03dizqePdZXBtAUa_La2woSY6czcx1U=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -1096,18 +857,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/GaK6Cr-K_u3zTfIP15u9oRzopw3LQ2vm0y7AckxxuwfwZH9e4nI66aisTD1T7DHL8Ow1zMiUrg1Wqjw6=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/GaK6Cr-K_u3zTfIP15u9oRzopw3LQ2vm0y7AckxxuwfwZH9e4nI66aisTD1T7DHL8Ow1zMiUrg1Wqjw6=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -1151,18 +900,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/DSzJ4yB0HvDMzAUp5_XCo0Jo79GywHqZFJayAVfpoy6Yv-p7DVN-lJxuuYzAYAoDqmxGBDn5kJXaagKR=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/DSzJ4yB0HvDMzAUp5_XCo0Jo79GywHqZFJayAVfpoy6Yv-p7DVN-lJxuuYzAYAoDqmxGBDn5kJXaagKR=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -1206,18 +943,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/GaK6Cr-K_u3zTfIP15u9oRzopw3LQ2vm0y7AckxxuwfwZH9e4nI66aisTD1T7DHL8Ow1zMiUrg1Wqjw6=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/GaK6Cr-K_u3zTfIP15u9oRzopw3LQ2vm0y7AckxxuwfwZH9e4nI66aisTD1T7DHL8Ow1zMiUrg1Wqjw6=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -1261,18 +986,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/O0BM0qveWB40423x8L9AdJxuMcBhFg0x_UtCbFQ_pRwbF412bmnlKj420gEPx1wwwAVpyXHpHp35cAU=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/O0BM0qveWB40423x8L9AdJxuMcBhFg0x_UtCbFQ_pRwbF412bmnlKj420gEPx1wwwAVpyXHpHp35cAU=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -1316,18 +1029,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/8MFj-k2DNUXPKOw8BawKI291ty1Wh8V4M3J6fiq4itWkjw34ncAem60h80eMzsD2XjczahdZEF69CQ8=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/8MFj-k2DNUXPKOw8BawKI291ty1Wh8V4M3J6fiq4itWkjw34ncAem60h80eMzsD2XjczahdZEF69CQ8=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -1371,18 +1072,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/8IP3yQUxIfSPUpDlkprDlHWaDxuddqYIRHsd9IGUu0BqoKrJn2vMCk--zhTQuokvszbIfnor23hoqNY=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/8IP3yQUxIfSPUpDlkprDlHWaDxuddqYIRHsd9IGUu0BqoKrJn2vMCk--zhTQuokvszbIfnor23hoqNY=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -1426,18 +1115,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/dW7K-yzIJBcCw5qltu-8Yq_vtZfz4CWj-J1_PLDYsj5zPpL23Uw9GxE3PBKhkRlHF42ddIB-sDeBG9Vd=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/dW7K-yzIJBcCw5qltu-8Yq_vtZfz4CWj-J1_PLDYsj5zPpL23Uw9GxE3PBKhkRlHF42ddIB-sDeBG9Vd=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -1481,18 +1158,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/r7FUIs4CwI2tr7vFGnvIo8-EgGLBC7LOh5V3OJOIKEneTOAIhgEbUwHeAPizEa2roidqNYaAK-Su48fP1A=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/r7FUIs4CwI2tr7vFGnvIo8-EgGLBC7LOh5V3OJOIKEneTOAIhgEbUwHeAPizEa2roidqNYaAK-Su48fP1A=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -1536,18 +1201,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/EO81br_-ABNZsAoWN24yJnsNfxHoo0KGB_XEXkW-PFFT74JlNDPZlO48yONoQiQ2bbXxtn184eez2zk=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/EO81br_-ABNZsAoWN24yJnsNfxHoo0KGB_XEXkW-PFFT74JlNDPZlO48yONoQiQ2bbXxtn184eez2zk=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -1599,18 +1252,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/O0BM0qveWB40423x8L9AdJxuMcBhFg0x_UtCbFQ_pRwbF412bmnlKj420gEPx1wwwAVpyXHpHp35cAU=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/O0BM0qveWB40423x8L9AdJxuMcBhFg0x_UtCbFQ_pRwbF412bmnlKj420gEPx1wwwAVpyXHpHp35cAU=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -1654,18 +1295,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/cHaRyci2upQidmt3iHYeAzbkFJ_c1vXEJbpVh-RZpAnbyMNOtOAeZdNMoJnUrRMZnjipmxfxvuvBeFzhWw=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/cHaRyci2upQidmt3iHYeAzbkFJ_c1vXEJbpVh-RZpAnbyMNOtOAeZdNMoJnUrRMZnjipmxfxvuvBeFzhWw=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -1709,18 +1338,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/IjEb5kMRk7qimcH3BCJaK85pf79X383z5KNrAxJSNOHVWC41_e66Id233ZGj1AQhH1H5AiKxQMEbHPn0=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/IjEb5kMRk7qimcH3BCJaK85pf79X383z5KNrAxJSNOHVWC41_e66Id233ZGj1AQhH1H5AiKxQMEbHPn0=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -1764,18 +1381,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/GaK6Cr-K_u3zTfIP15u9oRzopw3LQ2vm0y7AckxxuwfwZH9e4nI66aisTD1T7DHL8Ow1zMiUrg1Wqjw6=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/GaK6Cr-K_u3zTfIP15u9oRzopw3LQ2vm0y7AckxxuwfwZH9e4nI66aisTD1T7DHL8Ow1zMiUrg1Wqjw6=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -1819,18 +1424,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/0uSK3j19kosq8SmrnZZ_mlw3kL6ZWFcLRgt0cqhACJcA6cEfLgCscIllVfF-LjkuV3zhuYG6MSFih6PdMw=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/0uSK3j19kosq8SmrnZZ_mlw3kL6ZWFcLRgt0cqhACJcA6cEfLgCscIllVfF-LjkuV3zhuYG6MSFih6PdMw=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -1874,18 +1467,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/A0-PdNUOqA6Cqx0GVb55JcnBpzA76Y-eYkp_BdRXP65Ts-Oqgf7TYRjg3bHcIH5YNnDl-QX1GE7nnoLu=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/A0-PdNUOqA6Cqx0GVb55JcnBpzA76Y-eYkp_BdRXP65Ts-Oqgf7TYRjg3bHcIH5YNnDl-QX1GE7nnoLu=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -1929,18 +1510,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/octdAIhLRBSYd5JKOeTsF5zNhQ4C0L3JtOnjUYPvHLtJaxXr68NVW8gUfsE05aarfaDmZe_ibrVMxo-y4g=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/octdAIhLRBSYd5JKOeTsF5zNhQ4C0L3JtOnjUYPvHLtJaxXr68NVW8gUfsE05aarfaDmZe_ibrVMxo-y4g=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -1984,18 +1553,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/EO81br_-ABNZsAoWN24yJnsNfxHoo0KGB_XEXkW-PFFT74JlNDPZlO48yONoQiQ2bbXxtn184eez2zk=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/EO81br_-ABNZsAoWN24yJnsNfxHoo0KGB_XEXkW-PFFT74JlNDPZlO48yONoQiQ2bbXxtn184eez2zk=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -2039,18 +1596,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/IjEb5kMRk7qimcH3BCJaK85pf79X383z5KNrAxJSNOHVWC41_e66Id233ZGj1AQhH1H5AiKxQMEbHPn0=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/IjEb5kMRk7qimcH3BCJaK85pf79X383z5KNrAxJSNOHVWC41_e66Id233ZGj1AQhH1H5AiKxQMEbHPn0=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -2094,18 +1639,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/3FEtHPcqAjIF06HRNx6nyTVXcKp68EqjE18Wuy8IYNXMHpF_DaP9ASuSnG2wRcm1GnrMmVVLWrSjVL38=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/3FEtHPcqAjIF06HRNx6nyTVXcKp68EqjE18Wuy8IYNXMHpF_DaP9ASuSnG2wRcm1GnrMmVVLWrSjVL38=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -2149,18 +1682,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/5XPHXKkSftFuEa_46Adoq4Iz7rc2DnlJuai-gk-iH_nVw54knyP-4wratRCL0jCYEq8adQVaYR2X0Dz8vA=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/5XPHXKkSftFuEa_46Adoq4Iz7rc2DnlJuai-gk-iH_nVw54knyP-4wratRCL0jCYEq8adQVaYR2X0Dz8vA=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -2204,18 +1725,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/bmG1q9eu3ub2CtYcgArvzpiehqUpZGuLsOa_B0Bxkwxdfsk9r7nRzAQy1P5dTjqerODLxq3LycWGWW5m=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/bmG1q9eu3ub2CtYcgArvzpiehqUpZGuLsOa_B0Bxkwxdfsk9r7nRzAQy1P5dTjqerODLxq3LycWGWW5m=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -2259,18 +1768,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/8MFj-k2DNUXPKOw8BawKI291ty1Wh8V4M3J6fiq4itWkjw34ncAem60h80eMzsD2XjczahdZEF69CQ8=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/8MFj-k2DNUXPKOw8BawKI291ty1Wh8V4M3J6fiq4itWkjw34ncAem60h80eMzsD2XjczahdZEF69CQ8=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -2314,18 +1811,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/GaK6Cr-K_u3zTfIP15u9oRzopw3LQ2vm0y7AckxxuwfwZH9e4nI66aisTD1T7DHL8Ow1zMiUrg1Wqjw6=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/GaK6Cr-K_u3zTfIP15u9oRzopw3LQ2vm0y7AckxxuwfwZH9e4nI66aisTD1T7DHL8Ow1zMiUrg1Wqjw6=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -2369,18 +1854,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/IjEb5kMRk7qimcH3BCJaK85pf79X383z5KNrAxJSNOHVWC41_e66Id233ZGj1AQhH1H5AiKxQMEbHPn0=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/IjEb5kMRk7qimcH3BCJaK85pf79X383z5KNrAxJSNOHVWC41_e66Id233ZGj1AQhH1H5AiKxQMEbHPn0=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -2424,18 +1897,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/8MFj-k2DNUXPKOw8BawKI291ty1Wh8V4M3J6fiq4itWkjw34ncAem60h80eMzsD2XjczahdZEF69CQ8=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/8MFj-k2DNUXPKOw8BawKI291ty1Wh8V4M3J6fiq4itWkjw34ncAem60h80eMzsD2XjczahdZEF69CQ8=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -2479,18 +1940,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/cHaRyci2upQidmt3iHYeAzbkFJ_c1vXEJbpVh-RZpAnbyMNOtOAeZdNMoJnUrRMZnjipmxfxvuvBeFzhWw=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/cHaRyci2upQidmt3iHYeAzbkFJ_c1vXEJbpVh-RZpAnbyMNOtOAeZdNMoJnUrRMZnjipmxfxvuvBeFzhWw=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -2534,18 +1983,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/BfHLoMyzk389QwfEx3Ewr-J4g0nCbbrVzBt43qHtdfnX75veUIropjgAShejer3PzEG3yjSEZsLr-Q9a=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/BfHLoMyzk389QwfEx3Ewr-J4g0nCbbrVzBt43qHtdfnX75veUIropjgAShejer3PzEG3yjSEZsLr-Q9a=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -2589,18 +2026,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/5XPHXKkSftFuEa_46Adoq4Iz7rc2DnlJuai-gk-iH_nVw54knyP-4wratRCL0jCYEq8adQVaYR2X0Dz8vA=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/5XPHXKkSftFuEa_46Adoq4Iz7rc2DnlJuai-gk-iH_nVw54knyP-4wratRCL0jCYEq8adQVaYR2X0Dz8vA=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -2644,18 +2069,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/bmG1q9eu3ub2CtYcgArvzpiehqUpZGuLsOa_B0Bxkwxdfsk9r7nRzAQy1P5dTjqerODLxq3LycWGWW5m=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/bmG1q9eu3ub2CtYcgArvzpiehqUpZGuLsOa_B0Bxkwxdfsk9r7nRzAQy1P5dTjqerODLxq3LycWGWW5m=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -2699,18 +2112,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/BfHLoMyzk389QwfEx3Ewr-J4g0nCbbrVzBt43qHtdfnX75veUIropjgAShejer3PzEG3yjSEZsLr-Q9a=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/BfHLoMyzk389QwfEx3Ewr-J4g0nCbbrVzBt43qHtdfnX75veUIropjgAShejer3PzEG3yjSEZsLr-Q9a=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -2754,18 +2155,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/O0BM0qveWB40423x8L9AdJxuMcBhFg0x_UtCbFQ_pRwbF412bmnlKj420gEPx1wwwAVpyXHpHp35cAU=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/O0BM0qveWB40423x8L9AdJxuMcBhFg0x_UtCbFQ_pRwbF412bmnlKj420gEPx1wwwAVpyXHpHp35cAU=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -2809,18 +2198,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/74ZlD_ClwO8pdKlooxk3BWjGe1NNGU2euQepXyaWilfxceXZj2Uxn4Uk4fOk2btprCSx1lFKH-QlvrbW=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/74ZlD_ClwO8pdKlooxk3BWjGe1NNGU2euQepXyaWilfxceXZj2Uxn4Uk4fOk2btprCSx1lFKH-QlvrbW=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -2864,18 +2241,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/8MFj-k2DNUXPKOw8BawKI291ty1Wh8V4M3J6fiq4itWkjw34ncAem60h80eMzsD2XjczahdZEF69CQ8=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/8MFj-k2DNUXPKOw8BawKI291ty1Wh8V4M3J6fiq4itWkjw34ncAem60h80eMzsD2XjczahdZEF69CQ8=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -2919,18 +2284,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/3FEtHPcqAjIF06HRNx6nyTVXcKp68EqjE18Wuy8IYNXMHpF_DaP9ASuSnG2wRcm1GnrMmVVLWrSjVL38=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/3FEtHPcqAjIF06HRNx6nyTVXcKp68EqjE18Wuy8IYNXMHpF_DaP9ASuSnG2wRcm1GnrMmVVLWrSjVL38=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -2974,18 +2327,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/IjEb5kMRk7qimcH3BCJaK85pf79X383z5KNrAxJSNOHVWC41_e66Id233ZGj1AQhH1H5AiKxQMEbHPn0=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/IjEb5kMRk7qimcH3BCJaK85pf79X383z5KNrAxJSNOHVWC41_e66Id233ZGj1AQhH1H5AiKxQMEbHPn0=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -3029,18 +2370,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/IjEb5kMRk7qimcH3BCJaK85pf79X383z5KNrAxJSNOHVWC41_e66Id233ZGj1AQhH1H5AiKxQMEbHPn0=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/IjEb5kMRk7qimcH3BCJaK85pf79X383z5KNrAxJSNOHVWC41_e66Id233ZGj1AQhH1H5AiKxQMEbHPn0=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -3084,18 +2413,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/EO81br_-ABNZsAoWN24yJnsNfxHoo0KGB_XEXkW-PFFT74JlNDPZlO48yONoQiQ2bbXxtn184eez2zk=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/EO81br_-ABNZsAoWN24yJnsNfxHoo0KGB_XEXkW-PFFT74JlNDPZlO48yONoQiQ2bbXxtn184eez2zk=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -3139,18 +2456,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/bmG1q9eu3ub2CtYcgArvzpiehqUpZGuLsOa_B0Bxkwxdfsk9r7nRzAQy1P5dTjqerODLxq3LycWGWW5m=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/bmG1q9eu3ub2CtYcgArvzpiehqUpZGuLsOa_B0Bxkwxdfsk9r7nRzAQy1P5dTjqerODLxq3LycWGWW5m=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -3194,18 +2499,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/cHaRyci2upQidmt3iHYeAzbkFJ_c1vXEJbpVh-RZpAnbyMNOtOAeZdNMoJnUrRMZnjipmxfxvuvBeFzhWw=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/cHaRyci2upQidmt3iHYeAzbkFJ_c1vXEJbpVh-RZpAnbyMNOtOAeZdNMoJnUrRMZnjipmxfxvuvBeFzhWw=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -3249,18 +2542,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/WbzeDYz9fRAzx_6-Ix97oujwsPzpC5z3dtSd0uftkwu1sMpoGykm7T6zx2UT3iCQw-uVxJ-OaFHtQGT9=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/WbzeDYz9fRAzx_6-Ix97oujwsPzpC5z3dtSd0uftkwu1sMpoGykm7T6zx2UT3iCQw-uVxJ-OaFHtQGT9=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -3304,18 +2585,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/8MFj-k2DNUXPKOw8BawKI291ty1Wh8V4M3J6fiq4itWkjw34ncAem60h80eMzsD2XjczahdZEF69CQ8=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/8MFj-k2DNUXPKOw8BawKI291ty1Wh8V4M3J6fiq4itWkjw34ncAem60h80eMzsD2XjczahdZEF69CQ8=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -3359,18 +2628,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/r8_4I_rvh2kHa9Y-mSTH72Z84ncYx0SzPVLXXqaLEPYQrWqB03dizqePdZXBtAUa_La2woSY6czcx1U=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/r8_4I_rvh2kHa9Y-mSTH72Z84ncYx0SzPVLXXqaLEPYQrWqB03dizqePdZXBtAUa_La2woSY6czcx1U=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -3414,18 +2671,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/EO81br_-ABNZsAoWN24yJnsNfxHoo0KGB_XEXkW-PFFT74JlNDPZlO48yONoQiQ2bbXxtn184eez2zk=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/EO81br_-ABNZsAoWN24yJnsNfxHoo0KGB_XEXkW-PFFT74JlNDPZlO48yONoQiQ2bbXxtn184eez2zk=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -3469,18 +2714,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/bmG1q9eu3ub2CtYcgArvzpiehqUpZGuLsOa_B0Bxkwxdfsk9r7nRzAQy1P5dTjqerODLxq3LycWGWW5m=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/bmG1q9eu3ub2CtYcgArvzpiehqUpZGuLsOa_B0Bxkwxdfsk9r7nRzAQy1P5dTjqerODLxq3LycWGWW5m=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -3524,18 +2757,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/BfHLoMyzk389QwfEx3Ewr-J4g0nCbbrVzBt43qHtdfnX75veUIropjgAShejer3PzEG3yjSEZsLr-Q9a=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/BfHLoMyzk389QwfEx3Ewr-J4g0nCbbrVzBt43qHtdfnX75veUIropjgAShejer3PzEG3yjSEZsLr-Q9a=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -3579,18 +2800,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/N5RD4QtjBE8N8F-MjvETLJMFyGVJ8y8mNKXOWurFECyv9wJfMCHq5gm6riNXCkpvhUJ9NfDqb6h6vUUGcg=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/N5RD4QtjBE8N8F-MjvETLJMFyGVJ8y8mNKXOWurFECyv9wJfMCHq5gm6riNXCkpvhUJ9NfDqb6h6vUUGcg=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -3634,18 +2843,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/8MFj-k2DNUXPKOw8BawKI291ty1Wh8V4M3J6fiq4itWkjw34ncAem60h80eMzsD2XjczahdZEF69CQ8=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/8MFj-k2DNUXPKOw8BawKI291ty1Wh8V4M3J6fiq4itWkjw34ncAem60h80eMzsD2XjczahdZEF69CQ8=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -3689,18 +2886,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/r8_4I_rvh2kHa9Y-mSTH72Z84ncYx0SzPVLXXqaLEPYQrWqB03dizqePdZXBtAUa_La2woSY6czcx1U=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/r8_4I_rvh2kHa9Y-mSTH72Z84ncYx0SzPVLXXqaLEPYQrWqB03dizqePdZXBtAUa_La2woSY6czcx1U=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -3744,18 +2929,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/IjEb5kMRk7qimcH3BCJaK85pf79X383z5KNrAxJSNOHVWC41_e66Id233ZGj1AQhH1H5AiKxQMEbHPn0=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/IjEb5kMRk7qimcH3BCJaK85pf79X383z5KNrAxJSNOHVWC41_e66Id233ZGj1AQhH1H5AiKxQMEbHPn0=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -3799,18 +2972,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/r8_4I_rvh2kHa9Y-mSTH72Z84ncYx0SzPVLXXqaLEPYQrWqB03dizqePdZXBtAUa_La2woSY6czcx1U=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/r8_4I_rvh2kHa9Y-mSTH72Z84ncYx0SzPVLXXqaLEPYQrWqB03dizqePdZXBtAUa_La2woSY6czcx1U=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -3854,18 +3015,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/N5RD4QtjBE8N8F-MjvETLJMFyGVJ8y8mNKXOWurFECyv9wJfMCHq5gm6riNXCkpvhUJ9NfDqb6h6vUUGcg=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/N5RD4QtjBE8N8F-MjvETLJMFyGVJ8y8mNKXOWurFECyv9wJfMCHq5gm6riNXCkpvhUJ9NfDqb6h6vUUGcg=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -3909,18 +3058,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/bmG1q9eu3ub2CtYcgArvzpiehqUpZGuLsOa_B0Bxkwxdfsk9r7nRzAQy1P5dTjqerODLxq3LycWGWW5m=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/bmG1q9eu3ub2CtYcgArvzpiehqUpZGuLsOa_B0Bxkwxdfsk9r7nRzAQy1P5dTjqerODLxq3LycWGWW5m=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -3964,18 +3101,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/r8_4I_rvh2kHa9Y-mSTH72Z84ncYx0SzPVLXXqaLEPYQrWqB03dizqePdZXBtAUa_La2woSY6czcx1U=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/r8_4I_rvh2kHa9Y-mSTH72Z84ncYx0SzPVLXXqaLEPYQrWqB03dizqePdZXBtAUa_La2woSY6czcx1U=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -4019,18 +3144,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/8MFj-k2DNUXPKOw8BawKI291ty1Wh8V4M3J6fiq4itWkjw34ncAem60h80eMzsD2XjczahdZEF69CQ8=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/8MFj-k2DNUXPKOw8BawKI291ty1Wh8V4M3J6fiq4itWkjw34ncAem60h80eMzsD2XjczahdZEF69CQ8=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -4074,18 +3187,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/O0BM0qveWB40423x8L9AdJxuMcBhFg0x_UtCbFQ_pRwbF412bmnlKj420gEPx1wwwAVpyXHpHp35cAU=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/O0BM0qveWB40423x8L9AdJxuMcBhFg0x_UtCbFQ_pRwbF412bmnlKj420gEPx1wwwAVpyXHpHp35cAU=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -4129,18 +3230,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/8MFj-k2DNUXPKOw8BawKI291ty1Wh8V4M3J6fiq4itWkjw34ncAem60h80eMzsD2XjczahdZEF69CQ8=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/8MFj-k2DNUXPKOw8BawKI291ty1Wh8V4M3J6fiq4itWkjw34ncAem60h80eMzsD2XjczahdZEF69CQ8=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -4184,18 +3273,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/8MFj-k2DNUXPKOw8BawKI291ty1Wh8V4M3J6fiq4itWkjw34ncAem60h80eMzsD2XjczahdZEF69CQ8=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/8MFj-k2DNUXPKOw8BawKI291ty1Wh8V4M3J6fiq4itWkjw34ncAem60h80eMzsD2XjczahdZEF69CQ8=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -4239,18 +3316,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/r8_4I_rvh2kHa9Y-mSTH72Z84ncYx0SzPVLXXqaLEPYQrWqB03dizqePdZXBtAUa_La2woSY6czcx1U=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/r8_4I_rvh2kHa9Y-mSTH72Z84ncYx0SzPVLXXqaLEPYQrWqB03dizqePdZXBtAUa_La2woSY6czcx1U=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -4294,18 +3359,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/BfHLoMyzk389QwfEx3Ewr-J4g0nCbbrVzBt43qHtdfnX75veUIropjgAShejer3PzEG3yjSEZsLr-Q9a=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/BfHLoMyzk389QwfEx3Ewr-J4g0nCbbrVzBt43qHtdfnX75veUIropjgAShejer3PzEG3yjSEZsLr-Q9a=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -4349,18 +3402,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/BfHLoMyzk389QwfEx3Ewr-J4g0nCbbrVzBt43qHtdfnX75veUIropjgAShejer3PzEG3yjSEZsLr-Q9a=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/BfHLoMyzk389QwfEx3Ewr-J4g0nCbbrVzBt43qHtdfnX75veUIropjgAShejer3PzEG3yjSEZsLr-Q9a=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -4404,18 +3445,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/A0-PdNUOqA6Cqx0GVb55JcnBpzA76Y-eYkp_BdRXP65Ts-Oqgf7TYRjg3bHcIH5YNnDl-QX1GE7nnoLu=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/A0-PdNUOqA6Cqx0GVb55JcnBpzA76Y-eYkp_BdRXP65Ts-Oqgf7TYRjg3bHcIH5YNnDl-QX1GE7nnoLu=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -4459,18 +3488,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/cHaRyci2upQidmt3iHYeAzbkFJ_c1vXEJbpVh-RZpAnbyMNOtOAeZdNMoJnUrRMZnjipmxfxvuvBeFzhWw=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/cHaRyci2upQidmt3iHYeAzbkFJ_c1vXEJbpVh-RZpAnbyMNOtOAeZdNMoJnUrRMZnjipmxfxvuvBeFzhWw=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -4514,18 +3531,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/N5RD4QtjBE8N8F-MjvETLJMFyGVJ8y8mNKXOWurFECyv9wJfMCHq5gm6riNXCkpvhUJ9NfDqb6h6vUUGcg=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/N5RD4QtjBE8N8F-MjvETLJMFyGVJ8y8mNKXOWurFECyv9wJfMCHq5gm6riNXCkpvhUJ9NfDqb6h6vUUGcg=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -4569,18 +3574,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/bmG1q9eu3ub2CtYcgArvzpiehqUpZGuLsOa_B0Bxkwxdfsk9r7nRzAQy1P5dTjqerODLxq3LycWGWW5m=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/bmG1q9eu3ub2CtYcgArvzpiehqUpZGuLsOa_B0Bxkwxdfsk9r7nRzAQy1P5dTjqerODLxq3LycWGWW5m=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -4624,18 +3617,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/bmG1q9eu3ub2CtYcgArvzpiehqUpZGuLsOa_B0Bxkwxdfsk9r7nRzAQy1P5dTjqerODLxq3LycWGWW5m=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/bmG1q9eu3ub2CtYcgArvzpiehqUpZGuLsOa_B0Bxkwxdfsk9r7nRzAQy1P5dTjqerODLxq3LycWGWW5m=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -4679,18 +3660,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/3FEtHPcqAjIF06HRNx6nyTVXcKp68EqjE18Wuy8IYNXMHpF_DaP9ASuSnG2wRcm1GnrMmVVLWrSjVL38=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/3FEtHPcqAjIF06HRNx6nyTVXcKp68EqjE18Wuy8IYNXMHpF_DaP9ASuSnG2wRcm1GnrMmVVLWrSjVL38=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -4734,18 +3703,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/bmG1q9eu3ub2CtYcgArvzpiehqUpZGuLsOa_B0Bxkwxdfsk9r7nRzAQy1P5dTjqerODLxq3LycWGWW5m=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/bmG1q9eu3ub2CtYcgArvzpiehqUpZGuLsOa_B0Bxkwxdfsk9r7nRzAQy1P5dTjqerODLxq3LycWGWW5m=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -4789,18 +3746,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/RvX-sRBt7B1CPW2z0vIw7kGhq8xXf7FTFZIbOQscCYadjjErfZ4H0eM62m53ExzQTe1oMDma420HejwlVA=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/RvX-sRBt7B1CPW2z0vIw7kGhq8xXf7FTFZIbOQscCYadjjErfZ4H0eM62m53ExzQTe1oMDma420HejwlVA=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -4844,18 +3789,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/r8_4I_rvh2kHa9Y-mSTH72Z84ncYx0SzPVLXXqaLEPYQrWqB03dizqePdZXBtAUa_La2woSY6czcx1U=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/r8_4I_rvh2kHa9Y-mSTH72Z84ncYx0SzPVLXXqaLEPYQrWqB03dizqePdZXBtAUa_La2woSY6czcx1U=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -4899,18 +3832,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/8MFj-k2DNUXPKOw8BawKI291ty1Wh8V4M3J6fiq4itWkjw34ncAem60h80eMzsD2XjczahdZEF69CQ8=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/8MFj-k2DNUXPKOw8BawKI291ty1Wh8V4M3J6fiq4itWkjw34ncAem60h80eMzsD2XjczahdZEF69CQ8=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -4954,18 +3875,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/IjEb5kMRk7qimcH3BCJaK85pf79X383z5KNrAxJSNOHVWC41_e66Id233ZGj1AQhH1H5AiKxQMEbHPn0=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/IjEb5kMRk7qimcH3BCJaK85pf79X383z5KNrAxJSNOHVWC41_e66Id233ZGj1AQhH1H5AiKxQMEbHPn0=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -5009,18 +3918,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/3FEtHPcqAjIF06HRNx6nyTVXcKp68EqjE18Wuy8IYNXMHpF_DaP9ASuSnG2wRcm1GnrMmVVLWrSjVL38=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/3FEtHPcqAjIF06HRNx6nyTVXcKp68EqjE18Wuy8IYNXMHpF_DaP9ASuSnG2wRcm1GnrMmVVLWrSjVL38=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -5064,18 +3961,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/r8_4I_rvh2kHa9Y-mSTH72Z84ncYx0SzPVLXXqaLEPYQrWqB03dizqePdZXBtAUa_La2woSY6czcx1U=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/r8_4I_rvh2kHa9Y-mSTH72Z84ncYx0SzPVLXXqaLEPYQrWqB03dizqePdZXBtAUa_La2woSY6czcx1U=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -5119,18 +4004,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/bmG1q9eu3ub2CtYcgArvzpiehqUpZGuLsOa_B0Bxkwxdfsk9r7nRzAQy1P5dTjqerODLxq3LycWGWW5m=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/bmG1q9eu3ub2CtYcgArvzpiehqUpZGuLsOa_B0Bxkwxdfsk9r7nRzAQy1P5dTjqerODLxq3LycWGWW5m=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -5174,18 +4047,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/N5RD4QtjBE8N8F-MjvETLJMFyGVJ8y8mNKXOWurFECyv9wJfMCHq5gm6riNXCkpvhUJ9NfDqb6h6vUUGcg=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/N5RD4QtjBE8N8F-MjvETLJMFyGVJ8y8mNKXOWurFECyv9wJfMCHq5gm6riNXCkpvhUJ9NfDqb6h6vUUGcg=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -5229,18 +4090,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/74ZlD_ClwO8pdKlooxk3BWjGe1NNGU2euQepXyaWilfxceXZj2Uxn4Uk4fOk2btprCSx1lFKH-QlvrbW=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/74ZlD_ClwO8pdKlooxk3BWjGe1NNGU2euQepXyaWilfxceXZj2Uxn4Uk4fOk2btprCSx1lFKH-QlvrbW=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -5284,18 +4133,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/GaK6Cr-K_u3zTfIP15u9oRzopw3LQ2vm0y7AckxxuwfwZH9e4nI66aisTD1T7DHL8Ow1zMiUrg1Wqjw6=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/GaK6Cr-K_u3zTfIP15u9oRzopw3LQ2vm0y7AckxxuwfwZH9e4nI66aisTD1T7DHL8Ow1zMiUrg1Wqjw6=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -5339,18 +4176,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/A0-PdNUOqA6Cqx0GVb55JcnBpzA76Y-eYkp_BdRXP65Ts-Oqgf7TYRjg3bHcIH5YNnDl-QX1GE7nnoLu=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/A0-PdNUOqA6Cqx0GVb55JcnBpzA76Y-eYkp_BdRXP65Ts-Oqgf7TYRjg3bHcIH5YNnDl-QX1GE7nnoLu=w120-h120-l90-rj",
-                },
-            ],
             explicit: NotExplicit,
             is_available: true,
             playlist_id: PlaylistID(
@@ -5381,18 +4206,6 @@
                 },
             ],
             like_status: Indifferent,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://www.gstatic.com/youtube/media/ytm/images/cover_track_default@1200.png?sqp=CPXnx-oF-oaymwEGCDwQPFgB&rs=ALLJMcKG4HoG-nDcHAjjtvKnA1-TsHbplA",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://www.gstatic.com/youtube/media/ytm/images/cover_track_default@1200.png?sqp=CMnnx-oF-oaymwEGCHgQeFgB&rs=ALLJMcJMYVX-njU3_fFWsT7BvREyrfEBFQ",
-                },
-            ],
         },
     ),
 ]

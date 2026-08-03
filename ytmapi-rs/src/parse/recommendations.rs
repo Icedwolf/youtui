@@ -3,10 +3,10 @@ use super::{
     TASTE_PROFILE_IMPRESSION, TASTE_PROFILE_ITEMS, TASTE_PROFILE_SELECTION,
 };
 use crate::Result;
-use crate::common::{MoodCategoryParams, PlaylistID, TasteToken, Thumbnail};
+use crate::common::{MoodCategoryParams, PlaylistID, TasteToken};
 use crate::nav_consts::{
     CAROUSEL, CAROUSEL_TITLE, CATEGORY_PARAMS, MTRIR, NAVIGATION_BROWSE_ID, SECTION_LIST,
-    SINGLE_COLUMN_TAB, SUBTITLE_RUNS, THUMBNAIL_RENDERER, TITLE_TEXT,
+    SINGLE_COLUMN_TAB, SUBTITLE_RUNS, TITLE_TEXT,
 };
 use crate::query::{
     GetMoodCategoriesQuery, GetMoodPlaylistsQuery, GetTasteProfileQuery, SetTasteProfileQuery,
@@ -43,7 +43,6 @@ pub struct MoodPlaylistCategory {
 pub struct MoodPlaylist {
     pub playlist_id: PlaylistID<'static>,
     pub title: String,
-    pub thumbnails: Vec<Thumbnail>,
     pub author: String,
 }
 
@@ -131,7 +130,6 @@ impl<'a> ParseFrom<GetMoodPlaylistsQuery<'a>> for Vec<MoodPlaylistCategory> {
             let mut item = crawler.navigate_pointer(MTRIR)?;
             let playlist_id = item.take_value_pointer(NAVIGATION_BROWSE_ID)?;
             let title = item.take_value_pointer(TITLE_TEXT)?;
-            let thumbnails = item.take_value_pointer(THUMBNAIL_RENDERER)?;
 
             let author = item.borrow_pointer(SUBTITLE_RUNS)?.try_expect(
                 "Subtitle runs should contain at least 1 item",
@@ -148,7 +146,6 @@ impl<'a> ParseFrom<GetMoodPlaylistsQuery<'a>> for Vec<MoodPlaylistCategory> {
             Ok(MoodPlaylist {
                 playlist_id,
                 title,
-                thumbnails,
                 author,
             })
         }

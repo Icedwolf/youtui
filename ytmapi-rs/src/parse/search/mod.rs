@@ -1,7 +1,7 @@
 use super::{
     DISPLAY_POLICY, ParseFrom, ProcessedResult, flex_column_item_pointer, parse_flex_column_item,
 };
-use crate::common::{ContinuationParams, Explicit, SearchSuggestion, SuggestionType, TextRun, Thumbnail};
+use crate::common::{ContinuationParams, Explicit, SearchSuggestion, SuggestionType, TextRun};
 use crate::continuations::ParseFromContinuable;
 use crate::nav_consts::*;
 use crate::query::search::UnfilteredSearchType;
@@ -141,12 +141,10 @@ fn parse_top_results_from_music_card_shelf_contents(
     let duration = None;
     let year = None;
     let plays = None;
-    let thumbnails: Vec<Thumbnail> = music_shelf_contents.take_value_pointer(THUMBNAILS)?;
     let first_result = TopResult {
         // Assuming that in non-card case top result always has a result type.
         result_type,
         subscribers,
-        thumbnails,
         result_name,
         publisher,
         artist,
@@ -238,11 +236,9 @@ fn parse_top_result_from_music_shelf_contents(
             plays = parse_flex_column_item(&mut mrlir, 1, 6).ok();
         }
     }
-    let thumbnails: Vec<Thumbnail> = mrlir.take_value_pointer(THUMBNAILS)?;
     Ok(Some(TopResult {
         result_type,
         subscribers,
-        thumbnails,
         result_name,
         publisher,
         artist,
@@ -262,11 +258,9 @@ fn parse_artist_search_result_from_music_shelf_contents(
     let artist = parse_flex_column_item(&mut mrlir, 0, 0)?;
     let subscribers = parse_flex_column_item(&mut mrlir, 1, 2).ok();
     let browse_id = mrlir.take_value_pointer(NAVIGATION_BROWSE_ID)?;
-    let thumbnails: Vec<Thumbnail> = mrlir.take_value_pointer(THUMBNAILS)?;
     Ok(SearchResultArtist {
         artist,
         subscribers,
-        thumbnails,
         browse_id,
     })
 }
@@ -279,12 +273,10 @@ fn parse_profile_search_result_from_music_shelf_contents(
     let title = parse_flex_column_item(&mut mrlir, 0, 0)?;
     let username = parse_flex_column_item(&mut mrlir, 1, 2)?;
     let profile_id = mrlir.take_value_pointer(NAVIGATION_BROWSE_ID)?;
-    let thumbnails: Vec<Thumbnail> = mrlir.take_value_pointer(THUMBNAILS)?;
     Ok(SearchResultProfile {
         title,
         username,
         profile_id,
-        thumbnails,
     })
 }
 // TODO: Type safety
@@ -322,10 +314,8 @@ fn parse_album_search_result_from_music_shelf_contents(
         Explicit::NotExplicit
     };
     let browse_id = mrlir.take_value_pointer(NAVIGATION_BROWSE_ID)?;
-    let thumbnails: Vec<Thumbnail> = mrlir.take_value_pointer(THUMBNAILS)?;
     Ok(SearchResultAlbum {
         artist,
-        thumbnails,
         album_id: browse_id,
         title,
         year,
@@ -387,7 +377,6 @@ fn parse_song_search_result_from_music_shelf_contents(
         Explicit::NotExplicit
     };
     let video_id = mrlir.take_value_pointer(PLAYLIST_ITEM_VIDEO_ID)?;
-    let thumbnails: Vec<Thumbnail> = mrlir.take_value_pointer(THUMBNAILS)?;
     let video_type_path = concatcp!(
         PLAY_BUTTON,
         "/playNavigationEndpoint",
@@ -397,7 +386,6 @@ fn parse_song_search_result_from_music_shelf_contents(
         mrlir.take_value_pointer(video_type_path).ok();
     Ok(SearchResultSong {
         artist,
-        thumbnails,
         title,
         explicit,
         plays,
@@ -422,7 +410,6 @@ fn parse_video_search_result_from_music_shelf_contents(
     };
     let title = parse_flex_column_item(&mut mrlir, 0, 0)?;
     let first_field: String = parse_flex_column_item(&mut mrlir, 1, 0)?;
-    let thumbnails: Vec<Thumbnail> = mrlir.take_value_pointer(THUMBNAILS)?;
     match first_field.as_str() {
         // Old API format: flex column run 0 contains "Video" or "Episode" label
         "Video" => {
@@ -435,7 +422,6 @@ fn parse_video_search_result_from_music_shelf_contents(
                 channel_name,
                 views,
                 length,
-                thumbnails,
                 video_id,
             }))
         }
@@ -449,7 +435,6 @@ fn parse_video_search_result_from_music_shelf_contents(
                 title,
                 channel_name,
                 date,
-                thumbnails,
                 episode_id,
             }))
         }
@@ -465,7 +450,6 @@ fn parse_video_search_result_from_music_shelf_contents(
                     channel_name: first_field,
                     views,
                     length,
-                    thumbnails,
                     video_id,
                 }))
             } else {
@@ -475,7 +459,6 @@ fn parse_video_search_result_from_music_shelf_contents(
                     title,
                     channel_name,
                     date: EpisodeDate::Recorded { date: first_field },
-                    thumbnails,
                     episode_id,
                 }))
             }
@@ -491,12 +474,10 @@ fn parse_podcast_search_result_from_music_shelf_contents(
     let title = parse_flex_column_item(&mut mrlir, 0, 0)?;
     let publisher = parse_flex_column_item(&mut mrlir, 1, 0)?;
     let podcast_id = mrlir.take_value_pointer(NAVIGATION_BROWSE_ID)?;
-    let thumbnails: Vec<Thumbnail> = mrlir.take_value_pointer(THUMBNAILS)?;
     Ok(SearchResultPodcast {
         title,
         publisher,
         podcast_id,
-        thumbnails,
     })
 }
 // TODO: Type safety
@@ -528,13 +509,11 @@ fn parse_episode_search_result_from_music_shelf_contents(
         )
     };
     let video_id = mrlir.take_value_pointer(PLAYLIST_ITEM_VIDEO_ID)?;
-    let thumbnails: Vec<Thumbnail> = mrlir.take_value_pointer(THUMBNAILS)?;
     Ok(SearchResultEpisode {
         title,
         date,
         episode_id: video_id,
         channel_name,
-        thumbnails,
     })
 }
 // TODO: Type safety
@@ -547,13 +526,11 @@ fn parse_featured_playlist_search_result_from_music_shelf_contents(
     let author = parse_flex_column_item(&mut mrlir, 1, 0)?;
     let songs = parse_flex_column_item(&mut mrlir, 1, 2)?;
     let playlist_id = mrlir.take_value_pointer(NAVIGATION_BROWSE_ID)?;
-    let thumbnails: Vec<Thumbnail> = mrlir.take_value_pointer(THUMBNAILS)?;
     Ok(SearchResultFeaturedPlaylist {
         title,
         author,
         playlist_id,
         songs,
-        thumbnails,
     })
 }
 fn parse_community_playlist_search_result_from_music_shelf_contents(
@@ -564,13 +541,11 @@ fn parse_community_playlist_search_result_from_music_shelf_contents(
     let author = parse_flex_column_item(&mut mrlir, 1, 0)?;
     let views = parse_flex_column_item(&mut mrlir, 1, 2)?;
     let playlist_id = mrlir.take_value_pointer(NAVIGATION_BROWSE_ID)?;
-    let thumbnails: Vec<Thumbnail> = mrlir.take_value_pointer(THUMBNAILS)?;
     Ok(SearchResultCommunityPlaylist {
         title,
         author,
         playlist_id,
         views,
-        thumbnails,
     })
 }
 

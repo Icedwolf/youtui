@@ -1,11 +1,10 @@
 use super::{
     ParseFrom, RUN_TEXT, SECONDARY_SECTION_LIST_ITEM, STRAPLINE_RUNS, TAB_CONTENT,
-    THUMBNAIL_RENDERER, THUMBNAILS, TITLE_TEXT, VISUAL_HEADER,
+    TITLE_TEXT, VISUAL_HEADER,
 };
 use crate::Result;
 use crate::common::{
     EpisodeID, LibraryStatus, PlaylistID, PodcastChannelID, PodcastChannelParams, PodcastID,
-    Thumbnail,
 };
 use crate::nav_consts::{
     CAROUSEL, CAROUSEL_TITLE, DESCRIPTION, DESCRIPTION_SHELF, GRID_ITEMS, MMRLIR, MTRIR,
@@ -25,7 +24,6 @@ use serde::{Deserialize, Serialize};
 #[non_exhaustive]
 pub struct GetPodcastChannel {
     pub title: String,
-    pub thumbnails: Vec<Thumbnail>,
     pub episode_params: Option<PodcastChannelParams<'static>>,
     pub episodes: Vec<Episode>,
     pub podcasts: Vec<GetPodcastChannelPodcast>,
@@ -40,7 +38,6 @@ pub struct Episode {
     pub remaining_duration: String,
     pub date: String,
     pub episode_id: EpisodeID<'static>,
-    pub thumbnails: Vec<Thumbnail>,
 }
 #[derive(PartialEq, Debug, Clone, Deserialize, Serialize)]
 #[non_exhaustive]
@@ -48,7 +45,6 @@ pub struct GetPodcastChannelPodcast {
     pub title: String,
     pub channels: Vec<ParsedPodcastChannel>,
     pub podcast_id: PodcastID<'static>,
-    pub thumbnails: Vec<Thumbnail>,
 }
 #[derive(PartialEq, Debug, Clone, Deserialize, Serialize)]
 #[non_exhaustive]
@@ -57,7 +53,6 @@ pub struct GetPodcastChannelPlaylist {
     pub channel: ParsedPodcastChannel,
     pub playlist_id: PlaylistID<'static>,
     pub views: String,
-    pub thumbnails: Vec<Thumbnail>,
 }
 #[derive(PartialEq, Debug, Clone, Deserialize, Serialize)]
 // Intentionally not marked non_exhaustive - not expected to change.
@@ -110,7 +105,6 @@ impl ParseFrom<GetChannelQuery<'_>> for GetPodcastChannel {
             let mut podcast = crawler.navigate_pointer(MTRIR)?;
             let title = podcast.take_value_pointer(TITLE_TEXT)?;
             let podcast_id = podcast.take_value_pointer(NAVIGATION_BROWSE_ID)?;
-            let thumbnails = podcast.take_value_pointer(THUMBNAIL_RENDERER)?;
             let channels = podcast
                 .navigate_pointer(SUBTITLE_RUNS)?
                 .try_into_iter()?
@@ -120,21 +114,18 @@ impl ParseFrom<GetChannelQuery<'_>> for GetPodcastChannel {
                 title,
                 channels,
                 podcast_id,
-                thumbnails,
             })
         }
         fn parse_playlist(crawler: impl JsonCrawler) -> Result<GetPodcastChannelPlaylist> {
             let mut podcast = crawler.navigate_pointer(MTRIR)?;
             let title = podcast.take_value_pointer(TITLE_TEXT)?;
             let playlist_id = podcast.take_value_pointer(NAVIGATION_BROWSE_ID)?;
-            let thumbnails = podcast.take_value_pointer(THUMBNAIL_RENDERER)?;
             let views = podcast.take_value_pointer(SUBTITLE3)?;
             let channel =
                 parse_podcast_channel(podcast.navigate_pointer(SUBTITLE_RUNS)?.navigate_index(2)?)?;
             Ok(GetPodcastChannelPlaylist {
                 title,
                 channel,
-                thumbnails,
                 playlist_id,
                 views,
             })
@@ -142,7 +133,6 @@ impl ParseFrom<GetChannelQuery<'_>> for GetPodcastChannel {
         let mut json_crawler = JsonCrawlerOwned::from(p);
         let mut header = json_crawler.borrow_pointer(VISUAL_HEADER)?;
         let title = header.take_value_pointer(TITLE_TEXT)?;
-        let thumbnails = header.take_value_pointer(THUMBNAILS)?;
         let mut podcasts = Vec::new();
         let mut episodes = Vec::new();
         let mut playlists = Vec::new();
@@ -190,7 +180,6 @@ impl ParseFrom<GetChannelQuery<'_>> for GetPodcastChannel {
         }
         Ok(GetPodcastChannel {
             title,
-            thumbnails,
             episode_params,
             episodes,
             podcasts,
@@ -328,7 +317,6 @@ fn parse_episode(crawler: impl JsonCrawler) -> Result<Episode> {
     let total_duration = episode.take_value_pointer(PLAYBACK_DURATION_TEXT)?;
     let remaining_duration = episode.take_value_pointer(PLAYBACK_PROGRESS_TEXT)?;
     let date = episode.take_value_pointer(SUBTITLE)?;
-    let thumbnails = episode.take_value_pointer(THUMBNAILS)?;
     let mut title_run = episode.navigate_pointer(TITLE)?;
     let title = title_run.take_value_pointer("/text")?;
     let episode_id = title_run.take_value_pointer(NAVIGATION_BROWSE_ID)?;
@@ -339,7 +327,6 @@ fn parse_episode(crawler: impl JsonCrawler) -> Result<Episode> {
         remaining_duration,
         date,
         episode_id,
-        thumbnails,
     })
 }
 

@@ -5,7 +5,7 @@ use super::{
 };
 use crate::Result;
 use crate::common::{
-    AlbumType, Explicit, LibraryManager, LibraryStatus, LikeStatus, PlaylistID, Thumbnail, VideoID,
+    AlbumType, Explicit, LibraryManager, LibraryStatus, LikeStatus, PlaylistID, VideoID,
 };
 use crate::nav_consts::*;
 use crate::query::*;
@@ -88,8 +88,6 @@ impl From<ArtistSong> for AlbumSong {
 pub struct GetAlbum {
     pub title: String,
     pub category: AlbumType,
-    pub thumbnails: Vec<Thumbnail>,
-    pub artist_thumbnails: Vec<Thumbnail>,
     pub description: Option<String>,
     pub artists: Vec<ParsedSongArtist>,
     pub year: String,
@@ -185,11 +183,6 @@ fn parse_album_query(p: ProcessedResult<GetAlbumQuery>) -> Result<GetAlbum> {
                 .collect::<CrawlerResult<String>>()
         })
         .transpose()?;
-    // artist thumbnails may not be present, refer to https://github.com/nick42d/youtui/issues/144
-    let artist_thumbnails = header
-        .take_value_pointer(STRAPLINE_THUMBNAIL)
-        .unwrap_or_default();
-    let thumbnails = header.take_value_pointer(THUMBNAILS)?;
     let duration = header.take_value_pointer("/secondSubtitle/runs/2/text")?;
     let track_count_text = header.take_value_pointer("/secondSubtitle/runs/0/text")?;
     let mut buttons = header.borrow_pointer("/buttons")?;
@@ -217,7 +210,6 @@ fn parse_album_query(p: ProcessedResult<GetAlbumQuery>) -> Result<GetAlbum> {
         library_status,
         title,
         description,
-        artist_thumbnails,
         duration,
         category,
         track_count_text,
@@ -225,7 +217,6 @@ fn parse_album_query(p: ProcessedResult<GetAlbumQuery>) -> Result<GetAlbum> {
         year,
         tracks,
         artists,
-        thumbnails,
     })
 }
 

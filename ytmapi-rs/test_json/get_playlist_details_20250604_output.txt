@@ -15,21 +15,4 @@ GetPlaylistDetails {
     views: Some(
         "36M views",
     ),
-    thumbnails: [
-        Thumbnail {
-            height: 192,
-            width: 192,
-            url: "https://yt3.ggpht.com/YBt8Xst5N_I35MAUzdZwh_5ltgdlU7uxsojLYVqUIYUV8GTuKSDZ0K5O1AaFIuH3BZ20b4KbM5U=s192",
-        },
-        Thumbnail {
-            height: 576,
-            width: 576,
-            url: "https://yt3.ggpht.com/YBt8Xst5N_I35MAUzdZwh_5ltgdlU7uxsojLYVqUIYUV8GTuKSDZ0K5O1AaFIuH3BZ20b4KbM5U=s576",
-        },
-        Thumbnail {
-            height: 1200,
-            width: 1200,
-            url: "https://yt3.ggpht.com/YBt8Xst5N_I35MAUzdZwh_5ltgdlU7uxsojLYVqUIYUV8GTuKSDZ0K5O1AaFIuH3BZ20b4KbM5U=s1200",
-        },
-    ],
 }

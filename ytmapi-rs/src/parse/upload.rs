@@ -4,15 +4,15 @@ use super::{
 };
 use crate::Result;
 use crate::common::{
-    AlbumType, LikeStatus, Thumbnail, UploadAlbumID, UploadArtistID, UploadEntityID, VideoID,
+    AlbumType, LikeStatus, UploadAlbumID, UploadArtistID, UploadEntityID, VideoID,
 };
 use crate::continuations::ParseFromContinuable;
 use crate::nav_consts::{
     CONTINUATION_PARAMS, GRID, GRID_CONTINUATION, INDEX_TEXT, MENU_ITEMS, MENU_LIKE_STATUS, MRLIR,
     MUSIC_SHELF, MUSIC_SHELF_CONTINUATION, NAVIGATION_BROWSE_ID, PLAY_BUTTON, SECTION_LIST_ITEM,
     SINGLE_COLUMN_TAB, SINGLE_COLUMN_TABS, SUBTITLE2, SUBTITLE3, TAB_RENDERER, TEXT_RUN_TEXT,
-    THUMBNAIL_ANIMATED_ICON, THUMBNAIL_BADGE_ICON, THUMBNAIL_CROPPED, THUMBNAIL_RENDERER,
-    THUMBNAILS, TITLE_TEXT, WATCH_VIDEO_ID,
+    THUMBNAIL_ANIMATED_ICON, THUMBNAIL_BADGE_ICON,
+    TITLE_TEXT, WATCH_VIDEO_ID,
 };
 use crate::parse::{parse_fixed_column_item, parse_flex_column_item};
 use crate::query::{
@@ -48,7 +48,6 @@ pub struct TableListUploadSong {
     pub like_status: LikeStatus,
     pub title: String,
     pub artists: Vec<ParsedUploadArtist>,
-    pub thumbnails: Vec<Thumbnail>,
 }
 
 #[derive(PartialEq, Debug, Clone, Deserialize, Serialize)]
@@ -60,7 +59,6 @@ pub struct UploadAlbum {
     pub year: Option<String>,
     pub entity_id: UploadEntityID<'static>,
     pub album_id: UploadAlbumID<'static>,
-    pub thumbnails: Vec<Thumbnail>,
 }
 
 #[derive(PartialEq, Debug, Clone, Deserialize, Serialize)]
@@ -69,7 +67,6 @@ pub struct UploadArtist {
     pub artist_name: String,
     pub song_count: String,
     pub artist_id: UploadArtistID<'static>,
-    pub thumbnails: Vec<Thumbnail>,
 }
 
 #[derive(PartialEq, Debug, Clone, Deserialize, Serialize)]
@@ -82,7 +79,6 @@ pub struct GetLibraryUploadAlbum {
     pub duration: String,
     pub entity_id: UploadEntityID<'static>,
     pub songs: Vec<GetLibraryUploadAlbumSong>,
-    pub thumbnails: Vec<Thumbnail>,
 }
 
 #[derive(PartialEq, Debug, Clone, Deserialize, Serialize)]
@@ -258,7 +254,6 @@ impl ParseFrom<GetLibraryUploadAlbumQuery<'_>> for GetLibraryUploadAlbum {
         let artist_name = header.take_value_pointer(SUBTITLE2)?;
         let song_count = header.take_value_pointer(concatcp!(SECOND_SUBTITLE_RUNS, "/0/text"))?;
         let duration = header.take_value_pointer(concatcp!(SECOND_SUBTITLE_RUNS, "/2/text"))?;
-        let thumbnails = header.take_value_pointer(THUMBNAIL_CROPPED)?;
         let entity_id = header
             .navigate_pointer(MENU_ITEMS)?
             .try_into_iter()?
@@ -282,7 +277,6 @@ impl ParseFrom<GetLibraryUploadAlbumQuery<'_>> for GetLibraryUploadAlbum {
             duration,
             entity_id,
             songs,
-            thumbnails,
         })
     }
 }
@@ -366,7 +360,6 @@ pub(crate) fn parse_table_list_upload_song(
         PLAY_BUTTON,
         "/playNavigationEndpoint/watchEndpoint/videoId"
     ))?;
-    let thumbnails = crawler.take_value_pointer(THUMBNAILS)?;
     // An uploaded song may not have artists metadata
     let artists = parse_upload_song_artists(crawler.borrow_mut(), 1).unwrap_or_default();
     // An uploaded song may not have aalbum metadata
@@ -384,17 +377,14 @@ pub(crate) fn parse_table_list_upload_song(
         like_status,
         title,
         artists,
-        thumbnails,
     })
 }
 fn parse_item_list_upload_artist(mut item: impl JsonCrawler) -> Result<UploadArtist> {
     let mut data = item.borrow_pointer(MRLIR)?;
     let artist_name = parse_flex_column_item(&mut data.borrow_mut(), 0, 0)?;
     let songs = parse_flex_column_item(&mut data.borrow_mut(), 1, 0)?;
-    let thumbnails = data.take_value_pointer(THUMBNAILS)?;
     let artist_id = data.take_value_pointer(NAVIGATION_BROWSE_ID)?;
     Ok(UploadArtist {
-        thumbnails,
         artist_name,
         song_count: songs,
         artist_id,
@@ -403,7 +393,6 @@ fn parse_item_list_upload_artist(mut item: impl JsonCrawler) -> Result<UploadArt
 fn parse_item_list_upload_album(mut json_crawler: impl JsonCrawler) -> Result<UploadAlbum> {
     let mut data = json_crawler.borrow_pointer("/musicTwoRowItemRenderer")?;
     let album_id = data.take_value_pointer(NAVIGATION_BROWSE_ID)?;
-    let thumbnails = data.take_value_pointer(THUMBNAIL_RENDERER)?;
     let title = data.take_value_pointer(TITLE_TEXT)?;
     let subtitle = data.take_value_pointer(SUBTITLE2).ok();
     let year = data.take_value_pointer(SUBTITLE3).ok();
@@ -415,7 +404,6 @@ fn parse_item_list_upload_album(mut json_crawler: impl JsonCrawler) -> Result<Up
     Ok(UploadAlbum {
         title,
         year,
-        thumbnails,
         subtitle,
         entity_id,
         album_id,

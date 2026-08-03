@@ -21,7 +21,7 @@
 //! `json-crawler` as a dependency and use the provided
 //! `From<ProcessedResult> for JsonCrawlerOwned` implementation.
 use crate::auth::AuthToken;
-use crate::common::{AlbumID, ArtistChannelID, Thumbnail};
+use crate::common::{AlbumID, ArtistChannelID};
 use crate::json::Json;
 use crate::nav_consts::*;
 use crate::{RawResult, Result, error};

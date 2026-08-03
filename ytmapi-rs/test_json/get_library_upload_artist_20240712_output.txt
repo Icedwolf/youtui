@@ -27,18 +27,6 @@
                 ),
             },
         ],
-        thumbnails: [
-            Thumbnail {
-                height: 60,
-                width: 60,
-                url: "https://i9.ytimg.com/vi_locker/Xs5XVhmlO18/locker.png?sqp=-oaymwEGCDwQPCAA&rs=AMzJL3lafwB2pB_n5l2rLY8jQwXDDxtAKg",
-            },
-            Thumbnail {
-                height: 120,
-                width: 120,
-                url: "https://i9.ytimg.com/vi_locker/Xs5XVhmlO18/locker.png?sqp=-oaymwEGCHgQeCAA&rs=AMzJL3m27mxitQsaxDX0SNSoXXtyFxRVgg",
-            },
-        ],
     },
     TableListUploadSong {
         entity_id: UploadEntityID(
@@ -66,18 +54,6 @@
                         "FEmusic_library_privately_owned_artist_detaila_po_COmmveTQqc6_pQESCXJhZGlvaGVhZA",
                     ),
                 ),
-            },
-        ],
-        thumbnails: [
-            Thumbnail {
-                height: 60,
-                width: 60,
-                url: "https://i9.ytimg.com/vi_locker/T6yIXDvR3ec/locker.png?sqp=-oaymwEGCDwQPCAA&rs=AMzJL3klBtvObQVGLQ8ArNlXKqXfrBykMQ",
-            },
-            Thumbnail {
-                height: 120,
-                width: 120,
-                url: "https://i9.ytimg.com/vi_locker/T6yIXDvR3ec/locker.png?sqp=-oaymwEGCHgQeCAA&rs=AMzJL3m2jm8iO4SyAGG8nKxi9EIL05C3_w",
             },
         ],
     },
@@ -109,18 +85,6 @@
                 ),
             },
         ],
-        thumbnails: [
-            Thumbnail {
-                height: 60,
-                width: 60,
-                url: "https://i9.ytimg.com/vi_locker/BT6vKtULBNk/locker.png?sqp=-oaymwEGCDwQPCAA&rs=AMzJL3lsQ1RJimvP1pEsBx3Hhr8r38RBAA",
-            },
-            Thumbnail {
-                height: 120,
-                width: 120,
-                url: "https://i9.ytimg.com/vi_locker/BT6vKtULBNk/locker.png?sqp=-oaymwEGCHgQeCAA&rs=AMzJL3msPlXA5SuZQ69TWae30DYd3cSm4A",
-            },
-        ],
     },
     TableListUploadSong {
         entity_id: UploadEntityID(
@@ -148,18 +112,6 @@
                         "FEmusic_library_privately_owned_artist_detaila_po_COmmveTQqc6_pQESCXJhZGlvaGVhZA",
                     ),
                 ),
-            },
-        ],
-        thumbnails: [
-            Thumbnail {
-                height: 60,
-                width: 60,
-                url: "https://i9.ytimg.com/vi_locker/2A09JB1H9aA/locker.png?sqp=-oaymwEGCDwQPCAA&rs=AMzJL3kRtgwA8dPR40xNmqPHIlUGuWn0mg",
-            },
-            Thumbnail {
-                height: 120,
-                width: 120,
-                url: "https://i9.ytimg.com/vi_locker/2A09JB1H9aA/locker.png?sqp=-oaymwEGCHgQeCAA&rs=AMzJL3kRH8wMAv4OB6aPjpUQr2EDIi5Hsg",
             },
         ],
     },
@@ -191,18 +143,6 @@
                 ),
             },
         ],
-        thumbnails: [
-            Thumbnail {
-                height: 60,
-                width: 60,
-                url: "https://i9.ytimg.com/vi_locker/N4UgxImPfRs/locker.png?sqp=-oaymwEGCDwQPCAA&rs=AMzJL3kymYKfg__Xmdi4a_RBcPzrPHqq9g",
-            },
-            Thumbnail {
-                height: 120,
-                width: 120,
-                url: "https://i9.ytimg.com/vi_locker/N4UgxImPfRs/locker.png?sqp=-oaymwEGCHgQeCAA&rs=AMzJL3kmAM2AP6A9teLHJUMJCeaf1E37Fw",
-            },
-        ],
     },
     TableListUploadSong {
         entity_id: UploadEntityID(
@@ -230,18 +170,6 @@
                         "FEmusic_library_privately_owned_artist_detaila_po_COmmveTQqc6_pQESCXJhZGlvaGVhZA",
                     ),
                 ),
-            },
-        ],
-        thumbnails: [
-            Thumbnail {
-                height: 60,
-                width: 60,
-                url: "https://i9.ytimg.com/vi_locker/fYeU9kIOYFg/locker.png?sqp=-oaymwEGCDwQPCAA&rs=AMzJL3kN2SAU-31PjSGZUQNqCqOqMJrjBw",
-            },
-            Thumbnail {
-                height: 120,
-                width: 120,
-                url: "https://i9.ytimg.com/vi_locker/fYeU9kIOYFg/locker.png?sqp=-oaymwEGCHgQeCAA&rs=AMzJL3kfv-veD9Gva8SUt4zrBhrs6PsHhg",
             },
         ],
     },
@@ -273,18 +201,6 @@
                 ),
             },
         ],
-        thumbnails: [
-            Thumbnail {
-                height: 60,
-                width: 60,
-                url: "https://i9.ytimg.com/vi_locker/72f-xl-4Pbo/locker.png?sqp=-oaymwEGCDwQPCAA&rs=AMzJL3lSId8rTBVS5myQSt3HlSSar4qCQg",
-            },
-            Thumbnail {
-                height: 120,
-                width: 120,
-                url: "https://i9.ytimg.com/vi_locker/72f-xl-4Pbo/locker.png?sqp=-oaymwEGCHgQeCAA&rs=AMzJL3ndt_l2ZTgtlvlRz-03dvRjvxkdWA",
-            },
-        ],
     },
     TableListUploadSong {
         entity_id: UploadEntityID(
@@ -312,18 +228,6 @@
                         "FEmusic_library_privately_owned_artist_detaila_po_COmmveTQqc6_pQESCXJhZGlvaGVhZA",
                     ),
                 ),
-            },
-        ],
-        thumbnails: [
-            Thumbnail {
-                height: 60,
-                width: 60,
-                url: "https://i9.ytimg.com/vi_locker/7gSxluH1wuc/locker.png?sqp=-oaymwEGCDwQPCAA&rs=AMzJL3nv1BYiYSWFwStsc1rnHkVBVeyvLg",
-            },
-            Thumbnail {
-                height: 120,
-                width: 120,
-                url: "https://i9.ytimg.com/vi_locker/7gSxluH1wuc/locker.png?sqp=-oaymwEGCHgQeCAA&rs=AMzJL3lhu09zXS_T6HcDQ3UQYENAEpvScQ",
             },
         ],
     },
@@ -355,18 +259,6 @@
                 ),
             },
         ],
-        thumbnails: [
-            Thumbnail {
-                height: 60,
-                width: 60,
-                url: "https://i9.ytimg.com/vi_locker/gVceI17xWh4/locker.png?sqp=-oaymwEGCDwQPCAA&rs=AMzJL3levyvWrNlmVG0vMt5JYSUnu5uyxg",
-            },
-            Thumbnail {
-                height: 120,
-                width: 120,
-                url: "https://i9.ytimg.com/vi_locker/gVceI17xWh4/locker.png?sqp=-oaymwEGCHgQeCAA&rs=AMzJL3mCk6hDcBOpb_fy72qYLjt8k89qwA",
-            },
-        ],
     },
     TableListUploadSong {
         entity_id: UploadEntityID(
@@ -396,18 +288,6 @@
                 ),
             },
         ],
-        thumbnails: [
-            Thumbnail {
-                height: 60,
-                width: 60,
-                url: "https://i9.ytimg.com/vi_locker/l8A9RnpvOaM/locker.png?sqp=-oaymwEGCDwQPCAA&rs=AMzJL3khASKEbjWElwyUGVljXWnK5dj0_w",
-            },
-            Thumbnail {
-                height: 120,
-                width: 120,
-                url: "https://i9.ytimg.com/vi_locker/l8A9RnpvOaM/locker.png?sqp=-oaymwEGCHgQeCAA&rs=AMzJL3lDtAhsITt0Xb9JNdxtcQTWV_9M3g",
-            },
-        ],
     },
     TableListUploadSong {
         entity_id: UploadEntityID(
@@ -435,18 +315,6 @@
                         "FEmusic_library_privately_owned_artist_detaila_po_COmmveTQqc6_pQESCXJhZGlvaGVhZA",
                     ),
                 ),
-            },
-        ],
-        thumbnails: [
-            Thumbnail {
-                height: 60,
-                width: 60,
-                url: "https://i9.ytimg.com/vi_locker/vkYettN29Cw/locker.png?sqp=-oaymwEGCDwQPCAA&rs=AMzJL3k-XwVsVeuYbpzhzMqx83V3jmjU1w",
-            },
-            Thumbnail {
-                height: 120,
-                width: 120,
-                url: "https://i9.ytimg.com/vi_locker/vkYettN29Cw/locker.png?sqp=-oaymwEGCHgQeCAA&rs=AMzJL3ml0xsNNq9AkmciMBthle-VDp1CHg",
             },
         ],
     },

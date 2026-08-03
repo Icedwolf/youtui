@@ -19,28 +19,6 @@ GetArtist {
         "2.18M",
     ),
     subscribed: false,
-    thumbnails: [
-        Thumbnail {
-            height: 225,
-            width: 540,
-            url: "https://lh3.googleusercontent.com/rNwrmRbk3U19r6sBBarhK0GvBmOg8VFm935fc8J85HSU13cwSvVcGNNqUrG8ols56gYLwpEZu7qf-Q=w540-h225-p-l90-rj",
-        },
-        Thumbnail {
-            height: 340,
-            width: 816,
-            url: "https://lh3.googleusercontent.com/rNwrmRbk3U19r6sBBarhK0GvBmOg8VFm935fc8J85HSU13cwSvVcGNNqUrG8ols56gYLwpEZu7qf-Q=w816-h340-p-l90-rj",
-        },
-        Thumbnail {
-            height: 600,
-            width: 1440,
-            url: "https://lh3.googleusercontent.com/rNwrmRbk3U19r6sBBarhK0GvBmOg8VFm935fc8J85HSU13cwSvVcGNNqUrG8ols56gYLwpEZu7qf-Q=w1440-h600-p-l90-rj",
-        },
-        Thumbnail {
-            height: 696,
-            width: 1671,
-            url: "https://lh3.googleusercontent.com/rNwrmRbk3U19r6sBBarhK0GvBmOg8VFm935fc8J85HSU13cwSvVcGNNqUrG8ols56gYLwpEZu7qf-Q=w1671-h696-p-l90-rj",
-        },
-    ],
     top_releases: GetArtistTopReleases {
         songs: Some(
             GetArtistSongs {
@@ -234,18 +212,6 @@ GetArtist {
                             "MPREb_fARbcbseRtg",
                         ),
                         library_status: NotInLibrary,
-                        thumbnails: [
-                            Thumbnail {
-                                height: 226,
-                                width: 226,
-                                url: "https://lh3.googleusercontent.com/cfw242Jl0Jg6vtUK8pobPlOzKV6rUWaAu1DIdFupw35re86P5LQeu49US1WlGXjT2GjfwEuejeFrmY0=w226-h226-l90-rj",
-                            },
-                            Thumbnail {
-                                height: 544,
-                                width: 544,
-                                url: "https://lh3.googleusercontent.com/cfw242Jl0Jg6vtUK8pobPlOzKV6rUWaAu1DIdFupw35re86P5LQeu49US1WlGXjT2GjfwEuejeFrmY0=w544-h544-l90-rj",
-                            },
-                        ],
                         explicit: NotExplicit,
                     },
                     AlbumResult {
@@ -258,18 +224,6 @@ GetArtist {
                             "MPREb_iBvan7d5j0E",
                         ),
                         library_status: NotInLibrary,
-                        thumbnails: [
-                            Thumbnail {
-                                height: 226,
-                                width: 226,
-                                url: "https://lh3.googleusercontent.com/kpM2h-jmhtvy4oxeygH-tlcBggILWWHVfVIqbL7-BT377mKr4hNGAFIbuFYgEDZ0pK4qN61w_GXklpHHWA=w226-h226-l90-rj",
-                            },
-                            Thumbnail {
-                                height: 544,
-                                width: 544,
-                                url: "https://lh3.googleusercontent.com/kpM2h-jmhtvy4oxeygH-tlcBggILWWHVfVIqbL7-BT377mKr4hNGAFIbuFYgEDZ0pK4qN61w_GXklpHHWA=w544-h544-l90-rj",
-                            },
-                        ],
                         explicit: NotExplicit,
                     },
                     AlbumResult {
@@ -282,18 +236,6 @@ GetArtist {
                             "MPREb_65XlJUiJd0A",
                         ),
                         library_status: NotInLibrary,
-                        thumbnails: [
-                            Thumbnail {
-                                height: 226,
-                                width: 226,
-                                url: "https://lh3.googleusercontent.com/PM0GAJWGVc70TZcqX0vMZ-Ufhq3mKSGRbU_5gfXCjcBHFOd1X1GLSgj-HXgYtKvCQzu22IdrGunRufQ=w226-h226-l90-rj",
-                            },
-                            Thumbnail {
-                                height: 544,
-                                width: 544,
-                                url: "https://lh3.googleusercontent.com/PM0GAJWGVc70TZcqX0vMZ-Ufhq3mKSGRbU_5gfXCjcBHFOd1X1GLSgj-HXgYtKvCQzu22IdrGunRufQ=w544-h544-l90-rj",
-                            },
-                        ],
                         explicit: IsExplicit,
                     },
                     AlbumResult {
@@ -306,18 +248,6 @@ GetArtist {
                             "MPREb_wLbmLuS0Yir",
                         ),
                         library_status: NotInLibrary,
-                        thumbnails: [
-                            Thumbnail {
-                                height: 226,
-                                width: 226,
-                                url: "https://lh3.googleusercontent.com/eZ4QJxMdB7BKfkMQiQR7fp5XTLsX9zLjd5Ds_nmVG27cpzLTXmwK0QHdHRUGg14_T4hjkFe3nWJpOBw=w226-h226-l90-rj",
-                            },
-                            Thumbnail {
-                                height: 544,
-                                width: 544,
-                                url: "https://lh3.googleusercontent.com/eZ4QJxMdB7BKfkMQiQR7fp5XTLsX9zLjd5Ds_nmVG27cpzLTXmwK0QHdHRUGg14_T4hjkFe3nWJpOBw=w544-h544-l90-rj",
-                            },
-                        ],
                         explicit: NotExplicit,
                     },
                     AlbumResult {
@@ -330,18 +260,6 @@ GetArtist {
                             "MPREb_g6LN0lxbFmR",
                         ),
                         library_status: NotInLibrary,
-                        thumbnails: [
-                            Thumbnail {
-                                height: 226,
-                                width: 226,
-                                url: "https://lh3.googleusercontent.com/NOlE2MFK6QlPbJhMdg8CxdPWST149wYCqkgV1-QZQn2FDLsDuvlszoepiWUOYhYivkssKRfmsLEWFw=w226-h226-l90-rj",
-                            },
-                            Thumbnail {
-                                height: 544,
-                                width: 544,
-                                url: "https://lh3.googleusercontent.com/NOlE2MFK6QlPbJhMdg8CxdPWST149wYCqkgV1-QZQn2FDLsDuvlszoepiWUOYhYivkssKRfmsLEWFw=w544-h544-l90-rj",
-                            },
-                        ],
                         explicit: NotExplicit,
                     },
                     AlbumResult {
@@ -354,18 +272,6 @@ GetArtist {
                             "MPREb_A34bMrtRWST",
                         ),
                         library_status: NotInLibrary,
-                        thumbnails: [
-                            Thumbnail {
-                                height: 226,
-                                width: 226,
-                                url: "https://lh3.googleusercontent.com/zNmRpRSyE-guT-MDXRsmhPT8PBHBYG9G01GilGda93S_umcUx9rADKXM27IhPqXD5hgAPYUPsXDIBZ5l=w226-h226-l90-rj",
-                            },
-                            Thumbnail {
-                                height: 544,
-                                width: 544,
-                                url: "https://lh3.googleusercontent.com/zNmRpRSyE-guT-MDXRsmhPT8PBHBYG9G01GilGda93S_umcUx9rADKXM27IhPqXD5hgAPYUPsXDIBZ5l=w544-h544-l90-rj",
-                            },
-                        ],
                         explicit: NotExplicit,
                     },
                     AlbumResult {
@@ -378,18 +284,6 @@ GetArtist {
                             "MPREb_nXdsD7cWc5P",
                         ),
                         library_status: NotInLibrary,
-                        thumbnails: [
-                            Thumbnail {
-                                height: 226,
-                                width: 226,
-                                url: "https://lh3.googleusercontent.com/hl9pPbXjYF3hreh82FBswRoLtRVRi4vOXP5ZWE90hy8pH2F-vKZ3duEoa5kbh3YxbGNBgYgMself6AH30w=w226-h226-l90-rj",
-                            },
-                            Thumbnail {
-                                height: 544,
-                                width: 544,
-                                url: "https://lh3.googleusercontent.com/hl9pPbXjYF3hreh82FBswRoLtRVRi4vOXP5ZWE90hy8pH2F-vKZ3duEoa5kbh3YxbGNBgYgMself6AH30w=w544-h544-l90-rj",
-                            },
-                        ],
                         explicit: NotExplicit,
                     },
                     AlbumResult {
@@ -402,18 +296,6 @@ GetArtist {
                             "MPREb_R6RvYhkTs70",
                         ),
                         library_status: NotInLibrary,
-                        thumbnails: [
-                            Thumbnail {
-                                height: 226,
-                                width: 226,
-                                url: "https://lh3.googleusercontent.com/nB2KlaW2fDKMOJVWRRAHisOAbwI45CCL-9mVc0OCkZv3txP_uCzt4chMGT4vjWPElfUW9wcUmQnseU1p=w226-h226-l90-rj",
-                            },
-                            Thumbnail {
-                                height: 544,
-                                width: 544,
-                                url: "https://lh3.googleusercontent.com/nB2KlaW2fDKMOJVWRRAHisOAbwI45CCL-9mVc0OCkZv3txP_uCzt4chMGT4vjWPElfUW9wcUmQnseU1p=w544-h544-l90-rj",
-                            },
-                        ],
                         explicit: NotExplicit,
                     },
                     AlbumResult {
@@ -426,18 +308,6 @@ GetArtist {
                             "MPREb_9NgGUhkV6rh",
                         ),
                         library_status: NotInLibrary,
-                        thumbnails: [
-                            Thumbnail {
-                                height: 226,
-                                width: 226,
-                                url: "https://lh3.googleusercontent.com/CBK8C1yyMNGHBxlSfIFgobgiTH28EQn3p6e_oXFJpKPxCTwZ70YUDlw0M0_kdEzf4hiVsFfnWBkZ3yzG=w226-h226-l90-rj",
-                            },
-                            Thumbnail {
-                                height: 544,
-                                width: 544,
-                                url: "https://lh3.googleusercontent.com/CBK8C1yyMNGHBxlSfIFgobgiTH28EQn3p6e_oXFJpKPxCTwZ70YUDlw0M0_kdEzf4hiVsFfnWBkZ3yzG=w544-h544-l90-rj",
-                            },
-                        ],
                         explicit: NotExplicit,
                     },
                     AlbumResult {
@@ -450,18 +320,6 @@ GetArtist {
                             "MPREb_TFv1w2QzWWh",
                         ),
                         library_status: NotInLibrary,
-                        thumbnails: [
-                            Thumbnail {
-                                height: 226,
-                                width: 226,
-                                url: "https://lh3.googleusercontent.com/lmXmfUR5iMg4r0sLzf-Bo8gPrvQ0rLGIX3e0_S8zaE2RfwUSnTETF3bkbOLbOp1OjjLoTQAOc3Y__3zs=w226-h226-l90-rj",
-                            },
-                            Thumbnail {
-                                height: 544,
-                                width: 544,
-                                url: "https://lh3.googleusercontent.com/lmXmfUR5iMg4r0sLzf-Bo8gPrvQ0rLGIX3e0_S8zaE2RfwUSnTETF3bkbOLbOp1OjjLoTQAOc3Y__3zs=w544-h544-l90-rj",
-                            },
-                        ],
                         explicit: NotExplicit,
                     },
                 ],
@@ -488,18 +346,6 @@ GetArtist {
                             "MPREb_BJDe0OqAGKh",
                         ),
                         library_status: NotInLibrary,
-                        thumbnails: [
-                            Thumbnail {
-                                height: 226,
-                                width: 226,
-                                url: "https://lh3.googleusercontent.com/zSKyauwO6Te1Z5CdVKWDBWm_SWkEcvIW1kUU2MKi903jO0h0AyGcjCjCLA1WIUQCzDWAehVbPqPHoa-N=w226-h226-l90-rj",
-                            },
-                            Thumbnail {
-                                height: 544,
-                                width: 544,
-                                url: "https://lh3.googleusercontent.com/zSKyauwO6Te1Z5CdVKWDBWm_SWkEcvIW1kUU2MKi903jO0h0AyGcjCjCLA1WIUQCzDWAehVbPqPHoa-N=w544-h544-l90-rj",
-                            },
-                        ],
                         explicit: NotExplicit,
                     },
                     AlbumResult {
@@ -510,18 +356,6 @@ GetArtist {
                             "MPREb_JyCH48eqOdE",
                         ),
                         library_status: NotInLibrary,
-                        thumbnails: [
-                            Thumbnail {
-                                height: 226,
-                                width: 226,
-                                url: "https://lh3.googleusercontent.com/zSKyauwO6Te1Z5CdVKWDBWm_SWkEcvIW1kUU2MKi903jO0h0AyGcjCjCLA1WIUQCzDWAehVbPqPHoa-N=w226-h226-l90-rj",
-                            },
-                            Thumbnail {
-                                height: 544,
-                                width: 544,
-                                url: "https://lh3.googleusercontent.com/zSKyauwO6Te1Z5CdVKWDBWm_SWkEcvIW1kUU2MKi903jO0h0AyGcjCjCLA1WIUQCzDWAehVbPqPHoa-N=w544-h544-l90-rj",
-                            },
-                        ],
                         explicit: NotExplicit,
                     },
                     AlbumResult {
@@ -532,18 +366,6 @@ GetArtist {
                             "MPREb_gcqGUcG15Gt",
                         ),
                         library_status: NotInLibrary,
-                        thumbnails: [
-                            Thumbnail {
-                                height: 226,
-                                width: 226,
-                                url: "https://lh3.googleusercontent.com/zSKyauwO6Te1Z5CdVKWDBWm_SWkEcvIW1kUU2MKi903jO0h0AyGcjCjCLA1WIUQCzDWAehVbPqPHoa-N=w226-h226-l90-rj",
-                            },
-                            Thumbnail {
-                                height: 544,
-                                width: 544,
-                                url: "https://lh3.googleusercontent.com/zSKyauwO6Te1Z5CdVKWDBWm_SWkEcvIW1kUU2MKi903jO0h0AyGcjCjCLA1WIUQCzDWAehVbPqPHoa-N=w544-h544-l90-rj",
-                            },
-                        ],
                         explicit: NotExplicit,
                     },
                     AlbumResult {
@@ -554,18 +376,6 @@ GetArtist {
                             "MPREb_t3376EoOS4V",
                         ),
                         library_status: NotInLibrary,
-                        thumbnails: [
-                            Thumbnail {
-                                height: 226,
-                                width: 226,
-                                url: "https://lh3.googleusercontent.com/BHNVGqJZ-kibDn573qROQJlEym5rK-hojmv2zcpXrouDuejCnJyfpZhCSfcA92cKKOzifDXegljchWrf=w226-h226-l90-rj",
-                            },
-                            Thumbnail {
-                                height: 544,
-                                width: 544,
-                                url: "https://lh3.googleusercontent.com/BHNVGqJZ-kibDn573qROQJlEym5rK-hojmv2zcpXrouDuejCnJyfpZhCSfcA92cKKOzifDXegljchWrf=w544-h544-l90-rj",
-                            },
-                        ],
                         explicit: NotExplicit,
                     },
                     AlbumResult {
@@ -576,18 +386,6 @@ GetArtist {
                             "MPREb_AYfCt7o1QBs",
                         ),
                         library_status: NotInLibrary,
-                        thumbnails: [
-                            Thumbnail {
-                                height: 226,
-                                width: 226,
-                                url: "https://lh3.googleusercontent.com/2L8nCRAGesuZAYV_y6yaQ1kEtyfSds92O8ELsBJT0nq5XrRzv7H41SNsgTDqgsGjD37AkZWe5JHigMD3=w226-h226-l90-rj",
-                            },
-                            Thumbnail {
-                                height: 544,
-                                width: 544,
-                                url: "https://lh3.googleusercontent.com/2L8nCRAGesuZAYV_y6yaQ1kEtyfSds92O8ELsBJT0nq5XrRzv7H41SNsgTDqgsGjD37AkZWe5JHigMD3=w544-h544-l90-rj",
-                            },
-                        ],
                         explicit: NotExplicit,
                     },
                     AlbumResult {
@@ -598,18 +396,6 @@ GetArtist {
                             "MPREb_L4ZmGHGb6rP",
                         ),
                         library_status: NotInLibrary,
-                        thumbnails: [
-                            Thumbnail {
-                                height: 226,
-                                width: 226,
-                                url: "https://lh3.googleusercontent.com/MMTPEnLu6s0vx0Yx5HHZqJYLspo_SvPsiu9bd_5K0FD-QWs3QKvB4cKCcrpPoWS5Gf01g5XKOOfvlf2Ugw=w226-h226-s-l90-rj",
-                            },
-                            Thumbnail {
-                                height: 544,
-                                width: 544,
-                                url: "https://lh3.googleusercontent.com/MMTPEnLu6s0vx0Yx5HHZqJYLspo_SvPsiu9bd_5K0FD-QWs3QKvB4cKCcrpPoWS5Gf01g5XKOOfvlf2Ugw=w544-h544-s-l90-rj",
-                            },
-                        ],
                         explicit: NotExplicit,
                     },
                     AlbumResult {
@@ -620,18 +406,6 @@ GetArtist {
                             "MPREb_wJ6vUTl7tfo",
                         ),
                         library_status: NotInLibrary,
-                        thumbnails: [
-                            Thumbnail {
-                                height: 226,
-                                width: 226,
-                                url: "https://lh3.googleusercontent.com/vy-bGHvAI64cuVqxU9O1GojMsjaTIsT5dro1kA6ah1m2mfjVsc-La-6PSW7nqzivORtr6XrNC88014U=w226-h226-s-l90-rj",
-                            },
-                            Thumbnail {
-                                height: 544,
-                                width: 544,
-                                url: "https://lh3.googleusercontent.com/vy-bGHvAI64cuVqxU9O1GojMsjaTIsT5dro1kA6ah1m2mfjVsc-La-6PSW7nqzivORtr6XrNC88014U=w544-h544-s-l90-rj",
-                            },
-                        ],
                         explicit: NotExplicit,
                     },
                     AlbumResult {
@@ -642,18 +416,6 @@ GetArtist {
                             "MPREb_2lo3j6wkBj3",
                         ),
                         library_status: NotInLibrary,
-                        thumbnails: [
-                            Thumbnail {
-                                height: 226,
-                                width: 226,
-                                url: "https://lh3.googleusercontent.com/StBwVQhdeKwjcWH3RDqARjZF_39qhfmqi6nLmLfNie_0cK9XvNylNU6soTE2Nv3stfLABnFaKGgUyMCo=w226-h226-s-l90-rj",
-                            },
-                            Thumbnail {
-                                height: 544,
-                                width: 544,
-                                url: "https://lh3.googleusercontent.com/StBwVQhdeKwjcWH3RDqARjZF_39qhfmqi6nLmLfNie_0cK9XvNylNU6soTE2Nv3stfLABnFaKGgUyMCo=w544-h544-s-l90-rj",
-                            },
-                        ],
                         explicit: NotExplicit,
                     },
                     AlbumResult {
@@ -664,18 +426,6 @@ GetArtist {
                             "MPREb_fD7MTlRN69J",
                         ),
                         library_status: NotInLibrary,
-                        thumbnails: [
-                            Thumbnail {
-                                height: 226,
-                                width: 226,
-                                url: "https://lh3.googleusercontent.com/qsh_A30qQoLcnxzXBsu8NwvsfVA09egjo1vcQtTxnwtXqDDNSYG2BGQFbLHctogI1ESQ345DNwXAq00=w226-h226-l90-rj",
-                            },
-                            Thumbnail {
-                                height: 544,
-                                width: 544,
-                                url: "https://lh3.googleusercontent.com/qsh_A30qQoLcnxzXBsu8NwvsfVA09egjo1vcQtTxnwtXqDDNSYG2BGQFbLHctogI1ESQ345DNwXAq00=w544-h544-l90-rj",
-                            },
-                        ],
                         explicit: NotExplicit,
                     },
                     AlbumResult {
@@ -686,18 +436,6 @@ GetArtist {
                             "MPREb_suGcMqdjuxS",
                         ),
                         library_status: NotInLibrary,
-                        thumbnails: [
-                            Thumbnail {
-                                height: 226,
-                                width: 226,
-                                url: "https://lh3.googleusercontent.com/JSCcJ1X8Y89xn_yvavfCnbTBcWPq5Cop3BJTOV__nuKBA8u_gHj2twRyEbhMCm-y5DftTE7Yo-EjaiaG=w226-h226-l90-rj",
-                            },
-                            Thumbnail {
-                                height: 544,
-                                width: 544,
-                                url: "https://lh3.googleusercontent.com/JSCcJ1X8Y89xn_yvavfCnbTBcWPq5Cop3BJTOV__nuKBA8u_gHj2twRyEbhMCm-y5DftTE7Yo-EjaiaG=w544-h544-l90-rj",
-                            },
-                        ],
                         explicit: NotExplicit,
                     },
                 ],

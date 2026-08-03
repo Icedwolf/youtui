@@ -22,18 +22,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDH65miGsCFps",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/H65miGsCFps/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDQ&rs=AMzJL3kswjsaI1CZU4ikH6XmPYfHcHR4Zg",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/H65miGsCFps/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA0&rs=AMzJL3nVIZWoaKrn-KsNMxxSUm1pQi75FA",
-                },
-            ],
         },
         Episode {
             title: "Exploring Fiberplane's 3-Year Rust Journey, with Benno van den Berg",
@@ -44,18 +32,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDZovfCsVyNVY",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/ZovfCsVyNVY/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDg&rs=AMzJL3nk5GHg3hLDdsChM_tDQ2dNSjzFIw",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/ZovfCsVyNVY/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA4&rs=AMzJL3nVh-RqRX61N0NQabYVl9-E-UpWxg",
-                },
-            ],
         },
         Episode {
             title: "Rama with Glen De Cauwsemaecker",
@@ -66,18 +42,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDnlblyD34qjs",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/nlblyD34qjs/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDQ&rs=AMzJL3llHxIqETroFefDQGgBVhGTraYJ2A",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/nlblyD34qjs/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA0&rs=AMzJL3kB87FkChAAvftcdAQIBb6yAK-MAw",
-                },
-            ],
         },
         Episode {
             title: "Ratatui with Orhun Parmaksiz",
@@ -88,18 +52,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDEEMkSKDtxe4",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/EEMkSKDtxe4/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDQ&rs=AMzJL3nlk1B7bPPZd3ChnVVdaINuNWB3qg",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/EEMkSKDtxe4/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA0&rs=AMzJL3kMxpvysdfoR3nifSEB3Apjz3vmGw",
-                },
-            ],
         },
         Episode {
             title: "Isograph with Robert Balicki",
@@ -110,18 +62,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDjra_dQuBaeg",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/jra_dQuBaeg/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDQ&rs=AMzJL3kSNh2wZaLyW3ChWfAhp-V4v6nJzw",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/jra_dQuBaeg/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA0&rs=AMzJL3k_Mbz9GyKeKdiEgNZePFyQnzRi5A",
-                },
-            ],
         },
         Episode {
             title: "release-plz with Marco Ieni",
@@ -132,18 +72,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDgU0SSIXleZQ",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/gU0SSIXleZQ/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDg&rs=AMzJL3m9MQbh8JjDcyfOQE_wkmejPSgInw",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/gU0SSIXleZQ/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA4&rs=AMzJL3mEusQ07mmeTbVbK4wijI6J2c1dDQ",
-                },
-            ],
         },
         Episode {
             title: "Pavex with Luca Palmieri",
@@ -154,18 +82,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDDVKOVdigrQA",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/DVKOVdigrQA/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDg&rs=AMzJL3kwQpEFxarsYH6dNYf6tSd6sUtC9Q",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/DVKOVdigrQA/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA4&rs=AMzJL3mlZl47Uw-hmnNCEhPlmb1-JmvS6A",
-                },
-            ],
         },
         Episode {
             title: "Launching RustRover: JetBrains' Investment in Rust",
@@ -176,18 +92,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDiffbeOInSyY",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/iffbeOInSyY/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDQ&rs=AMzJL3kkrHg8m8FJ4faDDBVOONDggAcvnA",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/iffbeOInSyY/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA0&rs=AMzJL3kGOarIf-V8UjZkZdlxQJzCrgSOzQ",
-                },
-            ],
         },
         Episode {
             title: "cargo-semver-checks with Predrag Gruevski",
@@ -198,18 +102,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDuOwEiEBl2u8",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/uOwEiEBl2u8/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDg&rs=AMzJL3kOMLgXYirIfeFNtk7HN17uwkuxXg",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/uOwEiEBl2u8/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA4&rs=AMzJL3mxHaeDsBHKLwiqyyKjXqOBq3kuzQ",
-                },
-            ],
         },
         Episode {
             title: "Hyper 1.0 with Sean McArthur",
@@ -220,18 +112,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDmqDiy1G1dTI",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/mqDiy1G1dTI/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDQ&rs=AMzJL3ni-5kgAN5y6fODFDIjmdG7Fa3lIQ",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/mqDiy1G1dTI/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA0&rs=AMzJL3k10wVMasDMVwwSoAHw1vECfMkrdA",
-                },
-            ],
         },
         Episode {
             title: "Asynchronous Programming in Rust with Carl Fredrik Samson",
@@ -242,18 +122,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPED7jnLMt630OE",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/7jnLMt630OE/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDQ&rs=AMzJL3mC5nP8mRXTwv7tQF_ohvxuj9kT8w",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/7jnLMt630OE/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA0&rs=AMzJL3k4tk5frRKeNYG41DqedxNKgJppbg",
-                },
-            ],
         },
         Episode {
             title: "Asciinema with Marcin Kulik",
@@ -264,18 +132,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDxp2Vr8AkHts",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/xp2Vr8AkHts/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDQ&rs=AMzJL3kksJ72rD2Y9sz0A25wpl28K2e_rA",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/xp2Vr8AkHts/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA0&rs=AMzJL3lOpFBBw43s-sEnVwWzP7Q8SJ8i3w",
-                },
-            ],
         },
         Episode {
             title: "Unlocking Rust's power through mentorship and knowledge spreading, with Tim McNamara",
@@ -286,18 +142,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDmUy_fnQJQlQ",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/mUy_fnQJQlQ/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDQ&rs=AMzJL3lUzlrQATPyrcZ_6nDtHI9Ekf99wQ",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/mUy_fnQJQlQ/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA0&rs=AMzJL3lxMInK7oYvqZx3Tz2-yAOvtZypDw",
-                },
-            ],
         },
         Episode {
             title: "Prossimo with Josh Aas",
@@ -308,18 +152,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDIGFk_tzI8UY",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/IGFk_tzI8UY/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDQ&rs=AMzJL3kte-nz7W3MesAEclHZyhJQ4NGvoQ",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/IGFk_tzI8UY/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA0&rs=AMzJL3nsdzDiEmBqVbvrk_m6j-ZoJByw4A",
-                },
-            ],
         },
         Episode {
             title: "Polars with Ritchie Vink",
@@ -330,18 +162,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDwOwPGU2K0lM",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/wOwPGU2K0lM/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDg&rs=AMzJL3nBe5rHE6l4EIVxEDsXyk-OocZLBw",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/wOwPGU2K0lM/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA4&rs=AMzJL3lDgHexTYYwszsHZyDgWdueyANX_Q",
-                },
-            ],
         },
         Episode {
             title: "Exploring Rust's impact on efficiency and cost-savings, with Stefan Baumgartner",
@@ -352,18 +172,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDAf1TIrPIfAo",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/Af1TIrPIfAo/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDQ&rs=AMzJL3kBdGHoE4mxKyv9RH_6oggQflBbIg",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/Af1TIrPIfAo/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA0&rs=AMzJL3k-pRkN0LQtgU1uOXjReCNb3UDqHg",
-                },
-            ],
         },
         Episode {
             title: "Recruiting in Rust with Cedric Sellmann",
@@ -374,18 +182,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDVcAz7cvy0Ug",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/VcAz7cvy0Ug/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDQ&rs=AMzJL3keB7EYw3CQZSYqwU0IqAI-2RPzYA",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/VcAz7cvy0Ug/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA0&rs=AMzJL3nPP1FPahfhk1OIedfF-9_1zTk23Q",
-                },
-            ],
         },
         Episode {
             title: "Rust Digger with Gabor Szabo",
@@ -396,18 +192,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDHChati5ypww",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/HChati5ypww/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDQ&rs=AMzJL3keKKmXrEjAtwsbFzXy6Sfyjm0LCw",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/HChati5ypww/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA0&rs=AMzJL3nHmK1lgCY6aegc0-0HczVrDtqxLw",
-                },
-            ],
         },
         Episode {
             title: "Kraken's migration to Rust microservices, with Rob Ede",
@@ -418,18 +202,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPED5eFB6i9l2ps",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/5eFB6i9l2ps/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDQ&rs=AMzJL3n7Ic6PGsHty2YbUztGGMqmiBgOoQ",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/5eFB6i9l2ps/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA0&rs=AMzJL3kLbMi4i7HtmpwKgIY5yt5Pi1yy_A",
-                },
-            ],
         },
         Episode {
             title: "Learn Rust in a Month of Lunches with Dave MacLeod",
@@ -440,18 +212,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPED7URTQp-eOY8",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/7URTQp-eOY8/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDQ&rs=AMzJL3kFcPOhyu8b8npMRdVbtrv2wSnHqw",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/7URTQp-eOY8/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA0&rs=AMzJL3nlwStzbrQD62i9CnxSur0c2wlcgg",
-                },
-            ],
         },
         Episode {
             title: "What's New in Rust 1.70 and 1.71",
@@ -462,18 +222,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPED9WUCIoc7tK8",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/9WUCIoc7tK8/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDQ&rs=AMzJL3lTl66WOWUK4KrhfeTG0wy3ukCrQw",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/9WUCIoc7tK8/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA0&rs=AMzJL3njTMUN08F_aris8WxDXKjXZjQpHA",
-                },
-            ],
         },
         Episode {
             title: "rb-sys with Ian Ker-Seymer",
@@ -484,18 +232,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPED6EHe7ymDaEc",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/6EHe7ymDaEc/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDQ&rs=AMzJL3lp3hmdfVTNzGAP_F8J4wbJUI4UZA",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/6EHe7ymDaEc/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA0&rs=AMzJL3l547LNUn9Ig4ZFWp9abro60p_fQw",
-                },
-            ],
         },
         Episode {
             title: "What's New in Rust 1.68 and 1.69",
@@ -506,18 +242,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDrcttTCEGF98",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/rcttTCEGF98/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDQ&rs=AMzJL3mdrK_MLj6BeSH1LvliHIpOn_gSYg",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/rcttTCEGF98/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA0&rs=AMzJL3m9ByoOmGmoK079WLHfzVykd7jkqQ",
-                },
-            ],
         },
         Episode {
             title: "Pitching Rust to decision-makers, with Joel Marcey",
@@ -528,18 +252,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDE1w8SJrhPdY",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/E1w8SJrhPdY/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDg&rs=AMzJL3kmI_Ki-z7MExGhk9m1aieM2FqKYg",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/E1w8SJrhPdY/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA4&rs=AMzJL3mxXZjpxiRNm8k7ZGfZ3CVeAQnKfw",
-                },
-            ],
         },
         Episode {
             title: "Adopting Rust: present and future of the Rust web ecosystem, with Luca Palmieri",
@@ -550,18 +262,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPED7NHNwOBuZ9I",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/7NHNwOBuZ9I/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDg&rs=AMzJL3nRoRFHtTPZMLWkGoSbAE8l7U4rCw",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/7NHNwOBuZ9I/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA4&rs=AMzJL3noc3cR-Nnu637-YXONdHiEyquHpg",
-                },
-            ],
         },
         Episode {
             title: "Scanner.dev with Cliff Crosland",
@@ -572,18 +272,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPED_EHjBsGvE2U",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/_EHjBsGvE2U/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDg&rs=AMzJL3mkVK5s4DxkQubgHsYgFXhEuFfF6g",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/_EHjBsGvE2U/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA4&rs=AMzJL3mRyfoAFREIUu5r7djLRGkssFQYcw",
-                },
-            ],
         },
         Episode {
             title: "Bootstrapping Rust with Albert Larsan",
@@ -594,18 +282,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDU8CmYdgKIIg",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/U8CmYdgKIIg/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDg&rs=AMzJL3lBtuaIaxZW_yFBK-meNi-_qf1uUQ",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/U8CmYdgKIIg/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA4&rs=AMzJL3mMgf6TS8HwLLDYfc2mi_90Yn0wxA",
-                },
-            ],
         },
         Episode {
             title: "Shuttle with Ivan Cernja",
@@ -616,18 +292,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDbTBrrMtGBCw",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/bTBrrMtGBCw/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDQ&rs=AMzJL3mZhVaRGFOUW6nE-Aap4wZlJ3MfBA",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/bTBrrMtGBCw/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA0&rs=AMzJL3kRxyiaKnfQZnI5eTGgFz2rynX9IQ",
-                },
-            ],
         },
         Episode {
             title: "Fish Folk with Erlend Sogge Heggen",
@@ -638,18 +302,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDGoZeCoNQqnE",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/GoZeCoNQqnE/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDQ&rs=AMzJL3lZ-drkiVs-49Qs94spmOKYj0ZPfw",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/GoZeCoNQqnE/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA0&rs=AMzJL3kElsW7owsgzltCnADN34NwpPfLLw",
-                },
-            ],
         },
         Episode {
             title: "Daily with Kwindla Hultman Kramer",
@@ -660,18 +312,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDfT2k4cMORP0",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/fT2k4cMORP0/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDQ&rs=AMzJL3mhQL9Zm-03wbCC5JAT1ksl6n0oMg",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/fT2k4cMORP0/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA0&rs=AMzJL3ktcKVwKIxNw3hEscQs8tfGbmi-Qg",
-                },
-            ],
         },
         Episode {
             title: "Slint 1.0 with Tobias Hunger",
@@ -682,18 +322,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDPlbtXr0E3I4",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/PlbtXr0E3I4/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDQ&rs=AMzJL3nFDTjhOFz6wRQqXP6M7eiCqAXVRg",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/PlbtXr0E3I4/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA0&rs=AMzJL3nZs-W1v6EiAl5Z5x6GahpcuogdsA",
-                },
-            ],
         },
         Episode {
             title: "Shuttle Launchpad with Stefan Baumgartner",
@@ -704,18 +332,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDArvAb2XRpRg",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/ArvAb2XRpRg/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDQ&rs=AMzJL3klsze35gePgAobuklh8lM0foXmhw",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/ArvAb2XRpRg/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA0&rs=AMzJL3lG1JetHsmJfffmPMePb3YIm8oXUA",
-                },
-            ],
         },
         Episode {
             title: "CoderDojo and Rust Linz with Rainer Stropek",
@@ -726,18 +342,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDxI1gxegXJaI",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/xI1gxegXJaI/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDQ&rs=AMzJL3kRMr5O9m_iBOX9LWdYZor2Juhf9w",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/xI1gxegXJaI/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA0&rs=AMzJL3ksMb_ypGcxRGcuYrHgmE4ffdGGkA",
-                },
-            ],
         },
         Episode {
             title: "PyO3 with David Hewitt",
@@ -748,18 +352,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPED2bpp30JBrUc",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/2bpp30JBrUc/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDQ&rs=AMzJL3lJ-bfgr1r66k0W76KYNqD9atPg7g",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/2bpp30JBrUc/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA0&rs=AMzJL3miUXSOcpqOhohYnkP-uz1CEzW5ig",
-                },
-            ],
         },
         Episode {
             title: "smol with John Nunley",
@@ -770,18 +362,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDa1uY6lvoOI8",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/a1uY6lvoOI8/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDQ&rs=AMzJL3n4BBb-6YvBbysrJzBi3NH9eRhO8Q",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/a1uY6lvoOI8/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA0&rs=AMzJL3kcyig3C0rSNzKWfNSyKRUb0SJFcQ",
-                },
-            ],
         },
         Episode {
             title: "Glidesort with Orson Peters",
@@ -792,18 +372,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDgo4B5LAybP4",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/go4B5LAybP4/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDQ&rs=AMzJL3m9fqse-jrLzNNahQx-K1Qek4Igug",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/go4B5LAybP4/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA0&rs=AMzJL3lDzXNjOwQe7LQ6q6HjfxWG58XB7Q",
-                },
-            ],
         },
         Episode {
             title: "Rust Embedded WG with Jonathan Pallant",
@@ -814,18 +382,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDCTR5diZDMlw",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/CTR5diZDMlw/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDg&rs=AMzJL3kYqbiojiFMj8UpcYUw6BzXiN41yg",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/CTR5diZDMlw/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA4&rs=AMzJL3nLKBZBk4uywqkLWOQV5RuGs6AHoQ",
-                },
-            ],
         },
         Episode {
             title: "SurrealDB with Tobie and Jamie Morgan",
@@ -836,18 +392,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDPGWfB8K7Ad4",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/PGWfB8K7Ad4/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDg&rs=AMzJL3mnqNQcECPcaFBxugzdPgCdIKdCwg",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/PGWfB8K7Ad4/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA4&rs=AMzJL3k350oEF9hLqAg5zTEV8JPBAF2lRQ",
-                },
-            ],
         },
         Episode {
             title: "Rust Analyzer with Lukas Wirth",
@@ -858,18 +402,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDk7SUnJ2dUgk",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/k7SUnJ2dUgk/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDQ&rs=AMzJL3n0nxvXRVLVYrGhdlK9FYBCkZSjQw",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/k7SUnJ2dUgk/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA0&rs=AMzJL3kj9kK351_9PSyY-i41mt2l5UL9wg",
-                },
-            ],
         },
         Episode {
             title: "Wasmer with Syrus Akbary",
@@ -880,18 +412,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPED_gwDJObv7Cg",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/_gwDJObv7Cg/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDg&rs=AMzJL3nDvp25xb26TwYOBYTyRr8e-TUuoQ",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/_gwDJObv7Cg/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA4&rs=AMzJL3mMXMNhwZ35pKL5_6Lna65aG2ViJw",
-                },
-            ],
         },
         Episode {
             title: "Servo with Josh Matthews",
@@ -902,18 +422,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDyRlK0Rqi07M",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/yRlK0Rqi07M/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDQ&rs=AMzJL3llOV03LcpO9Fw2bFcC_RRHRJT-tw",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/yRlK0Rqi07M/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA0&rs=AMzJL3nufv9z_pARUHwLyvunxf8auKv1Ew",
-                },
-            ],
         },
         Episode {
             title: "AI-NC with Tom Miles",
@@ -924,18 +432,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDqiwafO25QZ8",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/qiwafO25QZ8/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDQ&rs=AMzJL3mzTB0fkSKRcnu-vZcsVNdELnqZow",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/qiwafO25QZ8/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA0&rs=AMzJL3kzusmvbOnQ4LAjyEQFMlj9Zy3DWg",
-                },
-            ],
         },
         Episode {
             title: "Cargo Limit with Alexander Lopatin",
@@ -946,18 +442,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDLyiy9mMF6OQ",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/Lyiy9mMF6OQ/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDQ&rs=AMzJL3nsg31MN1PJ_W9iUhW0bc50I0nhQw",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/Lyiy9mMF6OQ/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA0&rs=AMzJL3nHlLlnYPXOsN3K2bfEYr8vQKndaw",
-                },
-            ],
         },
         Episode {
             title: "Zed with Antonio Scandurra",
@@ -968,18 +452,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDjy9HXpmbwYE",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/jy9HXpmbwYE/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDQ&rs=AMzJL3kOkahusjCtIB8N3Im7gZMJKDv-HA",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/jy9HXpmbwYE/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA0&rs=AMzJL3ke_3IAlZJkQ75zer6wibLeSt4j0g",
-                },
-            ],
         },
         Episode {
             title: "Rustdoc with Joshua Nelson",
@@ -990,18 +462,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDZlZ-AwboeD4",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/ZlZ-AwboeD4/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDQ&rs=AMzJL3nTVEDjcVA2SjJ-ilUom8-1oLG_3w",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/ZlZ-AwboeD4/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA0&rs=AMzJL3lfft5TA0Dc7yv94JKP_WggTFIYfw",
-                },
-            ],
         },
         Episode {
             title: "Asynchronix with Serge Barral",
@@ -1012,18 +472,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPED6-vnc0PlTwA",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/6-vnc0PlTwA/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDQ&rs=AMzJL3ll8-x5qjgaAu1fO0a9OwkwMWQx1g",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/6-vnc0PlTwA/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA0&rs=AMzJL3lHeMDWu2gdvlndkqIsXWQph9crbg",
-                },
-            ],
         },
         Episode {
             title: "Lodestone with Wilbur Zhang, Peter Jiang, and Kevin Huang",
@@ -1034,18 +482,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDfwOy1yo151A",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/fwOy1yo151A/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDQ&rs=AMzJL3maJDje0bRfFfbuHkl9qkaiJmW3ig",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/fwOy1yo151A/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA0&rs=AMzJL3lHInZEwzKWDvLzgcLpEyucDwAOFA",
-                },
-            ],
         },
         Episode {
             title: "What's New in Rust 1.65, 1.66, and 1.67",
@@ -1056,18 +492,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDZ-hdndu4g1A",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/Z-hdndu4g1A/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDg&rs=AMzJL3mRJq5W0q1nRZKkGaFRXvi5_86baQ",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/Z-hdndu4g1A/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA4&rs=AMzJL3nELxP29R6FThpCJ7qBFME712qNGw",
-                },
-            ],
         },
         Episode {
             title: "Rust ABI with Aurimas Blažulionis",
@@ -1078,18 +502,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDEClEx4QyWro",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/EClEx4QyWro/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDQ&rs=AMzJL3nWntEANz5CVqIiYDi_zP9w1vUAYQ",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/EClEx4QyWro/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA0&rs=AMzJL3nbVIosrbGesH-cAmieFfBsGUyhiA",
-                },
-            ],
         },
         Episode {
             title: "Cloudflare with Adam Chalmers",
@@ -1100,18 +512,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDCA-LwdkFuK0",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/CA-LwdkFuK0/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDQ&rs=AMzJL3maet53Fu7NV3jI09kpwUWts5i-Nw",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/CA-LwdkFuK0/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA0&rs=AMzJL3l2gXGg16HEJbIEQIV5lmnfNRkQfw",
-                },
-            ],
         },
         Episode {
             title: "Rust Web Programming with Maxwell Flitton",
@@ -1122,18 +522,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDthSQ_956c5M",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/thSQ_956c5M/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDg&rs=AMzJL3lN8UXfyPPj5X4gV8bjTFfQjmeZKg",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/thSQ_956c5M/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA4&rs=AMzJL3lRgE5laUiiHoKXaz3hWvmA5IGVgg",
-                },
-            ],
         },
         Episode {
             title: "Rust Magazine with Shuang Zhu",
@@ -1144,18 +532,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDjoddrUWyUvk",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/joddrUWyUvk/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDQ&rs=AMzJL3lz71vVh2TaHkIcrFXHwFFk_R7k9g",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/joddrUWyUvk/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA0&rs=AMzJL3ne7X1n-aGjIYRqrxsCCiMMB_YOuw",
-                },
-            ],
         },
         Episode {
             title: "Rust Nation with Ernest Kissiedu",
@@ -1166,18 +542,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDVvod274eCBA",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/Vvod274eCBA/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDQ&rs=AMzJL3m0jW75KfBWVzF24BPxX6Bf4BGmjA",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/Vvod274eCBA/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA0&rs=AMzJL3lFQyYTFjN-f5i-3CgjGERSavkVlw",
-                },
-            ],
         },
         Episode {
             title: "Fermyon with Matt Butcher",
@@ -1188,18 +552,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDuBkQjQ1Fn24",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/uBkQjQ1Fn24/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDg&rs=AMzJL3kv2kwSzaSeFxlTph3EvYSFQRrsEg",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/uBkQjQ1Fn24/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA4&rs=AMzJL3ll-G3Ov4FP4ChEYPM889EYDdDqpw",
-                },
-            ],
         },
         Episode {
             title: "C2Rust with Stephen Crane",
@@ -1210,18 +562,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPED2HiLxAnuGvc",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/2HiLxAnuGvc/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDQ&rs=AMzJL3nO27Gz8tnGLbObbExxTXDVSqZ26Q",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/2HiLxAnuGvc/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA0&rs=AMzJL3l9fpjzGuC7NrjeQMn4GnNcNt8dWg",
-                },
-            ],
         },
         Episode {
             title: "Kernel Density Estimation with Seaton Ullberg",
@@ -1232,18 +572,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDC2kbBRZ-AZA",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/C2kbBRZ-AZA/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDg&rs=AMzJL3l9R3PY0y1Aa595GXYhpD38xNq-Ow",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/C2kbBRZ-AZA/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA4&rs=AMzJL3lCcGzjvrY1xDhwcpnOppoX-j2ewg",
-                },
-            ],
         },
         Episode {
             title: "Presser with Gray Olson",
@@ -1254,18 +582,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDcOX-bGn67ls",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/cOX-bGn67ls/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDQ&rs=AMzJL3mHGgrTD4n2gMxD8mdVS7Nqh1paIg",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/cOX-bGn67ls/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA0&rs=AMzJL3lInDFTvpO0gkbBDq50vNRZuUDDJg",
-                },
-            ],
         },
         Episode {
             title: "Leptos with Greg Johnston",
@@ -1276,18 +592,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDV2Y1E0XPW7g",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/V2Y1E0XPW7g/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDQ&rs=AMzJL3nnri8BXztu3azU8bCdEiBSiIWc6g",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/V2Y1E0XPW7g/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA0&rs=AMzJL3kQmlgwEcTLE8D9o6Q0_YkOFUQZBA",
-                },
-            ],
         },
         Episode {
             title: "Kanal with Khashayar Fereidani",
@@ -1298,18 +602,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDhsWEe93_aaE",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/hsWEe93_aaE/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDQ&rs=AMzJL3kzX63EkFu9BmdFSnaWx41DreHm1Q",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/hsWEe93_aaE/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA0&rs=AMzJL3mr2dRc7jNuP-GLBrfMjkuF9uYe-g",
-                },
-            ],
         },
         Episode {
             title: "cargo-auditable with Sergey Davidoff",
@@ -1320,18 +612,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDwMvNuA_vabk",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/wMvNuA_vabk/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDQ&rs=AMzJL3nQO2Aymyxr1fA7WgWdzqfNfIkEZw",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/wMvNuA_vabk/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA0&rs=AMzJL3mFKydcQ-3DyCkNTfJXzxgLs1I4JQ",
-                },
-            ],
         },
         Episode {
             title: "Pants with Eric Arellano and Stu Hood",
@@ -1342,18 +622,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPED7n1yuwszW9Y",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/7n1yuwszW9Y/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDQ&rs=AMzJL3nJe84qfxxz6Wn4RTLPjq5eI0gsRQ",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/7n1yuwszW9Y/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA0&rs=AMzJL3l-crzfKUk348WB-41NcAR2zdw_pA",
-                },
-            ],
         },
         Episode {
             title: "Veloren with Forest Anderson",
@@ -1364,18 +632,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDejqL7Y2TPN0",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/ejqL7Y2TPN0/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDQ&rs=AMzJL3kkFG-T020kDkS1XvkmGHjRq3_zVw",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/ejqL7Y2TPN0/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA0&rs=AMzJL3m7GhQKYV7nekaM0yFF4p1Vu7ClDw",
-                },
-            ],
         },
         Episode {
             title: "What's New in Rust 1.62, 1.63, and 1.64",
@@ -1386,18 +642,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPED-cfDoLt_wdc",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/-cfDoLt_wdc/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDQ&rs=AMzJL3nTxAi3ZKwdqXzJZyxJt_xXPgEB2A",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/-cfDoLt_wdc/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA0&rs=AMzJL3moegLyAlAXfzx6wIslWf5ixzRM4g",
-                },
-            ],
         },
         Episode {
             title: "Ockam with Mrinal Wadhwa",
@@ -1408,18 +652,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPED1YAHcRNf1EU",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/1YAHcRNf1EU/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDQ&rs=AMzJL3l93o24cBYHFO1NV3g2hNfNd5Osqg",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/1YAHcRNf1EU/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA0&rs=AMzJL3nafjw2CdLL3anjN9G7qdMi80bM1g",
-                },
-            ],
         },
         Episode {
             title: "Axum with David Pedersen",
@@ -1430,18 +662,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDOaBpgn14WBI",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/OaBpgn14WBI/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDQ&rs=AMzJL3mut0OyNAxctpzO5QdhMye-GR-6ZA",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/OaBpgn14WBI/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA0&rs=AMzJL3kpori6T4KUG9lhtD7swJ2ikVagQg",
-                },
-            ],
         },
         Episode {
             title: "Rust at Microsoft with Nell Shamrell-Harrington",
@@ -1452,18 +672,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDvyOLD7hLfkI",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/vyOLD7hLfkI/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDQ&rs=AMzJL3l6UHnFOUOph_TcNyuJEVgCvKeIrg",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/vyOLD7hLfkI/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA0&rs=AMzJL3li28dxXmi2SdtUswLQtMsy0tgliA",
-                },
-            ],
         },
         Episode {
             title: "Fyrox with Dmitry Stepanov",
@@ -1474,18 +682,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDdlub6wXfA0M",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/dlub6wXfA0M/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDQ&rs=AMzJL3mFOkzWpIvZY-t-9_TYlw-5cvUwqw",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/dlub6wXfA0M/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA0&rs=AMzJL3kPlAqiZQkNnuv9QwQWdutqdVocog",
-                },
-            ],
         },
         Episode {
             title: "Tauri with Daniel Thompson-Yvetot",
@@ -1496,18 +692,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDcMxvM1dCgMg",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/cMxvM1dCgMg/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDQ&rs=AMzJL3llu77z9k1Jclerfwnw21ZVepPIzQ",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/cMxvM1dCgMg/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA0&rs=AMzJL3nuGRmAk0p5Kbkz0vHahEhiYZr71Q",
-                },
-            ],
         },
         Episode {
             title: "Asynchronous Rust with Tyler Mandry",
@@ -1518,18 +702,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPED2teSp_JnujE",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/2teSp_JnujE/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDQ&rs=AMzJL3lM52bTBDBEJmP0kScS-IWveaTd3Q",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/2teSp_JnujE/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA0&rs=AMzJL3lZVpk4XZcksMpBqwN1gwIcDQz6IQ",
-                },
-            ],
         },
         Episode {
             title: "High Assurance Rust with Tiemoko Ballo",
@@ -1540,18 +712,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDOWCX1UzIQzA",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/OWCX1UzIQzA/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDQ&rs=AMzJL3lUImsx18TYCqbXmBR7uxOqJvgL2w",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/OWCX1UzIQzA/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA0&rs=AMzJL3kqMGHms76BRj8Zyzy1bGBHYYKe_A",
-                },
-            ],
         },
         Episode {
             title: "New Rustacean with Chris Krycho",
@@ -1562,18 +722,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDPeJsWxPeZi4",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/PeJsWxPeZi4/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDg&rs=AMzJL3nQNRaCHVel6gVoULnei1Cd0tMi-w",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/PeJsWxPeZi4/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA4&rs=AMzJL3mkt0jpPNcjUaVs9NS64-NAYKhNXg",
-                },
-            ],
         },
         Episode {
             title: "This Week in Rust - Issue 446",
@@ -1584,18 +732,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDYIUDz6pKSJ8",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/YIUDz6pKSJ8/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDQ&rs=AMzJL3lHC2xRIuTPzRBscB79C01F8lpSSw",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/YIUDz6pKSJ8/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA0&rs=AMzJL3nh40O4WwqlDpl7X9ABaUo--a3F2A",
-                },
-            ],
         },
         Episode {
             title: "Zig with Andrew Kelley",
@@ -1606,18 +742,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDrKXsZno9ijw",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/rKXsZno9ijw/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDg&rs=AMzJL3l9HJ8dEy-3A8pWYdZ45aKN-NatpA",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/rKXsZno9ijw/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA4&rs=AMzJL3lM0VZaj90nOfEDxZOS8kdbx3zqLA",
-                },
-            ],
         },
         Episode {
             title: "What's New in Rust 1.60 and 1.61",
@@ -1628,18 +752,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDy5aRQlSQ8vo",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/y5aRQlSQ8vo/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDg&rs=AMzJL3nZ3BKfa3hUsgaTwq1mJHniU05p-g",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/y5aRQlSQ8vo/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA4&rs=AMzJL3kUW-eufBEGPKxC8HNqCvsG1QZPYw",
-                },
-            ],
         },
         Episode {
             title: "Fig with Grant Gurvis",
@@ -1650,18 +762,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDDHThQe3Aogo",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/DHThQe3Aogo/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDQ&rs=AMzJL3nrK8Xvv9NmIYsYgDlDdGcxcKEgUg",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/DHThQe3Aogo/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA0&rs=AMzJL3l9IGheKwOHueComyPymsvq7otnjg",
-                },
-            ],
         },
         Episode {
             title: "This Week in Rust - Issue 445",
@@ -1672,18 +772,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDb3Gv6Z8zn7E",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/b3Gv6Z8zn7E/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDQ&rs=AMzJL3lZVlyiw596YB-bYRemQwCq_qgCRA",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/b3Gv6Z8zn7E/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA0&rs=AMzJL3nP7x9fafmqm9P0Dixhos8DTCdlXg",
-                },
-            ],
         },
         Episode {
             title: "Rust Foundation with Rebecca Rumbul",
@@ -1694,18 +782,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDFVBroqO0z_8",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/FVBroqO0z_8/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDg&rs=AMzJL3lw7qx_G0HzNGoswrvqfJ3bAD4jEw",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/FVBroqO0z_8/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA4&rs=AMzJL3l6eL-9WR69mJ5ZnvmNdl-RJ1QYaQ",
-                },
-            ],
         },
         Episode {
             title: "This Week in Rust - Issue 444",
@@ -1716,18 +792,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDkVW-NJAcZLY",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/kVW-NJAcZLY/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDg&rs=AMzJL3mtR1oLYQMRz3P-rkPHG8sgHlmvng",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/kVW-NJAcZLY/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA4&rs=AMzJL3kSlTT3Z-Ssvj5f_bMyhdaiTvtaLQ",
-                },
-            ],
         },
         Episode {
             title: "egui with Emil Ernerfeldt",
@@ -1738,18 +802,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPED6YzGGta_J1I",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/6YzGGta_J1I/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDQ&rs=AMzJL3mQyGfJldZscQv1MST6fmEAFMVqjg",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/6YzGGta_J1I/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA0&rs=AMzJL3lySbTCqRmIQyb1sqxSHD3xJFUthA",
-                },
-            ],
         },
         Episode {
             title: "This Week in Rust - Issue 443",
@@ -1760,18 +812,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDH1YCeYD4MpA",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/H1YCeYD4MpA/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDg&rs=AMzJL3mpwjtQxOmAGLCA9Dc7cm3rBVUteQ",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/H1YCeYD4MpA/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA4&rs=AMzJL3leDiY5Pe2XUotmuwsRswqehAc6bA",
-                },
-            ],
         },
         Episode {
             title: "Buttplug with Kyle Machulis",
@@ -1782,18 +822,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDEQxchDx4W_I",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/EQxchDx4W_I/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDg&rs=AMzJL3kIt-qKe2KnWJqJM4SmXAVeY7ZTvg",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/EQxchDx4W_I/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA4&rs=AMzJL3nCTIgCWePHBPwRdqFZvhhIOgxBMg",
-                },
-            ],
         },
         Episode {
             title: "This Week in Rust - Issue 442",
@@ -1804,18 +832,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDK14kosNyQmU",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/K14kosNyQmU/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDQ&rs=AMzJL3ne8wuyEhqHc5SSSi4K4Fqdf-NPag",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/K14kosNyQmU/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA0&rs=AMzJL3mGtvly4k1kPvu9EhDOVDKlcfPeRQ",
-                },
-            ],
         },
         Episode {
             title: "Actix Web with Rob Ede",
@@ -1826,18 +842,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPED9tehvRyKR1U",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/9tehvRyKR1U/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDQ&rs=AMzJL3kncunrwAY7zMc1BMinvBBpRvWxiw",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/9tehvRyKR1U/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA0&rs=AMzJL3nXgLeOe4a7z1-C5uPWudkKdaVETg",
-                },
-            ],
         },
         Episode {
             title: "This Week in Rust - Issue 441",
@@ -1848,18 +852,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPED0DU5uGDNUQs",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/0DU5uGDNUQs/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDQ&rs=AMzJL3l8aM_tIoxcZTfCcsBYOliK5ULvgQ",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/0DU5uGDNUQs/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA0&rs=AMzJL3n_6gflaRIIIpYTopXJIvyHp8ywdg",
-                },
-            ],
         },
         Episode {
             title: "Slint with Tobias Hunger",
@@ -1870,18 +862,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDVNfeXpCo17w",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/VNfeXpCo17w/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDQ&rs=AMzJL3m9TncJCdGwlQuFL9B8qacHxIS-2A",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/VNfeXpCo17w/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA0&rs=AMzJL3neeqWad-FgD8htOGemA6wLgUcdjg",
-                },
-            ],
         },
         Episode {
             title: "Rust Safety with Quentin Ochem and Florian Gilcher",
@@ -1892,18 +872,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDz4vg7K0_3PU",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/z4vg7K0_3PU/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDQ&rs=AMzJL3mOmRuioS4oIZO5NVltsQfs_gtkmA",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/z4vg7K0_3PU/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA0&rs=AMzJL3ngjXDg8Xdq49DDPTRmLCfmjGc3rQ",
-                },
-            ],
         },
         Episode {
             title: "Game Development with Rust and WebAssembly with Eric Smith",
@@ -1914,18 +882,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDfXKj3b6Y1aE",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/fXKj3b6Y1aE/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDQ&rs=AMzJL3nONgL4IRAL_O47cS5obJYU1p4xbw",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/fXKj3b6Y1aE/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA0&rs=AMzJL3k3GfGfAdJpv9JvxejzPP2yF_Yh6w",
-                },
-            ],
         },
         Episode {
             title: "clap with Ed Page",
@@ -1936,18 +892,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDt9UHkWqIWb4",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/t9UHkWqIWb4/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDg&rs=AMzJL3l6uJ4YChdDcck0V5JsriCCMgz2AA",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/t9UHkWqIWb4/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA4&rs=AMzJL3kbTOAJihDsihFF1-bmo_WFYuekiw",
-                },
-            ],
         },
         Episode {
             title: "Armin Ronacher on experimental deserialization with Deser",
@@ -1958,18 +902,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPED2qBUaiui-jw",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/2qBUaiui-jw/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDQ&rs=AMzJL3nF4fzTVJLwNkulKggo2SFaGZDjyg",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/2qBUaiui-jw/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA0&rs=AMzJL3lbCHt3kTUaN89-f1gcmp69-5PYkw",
-                },
-            ],
         },
         Episode {
             title: "Purdy with Marty Jones",
@@ -1980,18 +912,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDTWMFoCreeAM",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/TWMFoCreeAM/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDg&rs=AMzJL3nZM9g5DvDiSrWgbFp_1fxsLqdt9A",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/TWMFoCreeAM/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA4&rs=AMzJL3lbtJJbY7D7jCxh8WSIeXWtiE6LLw",
-                },
-            ],
         },
         Episode {
             title: "Rusty Engine",
@@ -2002,18 +922,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDBlEl163yT2k",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/BlEl163yT2k/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDQ&rs=AMzJL3mO-PqQ29J9LpbyOxuvVdfTzFD1Ag",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/BlEl163yT2k/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA0&rs=AMzJL3nrqoOnblzSs9VND18B5NcMHJourw",
-                },
-            ],
         },
         Episode {
             title: "Rust Servers, Services, and Apps with Prabhu Eshwarla",
@@ -2024,18 +932,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDA7kUTf0C9PY",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/A7kUTf0C9PY/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDQ&rs=AMzJL3kLqLsJknbETqPBuZR6sbJ0wIwtFA",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/A7kUTf0C9PY/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA0&rs=AMzJL3nB23Meyjg9JtCcFNrCJD0_9Gg9tA",
-                },
-            ],
         },
         Episode {
             title: "id3 with Roel",
@@ -2046,18 +942,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDGBW_e_-IpCw",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/GBW_e_-IpCw/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDQ&rs=AMzJL3l6NdZWdc8Edz5Go4JUNVvls8aPAw",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/GBW_e_-IpCw/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA0&rs=AMzJL3mu5jQ_zfl6MnFC85UDsr9zD246MA",
-                },
-            ],
         },
         Episode {
             title: "PancakeDB with Martin Loncaric",
@@ -2068,18 +952,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDUGbWc_SkhnQ",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/UGbWc_SkhnQ/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDg&rs=AMzJL3mgmnyEv5anLfuE74jj-KqMGGQ6eA",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/UGbWc_SkhnQ/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA4&rs=AMzJL3kamB-PQAzKzq-dqR2Q4JAD-fcrWQ",
-                },
-            ],
         },
         Episode {
             title: "What's New in Rust 1.58 and 1.59",
@@ -2090,18 +962,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDtT5ghFUdEcU",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/tT5ghFUdEcU/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDQ&rs=AMzJL3lUFSx7irRtIvaTY-uD_T_XMXJdGA",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/tT5ghFUdEcU/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA0&rs=AMzJL3lgABEozhjrzwANbBjpEMA9d53vzA",
-                },
-            ],
         },
         Episode {
             title: "Tor with Nick Mathewson",
@@ -2112,18 +972,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDeFyHHgCIUw4",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/eFyHHgCIUw4/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDg&rs=AMzJL3nStUKanSJuAy6yEznTTc8bRXvi3A",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/eFyHHgCIUw4/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA4&rs=AMzJL3li3cS6Vmy0AzcoCknYlojY9_bQ_A",
-                },
-            ],
         },
         Episode {
             title: "zbus with Zeeshan Ali",
@@ -2134,18 +982,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDkHn_xhOTCq0",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/kHn_xhOTCq0/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDg&rs=AMzJL3lCcMhU52ZbC0oNRLZuzpVMt0jKBQ",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/kHn_xhOTCq0/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA4&rs=AMzJL3kk8EqtHVNrwJGOWdBU4JdbRnkGRQ",
-                },
-            ],
         },
         Episode {
             title: "Gitoxide with Sebastian Thiel",
@@ -2156,18 +992,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDlvS9he8cmgk",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/lvS9he8cmgk/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDg&rs=AMzJL3mvDSsgMTIE6oeZbS723ggNI02T6g",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/lvS9he8cmgk/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA4&rs=AMzJL3lkT9jQ7ZisAedierGPoHGTPfMPCw",
-                },
-            ],
         },
         Episode {
             title: "Lumen with Paul Schoenfelder",
@@ -2178,18 +1002,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDYVXzDiZWW7Y",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/YVXzDiZWW7Y/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDg&rs=AMzJL3nybvf_-jPpx-kqyjCAu1AhoEyr5g",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/YVXzDiZWW7Y/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA4&rs=AMzJL3nvsPTDzi4Mxmhqe7HWOPMEWgdK2Q",
-                },
-            ],
         },
         Episode {
             title: "Yew with Julius Lungys",
@@ -2200,18 +1012,6 @@ GetPodcast {
             episode_id: EpisodeID(
                 "MPEDHBpO4P4Rizg",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 360,
-                    width: 640,
-                    url: "https://i.ytimg.com/vi/HBpO4P4Rizg/sddefault.jpg?sqp=-oaymwElCIAFEOgCIAQqCghQELAEGAAg4ANIWvKriqkDCZoCBggzEBwYDQ&rs=AMzJL3nQDY_jmhF-fBpydj37806Dtai2xA",
-                },
-                Thumbnail {
-                    height: 720,
-                    width: 1280,
-                    url: "https://i.ytimg.com/vi/HBpO4P4Rizg/hq720.jpg?sqp=-oaymwEmCIAKENAFIAQqCwiYAhDoBxgAINAFSFryq4qpAwmaAgYIMxAcGA0&rs=AMzJL3nGGhEV1vKwqIXDYeHdoVmCPZBR_Q",
-                },
-            ],
         },
     ],
 }

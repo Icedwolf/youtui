@@ -225,26 +225,4 @@ GetLibraryUploadAlbum {
             like_status: Indifferent,
         },
     ],
-    thumbnails: [
-        Thumbnail {
-            height: 60,
-            width: 60,
-            url: "https://i9.ytimg.com/vi_locker/-DZeUgqTpv0/locker.png?sqp=-oaymwEGCDwQPCAA&rs=AMzJL3m6r96hzvxLpSw3nXHihtT1MqXPDA",
-        },
-        Thumbnail {
-            height: 120,
-            width: 120,
-            url: "https://i9.ytimg.com/vi_locker/-DZeUgqTpv0/locker.png?sqp=-oaymwEGCHgQeCAA&rs=AMzJL3lnwLtmrYj0_nS6KpnuSQhN6HqpPA",
-        },
-        Thumbnail {
-            height: 226,
-            width: 226,
-            url: "https://i9.ytimg.com/vi_locker/-DZeUgqTpv0/locker.png?sqp=-oaymwEICOIBEOIBIAA&rs=AMzJL3lGSLB0Mw9muU0tGLSRi36yZ00M8g",
-        },
-        Thumbnail {
-            height: 544,
-            width: 544,
-            url: "https://i9.ytimg.com/vi_locker/-DZeUgqTpv0/locker.png?sqp=-oaymwEICKAEEKAEIAA&rs=AMzJL3lyXV4DqvJFMUL8Lcs9qnLGpbBahQ",
-        },
-    ],
 }

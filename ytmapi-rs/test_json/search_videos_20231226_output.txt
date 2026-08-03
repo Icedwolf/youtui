@@ -7,13 +7,6 @@
         ),
         views: "1.4M views",
         length: "59:55",
-        thumbnails: [
-            Thumbnail {
-                height: 225,
-                width: 400,
-                url: "https://i.ytimg.com/vi/l9ZhYl11TpM/sddefault.jpg?sqp=-oaymwEWCJADEOEBIAQqCghqEJQEGHgg6AJIWg&rs=AMzJL3nxfODqmYmLj0cDI5sN-EWn_VCI2g",
-            },
-        ],
     },
     Video {
         title: "Now And Then",
@@ -23,13 +16,6 @@
         ),
         views: "39M views",
         length: "4:36",
-        thumbnails: [
-            Thumbnail {
-                height: 225,
-                width: 400,
-                url: "https://i.ytimg.com/vi/Opxhh9Oh3rg/sddefault.jpg?sqp=-oaymwEWCJADEOEBIAQqCghqEJQEGHgg6AJIWg&rs=AMzJL3m_fXwdP9MEwcnf8ZtQgX2WgJ5pUg",
-            },
-        ],
     },
     Video {
         title: "The Beatles / 1967 - 1970 (2023 Edition - The Blue Album) [PART 2 - FULL ALBUM] ☆☆☆☆☆",
@@ -39,13 +25,6 @@
         ),
         views: "430K views",
         length: "53:51",
-        thumbnails: [
-            Thumbnail {
-                height: 225,
-                width: 400,
-                url: "https://i.ytimg.com/vi/P8fR2vwl0K8/sddefault.jpg?sqp=-oaymwEWCJADEOEBIAQqCghqEJQEGHgg6AJIWg&rs=AMzJL3nAbruZmqqbn6Ls4fg5S-zcPV8g7g",
-            },
-        ],
     },
     Video {
         title: "Now And Then",
@@ -55,13 +34,6 @@
         ),
         views: "8.2M views",
         length: "4:09",
-        thumbnails: [
-            Thumbnail {
-                height: 225,
-                width: 400,
-                url: "https://i.ytimg.com/vi/AW55J2zE3N4/sddefault.jpg?sqp=-oaymwEWCJADEOEBIAQqCghqEJQEGHgg6AJIWg&rs=AMzJL3n8OdFbfOtO_3krpM0VluQ4xuNk3g",
-            },
-        ],
     },
     Video {
         title: "Now And Then - The Last Beatles Song (Short Film)",
@@ -71,13 +43,6 @@
         ),
         views: "6.9M views",
         length: "12:25",
-        thumbnails: [
-            Thumbnail {
-                height: 225,
-                width: 400,
-                url: "https://i.ytimg.com/vi/APJAQoSCwuA/sddefault.jpg?sqp=-oaymwEWCJADEOEBIAQqCghqEJQEGHgg6AJIWg&rs=AMzJL3nSfCW4utM6udXbAhygK9Y47lCPMQ",
-            },
-        ],
     },
     Video {
         title: "Don't Let Me Down [blank]",
@@ -87,13 +52,6 @@
         ),
         views: "473M views",
         length: "3:32",
-        thumbnails: [
-            Thumbnail {
-                height: 225,
-                width: 400,
-                url: "https://i.ytimg.com/vi/NCtzkaL2t_Y/sddefault.jpg?sqp=-oaymwEWCJADEOEBIAQqCghqEJQEGHgg6AJIWg&rs=AMzJL3leGajvuS0AoS4PeDMGdZPOJBw9rw",
-            },
-        ],
     },
     Video {
         title: "The Beatles - The Beatles / 1967-1970 (2023 Mix) VOL.2 [FULL ALBUM] ☆☆☆☆☆",
@@ -103,13 +61,6 @@
         ),
         views: "510K views",
         length: "45:34",
-        thumbnails: [
-            Thumbnail {
-                height: 225,
-                width: 400,
-                url: "https://i.ytimg.com/vi/ts5XFV7hqQI/sddefault.jpg?sqp=-oaymwEWCJADEOEBIAQqCghqEJQEGHgg6AJIWg&rs=AMzJL3k_zzAc7RX4iuY-20GoiPSB58mGAQ",
-            },
-        ],
     },
     Video {
         title: "The Beatles (Live At Circus Krone, Munich, Germany 1966)",
@@ -119,13 +70,6 @@
         ),
         views: "1.8M views",
         length: "15:01",
-        thumbnails: [
-            Thumbnail {
-                height: 225,
-                width: 400,
-                url: "https://i.ytimg.com/vi/laQ2CndwCeM/sddefault.jpg?sqp=-oaymwEWCJADEOEBIAQqCghqEJQEGHgg6AJIWg&rs=AMzJL3nxQDlpaRAhxStCxrNAhShQ-LK0CA",
-            },
-        ],
     },
     Video {
         title: "Beyond Borders - Beatles go Egypt - I Want you",
@@ -135,13 +79,6 @@
         ),
         views: "344 views",
         length: "7:56",
-        thumbnails: [
-            Thumbnail {
-                height: 225,
-                width: 400,
-                url: "https://i.ytimg.com/vi/Tp7-GJnlg5A/sddefault.jpg?sqp=-oaymwEWCJADEOEBIAQqCghqEJQEGHgg6AJIWg&rs=AMzJL3kvs-Rgeh7xsVlwwQiOAkm0xamQJw",
-            },
-        ],
     },
     Video {
         title: "Best The Beatles Songs Collection - The Beatles Greatest Hits Full Album 2021",
@@ -151,13 +88,6 @@
         ),
         views: "11M views",
         length: "47:01",
-        thumbnails: [
-            Thumbnail {
-                height: 225,
-                width: 400,
-                url: "https://i.ytimg.com/vi/RS7trxkb0zE/sddefault.jpg?sqp=-oaymwEWCJADEOEBIAQqCghqEJQEGHgg6AJIWg&rs=AMzJL3l9bTJj6jKcI36tAYxqACEO1mKgig",
-            },
-        ],
     },
     Video {
         title: "Something (Studio Demo / Audio)",
@@ -167,13 +97,6 @@
         ),
         views: "1.6M views",
         length: "3:39",
-        thumbnails: [
-            Thumbnail {
-                height: 225,
-                width: 400,
-                url: "https://i.ytimg.com/vi/m0yJipVqktI/sddefault.jpg?sqp=-oaymwEWCJADEOEBIAQqCghqEJQEGHgg6AJIWg&rs=AMzJL3mElItZ2Ab5WC-rBLnuj7BkvwFJjQ",
-            },
-        ],
     },
     Video {
         title: "Yellow Submarine",
@@ -183,13 +106,6 @@
         ),
         views: "225K views",
         length: "2:39",
-        thumbnails: [
-            Thumbnail {
-                height: 225,
-                width: 400,
-                url: "https://i.ytimg.com/vi/182lCs2_XDg/sddefault.jpg?sqp=-oaymwEWCJADEOEBIAQqCghqEJQEGHgg6AJIWg&rs=AMzJL3ka0-URpHr_dBVGzMDs-DutESj8Pw",
-            },
-        ],
     },
     Video {
         title: "Oh! Darling (Take 4 / Audio)",
@@ -199,13 +115,6 @@
         ),
         views: "759K views",
         length: "3:33",
-        thumbnails: [
-            Thumbnail {
-                height: 225,
-                width: 400,
-                url: "https://i.ytimg.com/vi/IlNJWKhRQZI/sddefault.jpg?sqp=-oaymwEWCJADEOEBIAQqCghqEJQEGHgg6AJIWg&rs=AMzJL3mTGiQfz85VTxJa9Idn196ptuUoSA",
-            },
-        ],
     },
     Video {
         title: "Something (Take 39 / Instrumental / Strings Only / Audio)",
@@ -215,13 +124,6 @@
         ),
         views: "797K views",
         length: "2:44",
-        thumbnails: [
-            Thumbnail {
-                height: 225,
-                width: 400,
-                url: "https://i.ytimg.com/vi/SnYc4mQtbHM/sddefault.jpg?sqp=-oaymwEWCJADEOEBIAQqCghqEJQEGHgg6AJIWg&rs=AMzJL3kB1ME6WTRaVgFz4eZr_zZKJvpcbg",
-            },
-        ],
     },
     Video {
         title: "Hey Jude [blank]",
@@ -231,13 +133,6 @@
         ),
         views: "376M views",
         length: "8:10",
-        thumbnails: [
-            Thumbnail {
-                height: 225,
-                width: 400,
-                url: "https://i.ytimg.com/vi/A_MjCqQoLLA/sddefault.jpg?sqp=-oaymwEWCJADEOEBIAQqCghqEJQEGHgg6AJIWg&rs=AMzJL3lBbkuyY7UKcfsFCUDm1_xkAeo5Lw",
-            },
-        ],
     },
     Video {
         title: "The Beatles - Now And Then | Epic Orchestra",
@@ -247,13 +142,6 @@
         ),
         views: "350K views",
         length: "4:31",
-        thumbnails: [
-            Thumbnail {
-                height: 225,
-                width: 400,
-                url: "https://i.ytimg.com/vi/e_drjk_dG_0/sddefault.jpg?sqp=-oaymwEWCJADEOEBIAQqCghqEJQEGHgg6AJIWg&rs=AMzJL3kOWAVnLDs2wqqadot2gDqKXcvPCA",
-            },
-        ],
     },
     Video {
         title: "The Beatles - Hey Jude (Lyrics)",
@@ -263,13 +151,6 @@
         ),
         views: "10K views",
         length: "7:03",
-        thumbnails: [
-            Thumbnail {
-                height: 225,
-                width: 400,
-                url: "https://i.ytimg.com/vi/wOU4YBoa5Ng/sddefault.jpg?sqp=-oaymwEWCJADEOEBIAQqCghqEJQEGHgg6AJIWg&rs=AMzJL3nrK5vYNyDXdDcPzpE0zQXSPHQjLQ",
-            },
-        ],
     },
     Video {
         title: "Back In The U.S.S.R. (Esher Demo / Audio)",
@@ -279,13 +160,6 @@
         ),
         views: "310K views",
         length: "3:03",
-        thumbnails: [
-            Thumbnail {
-                height: 225,
-                width: 400,
-                url: "https://i.ytimg.com/vi/wqx6qP92QSQ/sddefault.jpg?sqp=-oaymwEWCJADEOEBIAQqCghqEJQEGHgg6AJIWg&rs=AMzJL3mGx5THIBPT6LH4HXW_Vm54aIxdnQ",
-            },
-        ],
     },
     Video {
         title: "The Beatles - Now And Then (Music Video)",
@@ -295,13 +169,6 @@
         ),
         views: "276K views",
         length: "6:07",
-        thumbnails: [
-            Thumbnail {
-                height: 225,
-                width: 400,
-                url: "https://i.ytimg.com/vi/5kibP6KXa6Q/sddefault.jpg?sqp=-oaymwEWCJADEOEBIAQqCghqEJQEGHgg6AJIWg&rs=AMzJL3lNhay0NgHBMvSDPicBuFRJMIPS2A",
-            },
-        ],
     },
     Video {
         title: "The Beatles - Don't Let Me Down Take 1 | Rooftop Concert",
@@ -311,12 +178,5 @@
         ),
         views: "1.9M views",
         length: "3:20",
-        thumbnails: [
-            Thumbnail {
-                height: 225,
-                width: 400,
-                url: "https://i.ytimg.com/vi/qB183XkDq5Q/sddefault.jpg?sqp=-oaymwEWCJADEOEBIAQqCghqEJQEGHgg6AJIWg&rs=AMzJL3mSYxfSI-ht9amuitCgSwSSPlBFfg",
-            },
-        ],
     },
 ]

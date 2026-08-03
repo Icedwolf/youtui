@@ -6,7 +6,7 @@ use super::{
 };
 use crate::common::{
     ApiOutcome, ArtistChannelID, ContinuationParams, EpisodeID, Explicit, LibraryManager,
-    LikeStatus, PlaylistID, SetVideoID, Thumbnail, UploadEntityID, VideoID,
+    LikeStatus, PlaylistID, SetVideoID, UploadEntityID, VideoID,
 };
 use crate::continuations::ParseFromContinuable;
 use crate::nav_consts::{
@@ -16,7 +16,7 @@ use crate::nav_consts::{
     NAVIGATION_PLAYLIST_ID, NAVIGATION_VIDEO_ID, NAVIGATION_VIDEO_TYPE, PLAY_BUTTON,
     PLAYLIST_PANEL_CONTINUATION, PPR, RADIO_CONTINUATION_PARAMS, RESPONSIVE_HEADER, RUN_TEXT,
     SECOND_SUBTITLE_RUNS, SECONDARY_SECTION_LIST_RENDERER, SECTION_LIST_ITEM, TAB_CONTENT,
-    TEXT_RUN, TEXT_RUN_TEXT, THUMBNAIL, THUMBNAILS, WATCH_NEXT_CONTENT, WATCH_VIDEO_ID,
+    TEXT_RUN, TEXT_RUN_TEXT, WATCH_NEXT_CONTENT, WATCH_VIDEO_ID,
 };
 use crate::query::playlist::{
     CreatePlaylistType, GetPlaylistDetailsQuery, GetWatchPlaylistQueryID, PrivacyStatus,
@@ -48,7 +48,6 @@ pub struct GetPlaylistDetails {
     pub track_count_text: String,
     // NOTE: Seem to be unable to distinguish when views is optional.
     pub views: Option<String>,
-    pub thumbnails: Vec<Thumbnail>,
 }
 #[derive(PartialEq, Debug, Clone, Deserialize, Serialize)]
 /// Provides a SetVideoID and VideoID for each video added to the playlist.
@@ -63,7 +62,6 @@ pub struct WatchPlaylistTrack {
     pub title: String,
     pub author: String,
     pub duration: String,
-    pub thumbnails: Vec<Thumbnail>,
     pub video_id: VideoID<'static>,
 }
 
@@ -83,7 +81,6 @@ pub struct PlaylistSong {
     pub artists: Vec<super::ParsedSongArtist>,
     // TODO: Song like feedback tokens.
     pub like_status: LikeStatus,
-    pub thumbnails: Vec<Thumbnail>,
     pub explicit: Explicit,
     pub is_available: bool,
     /// Id of the playlist that will get created when pressing 'Start Radio'.
@@ -110,7 +107,6 @@ pub struct PlaylistVideo {
     pub channel_id: ArtistChannelID<'static>,
     // TODO: Song like feedback tokens.
     pub like_status: LikeStatus,
-    pub thumbnails: Vec<Thumbnail>,
     pub is_available: bool,
     /// Id of the playlist that will get created when pressing 'Start Radio'.
     pub playlist_id: PlaylistID<'static>,
@@ -128,7 +124,6 @@ pub struct PlaylistEpisode {
     pub podcast_id: PlaylistID<'static>,
     // TODO: Song like feedback tokens.
     pub like_status: LikeStatus,
-    pub thumbnails: Vec<Thumbnail>,
     pub is_available: bool,
 }
 
@@ -146,7 +141,6 @@ pub struct PlaylistUploadSong {
     pub artists: Vec<ParsedUploadArtist>,
     // TODO: Song like feedback tokens.
     pub like_status: LikeStatus,
-    pub thumbnails: Vec<Thumbnail>,
 }
 
 impl<'a> ParseFrom<RemovePlaylistItemsQuery<'a>> for () {
@@ -281,12 +275,10 @@ fn parse_watch_playlist_track_from_video_renderer<C: JsonCrawler>(
     let author = video_renderer.take_value_pointer(concatcp!("/shortBylineText", RUN_TEXT))?;
     let duration = video_renderer.take_value_pointer(concatcp!("/lengthText", RUN_TEXT))?;
     let video_id = video_renderer.take_value_pointer(NAVIGATION_VIDEO_ID)?;
-    let thumbnails = video_renderer.take_value_pointer(THUMBNAIL)?;
     Ok(WatchPlaylistTrack {
         title,
         author,
         duration,
-        thumbnails,
         video_id,
     })
 }
@@ -318,7 +310,6 @@ pub(crate) fn parse_playlist_song(
     let duration = data
         .borrow_pointer(fixed_column_item_pointer(0))?
         .take_value_pointers(&["/text/simpleText", "/text/runs/0/text"])?;
-    let thumbnails = data.take_value_pointer(THUMBNAILS)?;
     let is_available = data
         .take_value_pointer::<String>("/musicItemRendererDisplayPolicy")
         .map(|m| m != "MUSIC_ITEM_RENDERER_DISPLAY_POLICY_GREY_OUT")
@@ -342,7 +333,6 @@ pub(crate) fn parse_playlist_song(
         title,
         artists,
         like_status,
-        thumbnails,
         explicit,
         album,
         playlist_id,
@@ -362,7 +352,6 @@ pub(crate) fn parse_playlist_upload_song(
         PLAY_BUTTON,
         "/playNavigationEndpoint/watchEndpoint/videoId"
     ))?;
-    let thumbnails = data.take_value_pointer(THUMBNAILS)?;
     // An uploaded song may not have artists metadata
     let artists = parse_upload_song_artists(data.borrow_mut(), 1).unwrap_or_default();
     // An uploaded song may not have artists metadata
@@ -380,7 +369,6 @@ pub(crate) fn parse_playlist_upload_song(
         like_status,
         title,
         artists,
-        thumbnails,
         track_no,
     })
 }
@@ -417,7 +405,6 @@ pub(crate) fn parse_playlist_episode(
     let podcast_id = data
         .borrow_pointer(flex_column_item_pointer(1))?
         .take_value_pointer(concatcp!(TEXT_RUN, NAVIGATION_BROWSE_ID))?;
-    let thumbnails = data.take_value_pointer(THUMBNAILS)?;
     let is_available = data
         .take_value_pointer::<String>("/musicItemRendererDisplayPolicy")
         .map(|m| m != "MUSIC_ITEM_RENDERER_DISPLAY_POLICY_GREY_OUT")
@@ -427,7 +414,6 @@ pub(crate) fn parse_playlist_episode(
         duration,
         title,
         like_status,
-        thumbnails,
         date,
         podcast_name,
         podcast_id,
@@ -453,7 +439,6 @@ pub(crate) fn parse_playlist_video(
     let duration = data
         .borrow_pointer(fixed_column_item_pointer(0))?
         .take_value_pointers(&["/text/simpleText", "/text/runs/0/text"])?;
-    let thumbnails = data.take_value_pointer(THUMBNAILS)?;
     let is_available = data
         .take_value_pointer::<String>("/musicItemRendererDisplayPolicy")
         .map(|m| m != "MUSIC_ITEM_RENDERER_DISPLAY_POLICY_GREY_OUT")
@@ -470,7 +455,6 @@ pub(crate) fn parse_playlist_video(
         duration,
         title,
         like_status,
-        thumbnails,
         playlist_id,
         is_available,
         channel_name,
@@ -567,7 +551,6 @@ fn get_playlist_details(json_crawler: JsonCrawlerOwned) -> Result<GetPlaylistDet
     let title = header.take_value_pointer(TITLE_TEXT)?;
     // STRAPLINE_TEXT to be deprecated in future.
     let author = header.take_value_pointers(&[STRAPLINE_TEXT, FACEPILE_TEXT])?;
-    let thumbnails: Vec<Thumbnail> = header.take_value_pointer(THUMBNAILS)?;
     let author_avatar_url: Option<String> = header.take_value_pointer(FACEPILE_AVATAR_URL).ok();
     let description = header
         .borrow_pointer(DESCRIPTION_SHELF_RUNS)
@@ -622,7 +605,6 @@ fn get_playlist_details(json_crawler: JsonCrawlerOwned) -> Result<GetPlaylistDet
         year,
         duration,
         track_count_text,
-        thumbnails,
         views,
         author_avatar_url,
     })

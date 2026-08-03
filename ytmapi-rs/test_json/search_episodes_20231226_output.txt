@@ -8,13 +8,6 @@
         episode_id: EpisodeID(
             "5dixjIRIbdo",
         ),
-        thumbnails: [
-            Thumbnail {
-                height: 225,
-                width: 400,
-                url: "https://i.ytimg.com/vi/5dixjIRIbdo/sddefault.jpg?sqp=-oaymwEWCJADEOEBIAQqCghqEJQEGHgg6AJIWg&rs=AMzJL3mlgvvgL6pIbnj9PE9u2BP8flE46w",
-            },
-        ],
     },
     SearchResultEpisode {
         title: "From me to you (The Beatles 1963) by Naudo",
@@ -25,13 +18,6 @@
         episode_id: EpisodeID(
             "1sXXRM5zOS0",
         ),
-        thumbnails: [
-            Thumbnail {
-                height: 225,
-                width: 400,
-                url: "https://i.ytimg.com/vi/1sXXRM5zOS0/sddefault.jpg?sqp=-oaymwEWCJADEOEBIAQqCghqEJQEGHgg6AJIWg&rs=AMzJL3mP__CTMvSRM65cEiJH_FfrM6mSRg",
-            },
-        ],
     },
     SearchResultEpisode {
         title: "Is There A Hidden Track in The Beatles Now and Then?",
@@ -42,13 +28,6 @@
         episode_id: EpisodeID(
             "3UmB2drmam8",
         ),
-        thumbnails: [
-            Thumbnail {
-                height: 270,
-                width: 480,
-                url: "https://i.ytimg.com/vi/3UmB2drmam8/hqdefault.jpg?sqp=-oaymwEWCOADEI4CIAQqCggAEOADGC0guwJIWg&rs=AMzJL3nrBrLq-lBBDKuEnzq30X-6_TMOhg",
-            },
-        ],
     },
     SearchResultEpisode {
         title: "The Beatles | Recording Techniques & Studio Secrets",
@@ -59,13 +38,6 @@
         episode_id: EpisodeID(
             "dIzX5gDur3w",
         ),
-        thumbnails: [
-            Thumbnail {
-                height: 270,
-                width: 480,
-                url: "https://i.ytimg.com/vi/dIzX5gDur3w/hqdefault.jpg?sqp=-oaymwEWCOADEI4CIAQqCggAEOADGC0guwJIWg&rs=AMzJL3k-aFZ7flDwZi8ihkLg0ZWNl6nt5Q",
-            },
-        ],
     },
     SearchResultEpisode {
         title: "Something  (Beatles song) Remastered  by Naudo",
@@ -76,13 +48,6 @@
         episode_id: EpisodeID(
             "_GrJ_FEskbE",
         ),
-        thumbnails: [
-            Thumbnail {
-                height: 225,
-                width: 400,
-                url: "https://i.ytimg.com/vi/_GrJ_FEskbE/sddefault.jpg?sqp=-oaymwEWCJADEOEBIAQqCghqEJQEGHgg6AJIWg&rs=AMzJL3mNrnS6GOlp2d5he-mmESedMWwZMQ",
-            },
-        ],
     },
     SearchResultEpisode {
         title: "The Beatles - Let it be (Bass + Drum Tabs) By Paul McCartney & Ringo Starr",
@@ -93,13 +58,6 @@
         episode_id: EpisodeID(
             "yAArIO-aMEk",
         ),
-        thumbnails: [
-            Thumbnail {
-                height: 270,
-                width: 480,
-                url: "https://i.ytimg.com/vi/yAArIO-aMEk/hqdefault.jpg?sqp=-oaymwEWCOADEI4CIAQqCggAEOADGC0guwJIWg&rs=AMzJL3nB-VZKDEk_oi_Qn3-pmAHtvpTyWg",
-            },
-        ],
     },
     SearchResultEpisode {
         title: "Once There Was a Way: What if The Beatles Stayed Together?",
@@ -110,13 +68,6 @@
         episode_id: EpisodeID(
             "sLxjeBNQATI",
         ),
-        thumbnails: [
-            Thumbnail {
-                height: 225,
-                width: 400,
-                url: "https://i.ytimg.com/vi/sLxjeBNQATI/sddefault.jpg?sqp=-oaymwEWCJADEOEBIAQqCghqEJQEGHgg6AJIWg&rs=AMzJL3l9prNLLO1K1BjUs2BK93UDENaBeQ",
-            },
-        ],
     },
     SearchResultEpisode {
         title: "ear-Jerking Reaction to The Beatles' New Song 'Now And Then' Will Move You",
@@ -127,13 +78,6 @@
         episode_id: EpisodeID(
             "RQrqIGx9S-A",
         ),
-        thumbnails: [
-            Thumbnail {
-                height: 270,
-                width: 480,
-                url: "https://i.ytimg.com/vi/RQrqIGx9S-A/hqdefault.jpg?sqp=-oaymwEWCOADEI4CIAQqCggAEOADGC0guwJIWg&rs=AMzJL3lTHMnPoJlfxfdISbbFXIJCcZHLmg",
-            },
-        ],
     },
     SearchResultEpisode {
         title: "The Beatles - Let It Be",
@@ -144,13 +88,6 @@
         episode_id: EpisodeID(
             "DUxFkcyk0EI",
         ),
-        thumbnails: [
-            Thumbnail {
-                height: 270,
-                width: 480,
-                url: "https://i.ytimg.com/vi/DUxFkcyk0EI/hqdefault.jpg?sqp=-oaymwEWCOADEI4CIAQqCggAEOADGC0guwJIWg&rs=AMzJL3m0iG4uZPUSK8EDB8q8dn6Y8bNCZw",
-            },
-        ],
     },
     SearchResultEpisode {
         title: "HEY JUDE (The Beatles) Remastered AI by Naudo",
@@ -161,13 +98,6 @@
         episode_id: EpisodeID(
             "_JMnEHxLL6s",
         ),
-        thumbnails: [
-            Thumbnail {
-                height: 225,
-                width: 400,
-                url: "https://i.ytimg.com/vi/_JMnEHxLL6s/sddefault.jpg?sqp=-oaymwEWCJADEOEBIAQqCghqEJQEGHgg6AJIWg&rs=AMzJL3mTiac3bEAA1uxkrfFuD-f1S-G0NA",
-            },
-        ],
     },
     SearchResultEpisode {
         title: "The Beatles Songs Collection - The Beatles Greatest Hits Full Album 2023",
@@ -178,13 +108,6 @@
         episode_id: EpisodeID(
             "GR_K3yhIB68",
         ),
-        thumbnails: [
-            Thumbnail {
-                height: 225,
-                width: 400,
-                url: "https://i.ytimg.com/vi/GR_K3yhIB68/sddefault.jpg?sqp=-oaymwEWCJADEOEBIAQqCghqEJQEGHgg6AJIWg&rs=AMzJL3nGBPXVSlTFso6KyP0qTyMu3Q_57w",
-            },
-        ],
     },
     SearchResultEpisode {
         title: "The Beatles -You cant do that (Bass + Drum Tabs) By Paul McCartney & Ringo Starr",
@@ -195,13 +118,6 @@
         episode_id: EpisodeID(
             "YNmUKyGAWLE",
         ),
-        thumbnails: [
-            Thumbnail {
-                height: 225,
-                width: 400,
-                url: "https://i.ytimg.com/vi/YNmUKyGAWLE/sddefault.jpg?sqp=-oaymwEWCJADEOEBIAQqCghqEJQEGHgg6AJIWg&rs=AMzJL3kbr9cqv7JiQfPyQXcG2zJjGS6-Hw",
-            },
-        ],
     },
     SearchResultEpisode {
         title: "The Beatles | Strawberry Fields (Reaction/Analysis) - What Makes It So Special?",
@@ -212,13 +128,6 @@
         episode_id: EpisodeID(
             "ggIBjv23p_c",
         ),
-        thumbnails: [
-            Thumbnail {
-                height: 270,
-                width: 480,
-                url: "https://i.ytimg.com/vi/ggIBjv23p_c/hqdefault.jpg?sqp=-oaymwEWCOADEI4CIAQqCggAEOADGC0guwJIWg&rs=AMzJL3kevktK64pBDXWlRsMavcztJH5L1w",
-            },
-        ],
     },
     SearchResultEpisode {
         title: "I Want To Hold Your Hand  (The Beatles 1963)  by Naudo",
@@ -229,13 +138,6 @@
         episode_id: EpisodeID(
             "7c3HnQwfW_U",
         ),
-        thumbnails: [
-            Thumbnail {
-                height: 225,
-                width: 400,
-                url: "https://i.ytimg.com/vi/7c3HnQwfW_U/sddefault.jpg?sqp=-oaymwEWCJADEOEBIAQqCghqEJQEGHgg6AJIWg&rs=AMzJL3lj-17l3XIzS1KBX5L54KoX-qfN-g",
-            },
-        ],
     },
     SearchResultEpisode {
         title: "The Beatles - I Saw Her Standing There (Bass + Drum Tabs) By Paul McCartney & Ringo Starr",
@@ -246,13 +148,6 @@
         episode_id: EpisodeID(
             "IYB9jX97_uE",
         ),
-        thumbnails: [
-            Thumbnail {
-                height: 270,
-                width: 480,
-                url: "https://i.ytimg.com/vi/IYB9jX97_uE/hqdefault.jpg?sqp=-oaymwEWCOADEI4CIAQqCggAEOADGC0guwJIWg&rs=AMzJL3kdDyPV5tqZxhEANCnuYew9laJG6Q",
-            },
-        ],
     },
     SearchResultEpisode {
         title: "The Beatles Greatest Hits Full Album - Best Beatles Songs Collection",
@@ -263,13 +158,6 @@
         episode_id: EpisodeID(
             "nj1wIiYv_Us",
         ),
-        thumbnails: [
-            Thumbnail {
-                height: 270,
-                width: 480,
-                url: "https://i.ytimg.com/vi/nj1wIiYv_Us/hqdefault.jpg?sqp=-oaymwEWCOADEI4CIAQqCggAEOADGC0guwJIWg&rs=AMzJL3nzZUMEc_YJR5lUTewhAS6iREmZDg",
-            },
-        ],
     },
     SearchResultEpisode {
         title: "Why's this the MOST streamed BEATLES song ever?",
@@ -280,13 +168,6 @@
         episode_id: EpisodeID(
             "J9IgDnsqarY",
         ),
-        thumbnails: [
-            Thumbnail {
-                height: 270,
-                width: 480,
-                url: "https://i.ytimg.com/vi/J9IgDnsqarY/hqdefault.jpg?sqp=-oaymwEWCOADEI4CIAQqCggAEOADGC0guwJIWg&rs=AMzJL3nh19kzUpastx9tyxDWk-BfR9xvtg",
-            },
-        ],
     },
     SearchResultEpisode {
         title: "The Beatles Record \"Show Up\" at Friar Park, 1971",
@@ -297,13 +178,6 @@
         episode_id: EpisodeID(
             "QhXvradQkQg",
         ),
-        thumbnails: [
-            Thumbnail {
-                height: 270,
-                width: 480,
-                url: "https://i.ytimg.com/vi/QhXvradQkQg/hqdefault.jpg?sqp=-oaymwEWCOADEI4CIAQqCggAEOADGC0guwJIWg&rs=AMzJL3mq_f9Oy10uCLrYiSAEtY55auu9Ug",
-            },
-        ],
     },
     SearchResultEpisode {
         title: "Mark Kermode reviews The Beatles’ A Hard Day's Night (1964) | BFI Player",
@@ -314,13 +188,6 @@
         episode_id: EpisodeID(
             "4OVqM12GG1A",
         ),
-        thumbnails: [
-            Thumbnail {
-                height: 270,
-                width: 480,
-                url: "https://i.ytimg.com/vi/4OVqM12GG1A/hqdefault.jpg?sqp=-oaymwEWCOADEI4CIAQqCggAEOADGC0guwJIWg&rs=AMzJL3lUnr9dUs_y2ZhbRgc3VEKTxNVRFQ",
-            },
-        ],
     },
     SearchResultEpisode {
         title: "The Beatles - A Hard Day's Night (Bass + Drum Tabs) By Paul McCartney & Ringo Starr",
@@ -331,12 +198,5 @@
         episode_id: EpisodeID(
             "bZ9uNuUfQRQ",
         ),
-        thumbnails: [
-            Thumbnail {
-                height: 225,
-                width: 400,
-                url: "https://i.ytimg.com/vi/bZ9uNuUfQRQ/sddefault.jpg?sqp=-oaymwEWCJADEOEBIAQqCghqEJQEGHgg6AJIWg&rs=AMzJL3lNo8lVXLb2B7uWv2lTBdbuBYCtiA",
-            },
-        ],
     },
 ]

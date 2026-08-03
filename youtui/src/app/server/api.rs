@@ -220,7 +220,6 @@ async fn search_artists(api: ConcurrentApi, text: String) -> Result<Vec<SearchRe
                     artist.name,
                     artist.subscribers,
                     artist.channel_id,
-                    artist.thumbnails,
                 )]);
             }
             Err(e) => debug!("Channel ID lookup failed: {e}, falling back to text search"),
@@ -306,7 +305,6 @@ async fn fetch_and_resolve_album(
         artists,
         year,
         mut tracks,
-        thumbnails: _,
         audio_playlist_id,
         ..
     } = album;

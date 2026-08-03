@@ -3,28 +3,6 @@ SearchResults {
         TopResult {
             result_name: "Metal Radio",
             result_type: None,
-            thumbnails: [
-                Thumbnail {
-                    height: 200,
-                    width: 200,
-                    url: "https://music.youtube.com/image/radioart?r=CioKCC9tLzA3bTdrCgovbS8wMXBxdjlyCggvbS8wNHJjcgoIL20vMGtyaDgQyAEYyAE",
-                },
-                Thumbnail {
-                    height: 600,
-                    width: 600,
-                    url: "https://music.youtube.com/image/radioart?r=CioKCC9tLzA3bTdrCgovbS8wMXBxdjlyCggvbS8wNHJjcgoIL20vMGtyaDgQ2AQY2AQ",
-                },
-                Thumbnail {
-                    height: 800,
-                    width: 800,
-                    url: "https://music.youtube.com/image/radioart?r=CioKCC9tLzA3bTdrCgovbS8wMXBxdjlyCggvbS8wNHJjcgoIL20vMGtyaDgQoAYYoAY",
-                },
-                Thumbnail {
-                    height: 1000,
-                    width: 1000,
-                    url: "https://music.youtube.com/image/radioart?r=CioKCC9tLzA3bTdrCgovbS8wMXBxdjlyCggvbS8wNHJjcgoIL20vMGtyaDgQ6AcY6Ac",
-                },
-            ],
             artist: None,
             album: None,
             duration: None,
@@ -46,18 +24,6 @@ SearchResults {
             browse_id: ArtistChannelID(
                 "UCSRf9xcJTj7fFzCp5FwM1Dw",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/iG7dK25ukyJs0WbqzUXHZox1guNA2KEzR8_beIZzentL-Nw6icuHZbTaAIhyrnocJRZdkypnfkcCLX5b=w60-h60-p-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/iG7dK25ukyJs0WbqzUXHZox1guNA2KEzR8_beIZzentL-Nw6icuHZbTaAIhyrnocJRZdkypnfkcCLX5b=w120-h120-p-l90-rj",
-                },
-            ],
         },
         SearchResultArtist {
             artist: "Brothers of Metal",
@@ -67,18 +33,6 @@ SearchResults {
             browse_id: ArtistChannelID(
                 "UC7apj1hieWRm-ji4_Umt2GA",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/C4lkhV4EFq_L2rm_qSUHrWULh1P-_hvxFHhfK3Sb2xoSC5GyhwMeuG04KksgMVGhSrOzd0YFQ_gxlA=w60-h60-p-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/C4lkhV4EFq_L2rm_qSUHrWULh1P-_hvxFHhfK3Sb2xoSC5GyhwMeuG04KksgMVGhSrOzd0YFQ_gxlA=w120-h120-p-l90-rj",
-                },
-            ],
         },
         SearchResultArtist {
             artist: "Cinematic Metal",
@@ -88,18 +42,6 @@ SearchResults {
             browse_id: ArtistChannelID(
                 "UCPeRp_lpV7O_XaxUABtFgmQ",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/3RVYtnkyvd1bcVHBM6pvWObIfrqH9JzooeU8tmQ2JI3CBGEt1OibE2uall_fct0HyZ1OhIYGPHZo8mc=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/3RVYtnkyvd1bcVHBM6pvWObIfrqH9JzooeU8tmQ2JI3CBGEt1OibE2uall_fct0HyZ1OhIYGPHZo8mc=w120-h120-l90-rj",
-                },
-            ],
         },
     ],
     albums: [
@@ -112,28 +54,6 @@ SearchResults {
                 "MPREb_Ld3jZZO1b6v",
             ),
             album_type: EP,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/uU_-ooMpvmcKhfSoWbJdhvp9LyuZ58-04Wh766H1zED3REsPXNiN9xyTnqaujBpqS2FbOcvHnw30FoZ0_Q=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/uU_-ooMpvmcKhfSoWbJdhvp9LyuZ58-04Wh766H1zED3REsPXNiN9xyTnqaujBpqS2FbOcvHnw30FoZ0_Q=w120-h120-l90-rj",
-                },
-                Thumbnail {
-                    height: 226,
-                    width: 226,
-                    url: "https://lh3.googleusercontent.com/uU_-ooMpvmcKhfSoWbJdhvp9LyuZ58-04Wh766H1zED3REsPXNiN9xyTnqaujBpqS2FbOcvHnw30FoZ0_Q=w226-h226-l90-rj",
-                },
-                Thumbnail {
-                    height: 544,
-                    width: 544,
-                    url: "https://lh3.googleusercontent.com/uU_-ooMpvmcKhfSoWbJdhvp9LyuZ58-04Wh766H1zED3REsPXNiN9xyTnqaujBpqS2FbOcvHnw30FoZ0_Q=w544-h544-l90-rj",
-                },
-            ],
         },
         SearchResultAlbum {
             title: "Yurei Despise (J-Metal)",
@@ -144,28 +64,6 @@ SearchResults {
                 "MPREb_fvvS5f016IM",
             ),
             album_type: Single,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/Xo1n68QZtiQV3XkPc21DCapmThRFQwra2DNSVEjJzVASHxDyhR1juoeyBblKC1t_490A3l_nIsK0TC1Q=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/Xo1n68QZtiQV3XkPc21DCapmThRFQwra2DNSVEjJzVASHxDyhR1juoeyBblKC1t_490A3l_nIsK0TC1Q=w120-h120-l90-rj",
-                },
-                Thumbnail {
-                    height: 226,
-                    width: 226,
-                    url: "https://lh3.googleusercontent.com/Xo1n68QZtiQV3XkPc21DCapmThRFQwra2DNSVEjJzVASHxDyhR1juoeyBblKC1t_490A3l_nIsK0TC1Q=w226-h226-l90-rj",
-                },
-                Thumbnail {
-                    height: 544,
-                    width: 544,
-                    url: "https://lh3.googleusercontent.com/Xo1n68QZtiQV3XkPc21DCapmThRFQwra2DNSVEjJzVASHxDyhR1juoeyBblKC1t_490A3l_nIsK0TC1Q=w544-h544-l90-rj",
-                },
-            ],
         },
         SearchResultAlbum {
             title: "Undead Oni (J-Metal)",
@@ -176,28 +74,6 @@ SearchResults {
                 "MPREb_CnzgOVq9DpE",
             ),
             album_type: Single,
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/8hb90gHz-aVOjGeN3KCNvNsb0tn9xJ7kjX2lHceWmmuyOeAIRt4IHTeU792r22gYJwRIoVEwZ4IU-fXV=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/8hb90gHz-aVOjGeN3KCNvNsb0tn9xJ7kjX2lHceWmmuyOeAIRt4IHTeU792r22gYJwRIoVEwZ4IU-fXV=w120-h120-l90-rj",
-                },
-                Thumbnail {
-                    height: 226,
-                    width: 226,
-                    url: "https://lh3.googleusercontent.com/8hb90gHz-aVOjGeN3KCNvNsb0tn9xJ7kjX2lHceWmmuyOeAIRt4IHTeU792r22gYJwRIoVEwZ4IU-fXV=w226-h226-l90-rj",
-                },
-                Thumbnail {
-                    height: 544,
-                    width: 544,
-                    url: "https://lh3.googleusercontent.com/8hb90gHz-aVOjGeN3KCNvNsb0tn9xJ7kjX2lHceWmmuyOeAIRt4IHTeU792r22gYJwRIoVEwZ4IU-fXV=w544-h544-l90-rj",
-                },
-            ],
         },
     ],
     featured_playlists: [
@@ -208,28 +84,6 @@ SearchResults {
             playlist_id: PlaylistID(
                 "VLRDCLAK5uy_lhO-w4BZWObj7daKVuBz_A2wORvjyBCZU",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/8Uk25jI4yFHU3JsdjiBRUFFOUaY5C61sjgUT8rcWzdgLRmiYmJruiDAQuFJ9VUaTmKF-lipMPXJcXU19=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/8Uk25jI4yFHU3JsdjiBRUFFOUaY5C61sjgUT8rcWzdgLRmiYmJruiDAQuFJ9VUaTmKF-lipMPXJcXU19=w120-h120-l90-rj",
-                },
-                Thumbnail {
-                    height: 226,
-                    width: 226,
-                    url: "https://lh3.googleusercontent.com/8Uk25jI4yFHU3JsdjiBRUFFOUaY5C61sjgUT8rcWzdgLRmiYmJruiDAQuFJ9VUaTmKF-lipMPXJcXU19=w226-h226-l90-rj",
-                },
-                Thumbnail {
-                    height: 544,
-                    width: 544,
-                    url: "https://lh3.googleusercontent.com/8Uk25jI4yFHU3JsdjiBRUFFOUaY5C61sjgUT8rcWzdgLRmiYmJruiDAQuFJ9VUaTmKF-lipMPXJcXU19=w544-h544-l90-rj",
-                },
-            ],
         },
         SearchResultFeaturedPlaylist {
             title: "Japan Metal",
@@ -238,28 +92,6 @@ SearchResults {
             playlist_id: PlaylistID(
                 "VLRDCLAK5uy_lhKsFGmKkGIdQFU4VmpyHI1sgwNu4n-KI",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/TYiivM2hWUp_hiqL-Ez96byXIWgOv8q-viBtyv22OAW4IrrD5S-Y3l2i3TJyqenaB0y_XDw6VbbkAA=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/TYiivM2hWUp_hiqL-Ez96byXIWgOv8q-viBtyv22OAW4IrrD5S-Y3l2i3TJyqenaB0y_XDw6VbbkAA=w120-h120-l90-rj",
-                },
-                Thumbnail {
-                    height: 226,
-                    width: 226,
-                    url: "https://lh3.googleusercontent.com/TYiivM2hWUp_hiqL-Ez96byXIWgOv8q-viBtyv22OAW4IrrD5S-Y3l2i3TJyqenaB0y_XDw6VbbkAA=w226-h226-l90-rj",
-                },
-                Thumbnail {
-                    height: 544,
-                    width: 544,
-                    url: "https://lh3.googleusercontent.com/TYiivM2hWUp_hiqL-Ez96byXIWgOv8q-viBtyv22OAW4IrrD5S-Y3l2i3TJyqenaB0y_XDw6VbbkAA=w544-h544-l90-rj",
-                },
-            ],
         },
         SearchResultFeaturedPlaylist {
             title: "Heavy Metal Workout",
@@ -268,28 +100,6 @@ SearchResults {
             playlist_id: PlaylistID(
                 "VLRDCLAK5uy_lFuA--WIEukXUJ93HkgnVOv0Bs02c_O4g",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/uxC3H_HU-xYG0AAkzR-RtwVY6sLj9PtMVDzT6vkkWxr2v87JE1CrxL7P0u18tZ0QNl4W3OVDLiuFHA=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/uxC3H_HU-xYG0AAkzR-RtwVY6sLj9PtMVDzT6vkkWxr2v87JE1CrxL7P0u18tZ0QNl4W3OVDLiuFHA=w120-h120-l90-rj",
-                },
-                Thumbnail {
-                    height: 226,
-                    width: 226,
-                    url: "https://lh3.googleusercontent.com/uxC3H_HU-xYG0AAkzR-RtwVY6sLj9PtMVDzT6vkkWxr2v87JE1CrxL7P0u18tZ0QNl4W3OVDLiuFHA=w226-h226-l90-rj",
-                },
-                Thumbnail {
-                    height: 544,
-                    width: 544,
-                    url: "https://lh3.googleusercontent.com/uxC3H_HU-xYG0AAkzR-RtwVY6sLj9PtMVDzT6vkkWxr2v87JE1CrxL7P0u18tZ0QNl4W3OVDLiuFHA=w544-h544-l90-rj",
-                },
-            ],
         },
     ],
     community_playlists: [],
@@ -311,18 +121,6 @@ SearchResults {
             video_id: VideoID(
                 "mUEsqQpact0",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/-YmkgDfUd9e-8_VXC90fpar-i-wa06PsUja6tb2qYR7CJLQGe8T_pJKyzW_AkuGqgQMSEMqI2VCjocM=w60-h60-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/-YmkgDfUd9e-8_VXC90fpar-i-wa06PsUja6tb2qYR7CJLQGe8T_pJKyzW_AkuGqgQMSEMqI2VCjocM=w120-h120-l90-rj",
-                },
-            ],
             music_video_type: Some(
                 Atv,
             ),
@@ -344,18 +142,6 @@ SearchResults {
             video_id: VideoID(
                 "KUZ7jG7BKE8",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/VzLpbmiJJz1FeC7qHpu7VLQkreNqZwDDIEVFRch-6Mikd3z0VDKcLDpLb_qRPKHkIRmrULJp-GiX_3Oc=w60-h60-s-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/VzLpbmiJJz1FeC7qHpu7VLQkreNqZwDDIEVFRch-6Mikd3z0VDKcLDpLb_qRPKHkIRmrULJp-GiX_3Oc=w120-h120-s-l90-rj",
-                },
-            ],
             music_video_type: Some(
                 Atv,
             ),
@@ -377,18 +163,6 @@ SearchResults {
             video_id: VideoID(
                 "5qZQEq_C3vc",
             ),
-            thumbnails: [
-                Thumbnail {
-                    height: 60,
-                    width: 60,
-                    url: "https://lh3.googleusercontent.com/Rqh2HDAD-Fj1-oHYqVklPGklMHIV3r6SMPMZmFE3FlLiWeBBnP3SCESfgeNdzQ-DmpCIvOGE4J0hzVxa=w60-h60-s-l90-rj",
-                },
-                Thumbnail {
-                    height: 120,
-                    width: 120,
-                    url: "https://lh3.googleusercontent.com/Rqh2HDAD-Fj1-oHYqVklPGklMHIV3r6SMPMZmFE3FlLiWeBBnP3SCESfgeNdzQ-DmpCIvOGE4J0hzVxa=w120-h120-s-l90-rj",
-                },
-            ],
             music_video_type: Some(
                 Atv,
             ),

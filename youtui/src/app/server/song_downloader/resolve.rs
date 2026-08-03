@@ -26,6 +26,16 @@ fn url_cache_put(video_id: String, url: String) {
     cache.insert(video_id, (url, Instant::now()));
 }
 
+/// True only if `path` points to an existing, non-empty regular file. Passing a
+/// zero-byte (or absent) cookie file to yt-dlp aborts the whole download, so we
+/// treat such a file as "no auth" rather than as a hard failure.
+fn is_nonempty_cookie_file(path: &Path) -> bool {
+    match std::fs::metadata(path) {
+        Ok(md) => md.is_file() && md.len() > 0,
+        Err(_) => false,
+    }
+}
+
 pub fn apply_ytdlp_auth_args(
     cmd: &mut tokio::process::Command,
     po_token: Option<&str>,
@@ -41,7 +51,10 @@ pub fn apply_ytdlp_auth_args(
     };
     cmd.arg("--extractor-args");
     cmd.arg(&extractor_args);
-    if let Some(cp) = cookie_path {
+    // Only pass --cookies when the file actually exists and has content. An
+    // empty or missing cookie file makes yt-dlp hard-fail every download, so
+    // never let a bad export disable playback — fall back to header/unauth.
+    if let Some(cp) = cookie_path.filter(|cp| is_nonempty_cookie_file(cp)) {
         cmd.arg("--cookies");
         cmd.arg(cp);
     } else if let Some(ch) = cookie_header {
@@ -120,7 +133,7 @@ pub async fn resolve_url(
 
 #[cfg(test)]
 mod tests {
-    use super::resolve_url;
+    use super::{is_nonempty_cookie_file, resolve_url};
     use std::time::Duration;
 
     fn fake_ytdlp_script(pidfile: &std::path::Path, script: &std::path::Path) {
@@ -196,5 +209,21 @@ mod tests {
             std::fs::remove_file(&script).ok();
             std::fs::remove_file(&pidfile).ok();
         });
+    }
+
+    #[test]
+    fn empty_or_missing_cookie_file_omits_cookies_arg() {
+        let empty = unique_tmp("empty_cookies");
+        let full = unique_tmp("full_cookies");
+        let missing = unique_tmp("missing_cookies");
+        std::fs::write(&empty, b"").expect("write empty cookie file");
+        std::fs::write(&full, b"# Netscape HTTP Cookie File\n").expect("write cookie file");
+
+        assert!(!is_nonempty_cookie_file(&empty), "empty file must be rejected");
+        assert!(!is_nonempty_cookie_file(&missing), "missing file must be rejected");
+        assert!(is_nonempty_cookie_file(&full), "non-empty file must pass");
+
+        std::fs::remove_file(&empty).ok();
+        std::fs::remove_file(&full).ok();
     }
 }
