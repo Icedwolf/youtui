@@ -180,6 +180,18 @@ async fn spawn_bg_cache_task(
     }
 }
 
+/// Classify a yt-dlp stderr line as a *permanently* unavailable video
+/// (removed, terminated account) as opposed to a transient error (bot-check,
+/// bad cookie file, format/network issue). Only the permanent class triggers
+/// auto-removal; everything else must never touch the queue.
+fn is_permanently_unavailable(line: &str) -> bool {
+    let line = line.to_ascii_lowercase();
+    line.contains("video unavailable")
+        && (line.contains("not available")
+            || line.contains("no longer available")
+            || line.contains("removed by the uploader"))
+}
+
 fn spawn_stderr_handler(
     stderr: tokio::process::ChildStderr,
     cancel_token: tokio_util::sync::CancellationToken,
@@ -203,6 +215,9 @@ fn spawn_stderr_handler(
                         debug!(total_bytes = bytes, "Parsed total size from yt-dlp progress");
                         buffer.set_total_len(bytes);
                     } else if line.contains("ERROR") {
+                        if is_permanently_unavailable(&line) {
+                            buffer.mark_dead_video();
+                        }
                         warn!(stderr_line = %line.trim(), "yt-dlp stderr (error), failing buffer");
                         buffer.fail();
                     } else if line.contains("WARNING") {
@@ -413,6 +428,10 @@ async fn ytdlp_pipeline(
             bail!("download cancelled during buffering");
         }
         if buffer.is_failed() {
+            if buffer.is_dead_video() {
+                debug!(%cfg.video_id, "Video unavailable (permanently dead), bailing early");
+                bail!("video unavailable (yt-dlp error)");
+            }
             let reason = if from_url_cache { "ffmpeg" } else { "yt-dlp" };
             debug!(%cfg.video_id, elapsed = ?t0.elapsed(),
                 "{reason} failed before data arrived — bailing early");
@@ -509,6 +528,9 @@ async fn ytdlp_pipeline(
                 + std::time::Duration::from_secs(M4A_TOTAL_LEN_TIMEOUT_S);
             loop {
                 if buffer.is_failed() {
+                    if buffer.is_dead_video() {
+                        bail!("video unavailable (yt-dlp error)");
+                    }
                     break None;
                 }
                 if cfg.cancel_token.is_cancelled() {
@@ -719,6 +741,34 @@ mod tests {
     fn parse_kib() {
         let line = "[download]   0.3% of  302.04KiB at  344.87KiB/s ETA 00:00";
         assert_eq!(parse_total_size(line), Some((302.04 * 1024.0) as u64));
+    }
+
+    #[test]
+    fn permanently_unavailable_classifier() {
+        let permanent = [
+            "ERROR: [youtube] NLkDhrzgrI8: Video unavailable. This video is not available",
+            "ERROR: [youtube] 5cmbsjSt3K0: Video unavailable. This video is not available",
+            "ERROR: [youtube] 4y5R7urKjAQ: Video unavailable. This video is no longer available because the YouTube account associated with this video has been terminated.",
+            "ERROR: [youtube] X: Video unavailable. This video has been removed by the uploader",
+        ];
+        for line in permanent {
+            assert!(is_permanently_unavailable(line), "expected permanent: {line}");
+        }
+
+        let transient = [
+            "ERROR: [youtube] X: Sign in to confirm you're not a bot",
+            "ERROR: '/home/.config/youtui/cookies_netscape.txt' does not look like a Netscape format cookies file",
+            "ERROR: Requested format is not available",
+            "ERROR: [youtube] X: HTTP Error 429: Too Many Requests",
+            "ERROR: [youtube] X: This video is only available to signed-in users",
+            "ERROR: [youtube] X: Please sign in to view this content",
+        ];
+        for line in transient {
+            assert!(
+                !is_permanently_unavailable(line),
+                "expected transient: {line}"
+            );
+        }
     }
 
     #[test]

@@ -337,7 +337,9 @@ mod state_transitions {
     use crate::app::structures::{
         DownloadStatus, ListSong, ListSongID, ListStatus, Percentage, PlayState,
     };
-    use crate::app::ui::playlist::{Playlist, PlaylistAction};
+    use crate::app::ui::playlist::{
+        DownloadProgressUpdate, Playlist, PlaylistAction, is_dead_video_error,
+    };
     use crate::app::view::HasTitle;
     use pretty_assertions::assert_eq;
     use ratatui::style::Color;
@@ -381,6 +383,46 @@ mod state_transitions {
             .collect();
         p.list.push_song_list(songs);
         p
+    }
+
+    #[test]
+    fn permanently_unavailable_song_is_removed_and_advances() {
+        let mut p = downloaded_songs(2);
+        p.set_notifications_enabled(false);
+        p.play_status = PlayState::Buffering(ListSongID(0));
+        let _effect = p.handle_song_download_progress_update(
+            DownloadProgressUpdate::Error("video unavailable (yt-dlp error)".to_string()),
+            ListSongID(0),
+        );
+        // Dead song is removed, next song starts buffering.
+        assert_eq!(p.list.get_list_iter().count(), 1);
+        assert_eq!(p.get_index_from_id(ListSongID(0)), None);
+        assert_eq!(p.play_status, PlayState::Buffering(ListSongID(1)));
+        assert_eq!(
+            p.list.get_list_iter().next().unwrap().download_status,
+            DownloadStatus::Queued
+        );
+    }
+
+    #[test]
+    fn transient_error_does_not_remove_song() {
+        let mut p = downloaded_songs(2);
+        p.set_notifications_enabled(false);
+        p.play_status = PlayState::Buffering(ListSongID(0));
+        let _effect = p.handle_song_download_progress_update(
+            DownloadProgressUpdate::Error("HTTP Error 429: Too Many Requests".to_string()),
+            ListSongID(0),
+        );
+        // Transient failure keeps the song and advances playback only.
+        assert_eq!(p.list.get_list_iter().count(), 2);
+        assert!(p.get_index_from_id(ListSongID(0)).is_some());
+    }
+
+    #[test]
+    fn dead_video_error_classifier() {
+        assert!(is_dead_video_error("video unavailable (yt-dlp error)"));
+        assert!(!is_dead_video_error("download cancelled"));
+        assert!(!is_dead_video_error("HTTP Error 429: Too Many Requests"));
     }
 
     #[test]

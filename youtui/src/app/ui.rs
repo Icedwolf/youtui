@@ -263,7 +263,8 @@ impl ActionHandler<AppAction> for YoutuiWindow {
 
 impl YoutuiWindow {
     pub fn new(config: Config) -> (YoutuiWindow, Effects<YoutuiWindow>) {
-        let (playlist, task) = Playlist::new(Percentage(config.volume));
+        let (mut playlist, task) = Playlist::new(Percentage(config.volume));
+        playlist.set_notifications_enabled(config.notifications_enabled);
         let this = YoutuiWindow {
             context: WindowContext::Browser,
             playlist,

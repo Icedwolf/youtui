@@ -5,6 +5,7 @@ use std::sync::{Arc, Condvar, Mutex};
 struct SharedBufferInner {
     finished: bool,
     failed: bool,
+    dead_video: bool,
     total_len: Option<u64>,
     state: BufferState,
 }
@@ -41,6 +42,7 @@ impl SharedBuffer {
             inner: Mutex::new(SharedBufferInner {
                 finished: false,
                 failed: false,
+                dead_video: false,
                 total_len: None,
                 state: BufferState::Partial(Vec::with_capacity(cap)),
             }),
@@ -96,6 +98,18 @@ impl SharedBuffer {
     #[must_use]
     pub fn is_failed(&self) -> bool {
         self.inner.lock().unwrap_or_warn().failed
+    }
+
+    /// True when yt-dlp reported the video is permanently unavailable
+    /// (removed, terminated account, etc.) rather than a transient error.
+    #[must_use]
+    pub fn is_dead_video(&self) -> bool {
+        self.inner.lock().unwrap_or_warn().dead_video
+    }
+
+    pub fn mark_dead_video(&self) {
+        let mut guard = self.inner.lock().unwrap_or_warn();
+        guard.dead_video = true;
     }
 
     pub fn fail(&self) {

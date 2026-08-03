@@ -55,6 +55,10 @@ fn is_cancellation_error(msg: &str) -> bool {
     msg.starts_with("download cancelled")
 }
 
+fn is_dead_video_error(msg: &str) -> bool {
+    msg.starts_with("video unavailable")
+}
+
 pub enum DownloadProgressUpdate {
     Downloading,
     Completed(Box<dyn Source<Item = f32> + Send + 'static>),
@@ -108,6 +112,7 @@ pub struct Playlist {
     resolving_audio: bool,
     resolve_remaining: usize,
     cached_title: RefCell<Option<Line<'static>>>,
+    notifications_enabled: bool,
 }
 
 impl Component for Playlist {}

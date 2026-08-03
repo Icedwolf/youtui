@@ -62,9 +62,14 @@ impl Playlist {
             resolving_audio: false,
             resolve_remaining: 0,
             cached_title: RefCell::new(None),
+            notifications_enabled: true,
         };
 
         (playlist, task)
+    }
+
+    pub fn set_notifications_enabled(&mut self, enabled: bool) {
+        self.notifications_enabled = enabled;
     }
 
     pub fn volume(&self) -> Percentage {
@@ -964,6 +969,71 @@ impl Playlist {
         return_task
     }
 
+    /// Remove a single song whose video is permanently unavailable at YouTube
+    /// and notify the user. Conservative by design: touches only `id`, never
+    /// the rest of the queue. Mirrors `delete_selected`'s index maintenance.
+    fn remove_unavailable_song(&mut self, id: ListSongID) {
+        let Some(actual_index) = self.get_index_from_id(id) else {
+            return;
+        };
+        let visual_before = self.actual_to_visual_index(actual_index).unwrap_or(self.cur_selected);
+        let title = self
+            .get_song_from_id(id)
+            .map(|s| s.title.clone())
+            .unwrap_or_default();
+
+        if self.notifications_enabled
+            && !title.is_empty()
+            && let Ok(rt) = tokio::runtime::Handle::try_current()
+        {
+            drop(rt.spawn(async move {
+                let body = format!("{title} — no longer available on YouTube, removed from playlist");
+                if let Err(e) = Notification::new()
+                    .summary("Song Unavailable")
+                    .body(&body)
+                    .appname("youtui")
+                    .timeout(Timeout::Milliseconds(5000))
+                    .show()
+                {
+                    debug!("unavailable-song notification failed: {e}");
+                }
+            }));
+        }
+
+        self.cancel_song_download(id);
+        self.download_queue.retain(|qid| *qid != id);
+
+        self.list.remove_song_index(actual_index);
+        self.rebuild_id_cache();
+
+        if !self.search_text.is_empty() {
+            self.update_search_indices();
+            self.cur_selected = if self.search_indices.is_empty() {
+                0
+            } else {
+                visual_before.min(self.search_indices.len() - 1)
+            };
+        } else {
+            let new_max = self.list.get_list_iter().len().saturating_sub(1);
+            self.cur_selected = self.cur_selected.min(new_max);
+        }
+
+        if self.shuffle_enabled {
+            if let Some(pos) = self.shuffle_indices.iter().position(|&i| i == actual_index) {
+                self.shuffle_indices.remove(pos);
+            }
+            for idx in &mut self.shuffle_indices {
+                if *idx > actual_index {
+                    *idx = idx.saturating_sub(1);
+                }
+            }
+            self.shuffle_visual_map =
+                build_visual_map(&self.shuffle_indices, self.list.get_list_iter().count());
+        }
+
+        debug!("Removed permanently unavailable song id={:?}", id);
+    }
+
     fn cancel_song_download(&self, id: ListSongID) {
         let token = {
             let mut downloads = self.active_downloads.lock().unwrap_or_warn();
@@ -1311,7 +1381,11 @@ impl Playlist {
                     } else {
                         warn!("download failed while buffering, skipping: {}", e);
                     }
+                    let is_dead = is_dead_video_error(&e);
                     effect = effect.push(self.handle_set_to_error(id));
+                    if is_dead {
+                        self.remove_unavailable_song(id);
+                    }
                 }
                 effect
             }
