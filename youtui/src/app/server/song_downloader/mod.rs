@@ -448,6 +448,9 @@ async fn ytdlp_pipeline(
                 bail!("authentication error (stale cookies)");
             }
             let reason = if from_url_cache { "ffmpeg" } else { "yt-dlp" };
+            if from_url_cache {
+                resolve::url_cache_remove(&cfg.video_id);
+            }
             debug!(%cfg.video_id, elapsed = ?t0.elapsed(),
                 "{reason} failed before data arrived — bailing early");
             bail!("format not available ({reason} error)");
