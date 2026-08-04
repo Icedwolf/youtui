@@ -404,42 +404,51 @@ fn cookie_export_needed(path: &Path) -> bool {
 
 /// Run yt-dlp's cookie export. Returns `Err(stderr)` on a non-zero exit so the
 /// caller can report *why* the export failed (locked browser profile, wrong
-/// browser, unsupported DB, ...) instead of a bare "Failed".
+/// browser, unsupported DB, ...) instead of a bare "Failed". Writes to a
+/// sibling temp file so a failed/partial export can never corrupt the live
+/// cookie file.
 fn run_cookie_export(cmd: &str, browser: &str, dest: &Path) -> Result<(), String> {
+    let tmp = dest.with_extension("tmp");
     let output = std::process::Command::new(cmd)
         .args(["--ignore-config", "--cookies-from-browser", browser, "--cookies"])
-        .arg(dest)
+        .arg(&tmp)
         .stdout(std::process::Stdio::null())
         .output()
         .map_err(|e| e.to_string())?;
-    if output.status.success() {
-        Ok(())
-    } else {
-        Err(String::from_utf8_lossy(&output.stderr).trim().to_string())
+    if !output.status.success() {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
     }
+    Ok(())
 }
 
 /// Export the browser's cookies to a Netscape file, reusing yt-dlp. Returns
 /// false (and warns with the actual failure reason) on any failure — a silent
 /// failed export is what left a 0-byte file that disabled downloads for weeks.
 /// Honors the configured `yt_dlp_command` so the export always uses the same
-/// binary as downloads.
+/// binary as downloads. Publish is atomic: the live file is only replaced by a
+/// non-empty export, so a failed re-export preserves the last good cookies.
 fn export_browser_cookies(browser: &str, dest: &Path, yt_dlp_cmd: &str) -> bool {
     // Mirror the download path's empty-string fallback (song_downloader).
     let cmd = if yt_dlp_cmd.is_empty() { "yt-dlp" } else { yt_dlp_cmd };
+    let tmp = dest.with_extension("tmp");
     let reason = match run_cookie_export(cmd, browser, dest) {
         Ok(()) => {
-            if std::fs::metadata(dest).map(|m| m.len() > 0).unwrap_or(false) {
+            if std::fs::metadata(&tmp).map(|m| m.len() > 0).unwrap_or(false) {
                 use std::os::unix::fs::PermissionsExt;
-                let mut perms = match std::fs::metadata(dest) {
-                    Ok(m) => m.permissions(),
-                    Err(_) => std::fs::Permissions::from_mode(0o600),
-                };
+                let mut perms = std::fs::metadata(&tmp)
+                    .map(|m| m.permissions())
+                    .unwrap_or_else(|_| std::fs::Permissions::from_mode(0o600));
                 perms.set_mode(0o600);
-                let _ = std::fs::set_permissions(dest, perms);
-                info!("Exported cookies to {}", dest.display());
-                return true;
+                let _ = std::fs::set_permissions(&tmp, perms);
+                if std::fs::rename(&tmp, dest).is_ok() {
+                    info!("Exported cookies to {}", dest.display());
+                    return true;
+                }
+                let _ = std::fs::remove_file(&tmp);
+                return false;
             }
+            let _ = std::fs::remove_file(&tmp);
             "export succeeded but produced an empty file".to_string()
         }
         Err(err) => err,
@@ -547,7 +556,42 @@ mod tests {
             "stderr must be surfaced, got: {err:?}"
         );
         assert!(!dest.exists(), "failed export must not leave a file");
+        assert!(
+            !dest.with_extension("tmp").exists(),
+            "failed export must clean up its temp file"
+        );
 
         std::fs::remove_file(&script).ok();
+    }
+
+    #[test]
+    fn export_browser_cookies_failure_preserves_existing_dest() {
+        use std::os::unix::fs::PermissionsExt;
+        // A pre-existing valid export must survive a subsequent failed
+        // re-export (the historical 0-byte-trap). The fake yt-dlp writes
+        // garbage to its output then fails — proving the atomic publish.
+        let script = std::env::temp_dir().join(format!("youtui_corrupt_export_{}.sh", std::process::id()));
+        std::fs::write(&script, "#!/bin/sh\necho 'garbage' > \"$5\"\nexit 1\n").unwrap();
+        let mut perms = std::fs::metadata(&script).unwrap().permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(&script, perms).unwrap();
+
+        let dest = std::env::temp_dir().join(format!("youtui_export_atomic_{}.txt", std::process::id()));
+        std::fs::write(&dest, b".youtube.com\tTRUE\t/\tTRUE\t1735689600\tSID\tabc\n").unwrap();
+
+        let ok = export_browser_cookies("fake-browser", &dest, script.to_str().unwrap());
+        assert!(!ok, "failing export must report failure");
+        let content = std::fs::read_to_string(&dest).unwrap();
+        assert!(
+            content.contains("SID"),
+            "prior good export must be preserved, got: {content:?}"
+        );
+        assert!(
+            !dest.with_extension("tmp").exists(),
+            "failed export must not leave a temp file"
+        );
+
+        std::fs::remove_file(&script).ok();
+        std::fs::remove_file(&dest).ok();
     }
 }
