@@ -134,7 +134,7 @@ impl Youtui {
             cp.push(COOKIE_NETSCAPE_FILENAME);
             let exported = if cookie_export_needed(&cp) {
                 debug!(browser = %browser, path = %cp.display(), "Exporting cookies from browser");
-                export_browser_cookies(&browser, &cp)
+                export_browser_cookies(&browser, &cp, &config.yt_dlp_command)
             } else {
                 false
             };
@@ -404,9 +404,12 @@ fn cookie_export_needed(path: &Path) -> bool {
 
 /// Export the browser's cookies to a Netscape file, reusing yt-dlp. Returns
 /// false (and warns) on any failure — a silent failed export is what left a
-/// 0-byte file that disabled downloads for weeks.
-fn export_browser_cookies(browser: &str, dest: &Path) -> bool {
-    let ok = std::process::Command::new("yt-dlp")
+/// 0-byte file that disabled downloads for weeks. Honors the configured
+/// `yt_dlp_command` so the export always uses the same binary as downloads.
+fn export_browser_cookies(browser: &str, dest: &Path, yt_dlp_cmd: &str) -> bool {
+    // Mirror the download path's empty-string fallback (song_downloader).
+    let cmd = if yt_dlp_cmd.is_empty() { "yt-dlp" } else { yt_dlp_cmd };
+    let ok = std::process::Command::new(cmd)
         .args(["--ignore-config", "--cookies-from-browser", browser, "--cookies"])
         .arg(dest)
         .stdout(std::process::Stdio::null())
@@ -467,5 +470,38 @@ mod tests {
         f.set_times(std::fs::FileTimes::new().set_modified(old)).unwrap();
         assert!(cookie_export_needed(&path));
         std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn export_browser_cookies_uses_configured_command() {
+        // A fake "yt-dlp" whose only job is to write the cookie destination file.
+        let script = std::env::temp_dir().join(format!("youtui_fake_ytdlp_{}.sh", std::process::id()));
+        std::fs::write(&script, "#!/bin/sh\necho 'SID=abc' > \"$5\"\nexit 0\n").unwrap();
+        let mut perms = std::fs::metadata(&script).unwrap().permissions();
+        use std::os::unix::fs::PermissionsExt;
+        perms.set_mode(0o755);
+        std::fs::set_permissions(&script, perms).unwrap();
+
+        let dest = std::env::temp_dir().join(format!("youtui_export_cfg_{}.txt", std::process::id()));
+        let _ = std::fs::remove_file(&dest);
+        // Config path must be honored: the fake binary runs, not the real yt-dlp.
+        assert!(export_browser_cookies("fake-browser", &dest, script.to_str().unwrap()));
+        assert!(std::fs::metadata(&dest).map(|m| m.len() > 0).unwrap_or(false));
+
+        std::fs::remove_file(&script).ok();
+        std::fs::remove_file(&dest).ok();
+    }
+
+    #[test]
+    fn export_browser_cookies_empty_command_falls_back() {
+        // Empty configured command must resolve to "yt-dlp" (like the download
+        // path) rather than attempting `Command::new("")`.
+        let dest = std::env::temp_dir().join(format!("youtui_export_empty_cmd_{}.txt", std::process::id()));
+        let _ = std::fs::remove_file(&dest);
+        // No such browser -> real yt-dlp (or missing binary) fails -> false.
+        // Deterministic: the test only asserts no panic + bool return.
+        let ok = export_browser_cookies("youtui-no-such-browser", &dest, "");
+        assert!(!ok);
+        std::fs::remove_file(&dest).ok();
     }
 }

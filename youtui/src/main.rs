@@ -421,7 +421,9 @@ async fn try_main() -> anyhow::Result<()> {
     Ok(())
 }
 
-// XXX: Seems to be some duplication of load_api_key.
+/// Build the ytmapi-rs API client for CLI commands. Distinct from
+/// `load_api_key` (which returns the app's `ApiKey`); CLI commands need a live
+/// `DynamicYtMusic` to run queries against.
 async fn get_api(config: &Config) -> anyhow::Result<api::DynamicYtMusic> {
     let confdir = get_config_dir()?;
     let api = match config.auth_type {
