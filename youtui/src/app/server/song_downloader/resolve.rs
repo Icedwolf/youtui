@@ -26,6 +26,13 @@ fn url_cache_put(video_id: String, url: String) {
     cache.insert(video_id, (url, Instant::now()));
 }
 
+/// Drop a cached stream URL. Called when the download fails after using a
+/// cached URL (e.g. empty pipe / timeout): the URL may have died server-side,
+/// and keeping it would make every retry reuse the same dead URL forever.
+pub(crate) fn url_cache_remove(video_id: &str) {
+    URL_CACHE.lock().unwrap_or_warn().remove(video_id);
+}
+
 /// Outcome of a URL pre-resolution. Distinct from a shared Option so the
 /// caller can fail fast (skip the redundant download) and surface a
 /// diagnosable message when yt-dlp reports an authentication/cookie error.
@@ -154,7 +161,10 @@ pub async fn resolve_url(
 
 #[cfg(test)]
 mod tests {
-    use super::{ResolveOutcome, apply_ytdlp_auth_args, is_nonempty_cookie_file, resolve_url};
+    use super::{
+        ResolveOutcome, apply_ytdlp_auth_args, is_nonempty_cookie_file, resolve_url, url_cache_get,
+        url_cache_put, url_cache_remove,
+    };
     use std::time::Duration;
 
     fn fake_ytdlp_script(pidfile: &std::path::Path, script: &std::path::Path) {
@@ -372,5 +382,19 @@ mod tests {
             );
             std::fs::remove_file(&script).ok();
         });
+    }
+
+    #[test]
+    fn url_cache_remove_evicts_entry() {
+        // Regression for the empty-pipe loop: a dead cached stream URL must be
+        // evictable so the next retry re-resolves instead of reusing it.
+        url_cache_put("evict-me".to_string(), "https://example.com/stream".to_string());
+        assert!(url_cache_get("evict-me").is_some(), "precondition: entry cached");
+        url_cache_remove("evict-me");
+        assert_eq!(
+            url_cache_get("evict-me"),
+            None,
+            "entry must be gone after eviction"
+        );
     }
 }

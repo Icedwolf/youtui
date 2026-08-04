@@ -12,9 +12,7 @@ use tokio::sync::Semaphore;
 use tracing::{debug, error, warn};
 
 pub(crate) use cache::{cache_get, cache_put};
-use resolve::URL_CACHE;
 use crate::app::server::streaming_buffer::{SharedBuffer, SharedBufferWriter};
-use crate::core::PoisonRecovery;
 use crate::decoder::SymphoniaDecoder;
 use crate::decoder::read_seek_source::ReadSeekSource;
 
@@ -456,6 +454,12 @@ async fn ytdlp_pipeline(
         }
         let current = buffer.len();
         if current == 0 {
+            // A cached URL that has died server-side yields zero bytes while
+            // ffmpeg's (nulled) stderr never marks the buffer failed. Evict it
+            // so the retry re-resolves instead of looping on the same dead URL.
+            if from_url_cache {
+                resolve::url_cache_remove(&cfg.video_id);
+            }
             debug!(%cfg.video_id, elapsed = ?t0.elapsed(),
                 "No data after {}s, format may be unavailable — bailing early", DECODER_INIT_DEADLINE_S);
             bail!(
@@ -510,14 +514,14 @@ async fn ytdlp_pipeline(
                     Ok(Ok(())) => {}
                     Ok(Err(join_err)) => {
                         if from_url_cache {
-                            URL_CACHE.lock().unwrap_or_warn().remove(&cfg.video_id);
+                            resolve::url_cache_remove(&cfg.video_id);
                         }
                         bail!("{pipe_label} writer task panicked: {join_err}");
                     }
                     Err(_elapsed) => {
                         kill_and_reap(&mut child, &mut yt_child).await;
                         if from_url_cache {
-                            URL_CACHE.lock().unwrap_or_warn().remove(&cfg.video_id);
+                            resolve::url_cache_remove(&cfg.video_id);
                         }
                         bail!("{pipe_label} download timed out ({}s)", DOWNLOAD_TIMEOUT_S);
                     }
@@ -527,7 +531,7 @@ async fn ytdlp_pipeline(
                 if !status.success() {
                     let code = exit_code_string(&status);
                     if from_url_cache {
-                        URL_CACHE.lock().unwrap_or_warn().remove(&cfg.video_id);
+                        resolve::url_cache_remove(&cfg.video_id);
                     }
                     bail!("{pipe_label} exited with code {code}");
                 }
