@@ -674,9 +674,14 @@ pub async fn download_and_decode(cfg: DownloadConfig) -> anyhow::Result<Symphoni
     ).await {
         resolve::ResolveOutcome::Url(url) => Some(url),
         resolve::ResolveOutcome::AuthError(line) => {
-            warn!(%cfg.video_id, error_line = %line,
+            let po_tok = if cfg.po_token.is_some() {
+                "po_token set"
+            } else {
+                "no po_token"
+            };
+            warn!(%cfg.video_id, po_tok, error_line = %line,
                 "resolve failed with an auth error — failing fast, skipping redundant download");
-            anyhow::bail!("authentication error (stale cookies): {line}");
+            anyhow::bail!("authentication error (stale cookies; {po_tok}): {line}");
         }
         resolve::ResolveOutcome::Failed => None,
     };

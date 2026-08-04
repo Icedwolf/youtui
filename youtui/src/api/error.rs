@@ -18,8 +18,7 @@ pub struct DynamicApiError(String);
 fn short_type_name<T: ?Sized>() -> &'static str {
     let full = std::any::type_name::<T>();
     // rsplit always returns at least one element (the original string if no delimiter found).
-    #[allow(clippy::unwrap_used)]
-    full.rsplit("::").next().unwrap()
+    full.rsplit("::").next().unwrap_or(full)
 }
 
 pub fn wrong_auth_token_error_message<Q>(

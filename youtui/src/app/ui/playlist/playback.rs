@@ -91,21 +91,9 @@ impl Playlist {
         let clipped: String = detail.chars().take(200).collect();
         let body = format!(
             "{clipped} — your YouTube login looks stale and songs are being skipped. \
-Re-log into your browser, or refresh your cookie file, then restart."
+Re-log into your browser, or refresh your cookie file / po_token, then restart."
         );
-        if let Ok(rt) = tokio::runtime::Handle::try_current() {
-            drop(rt.spawn(async move {
-                if let Err(e) = Notification::new()
-                    .summary("YouTube Authentication Issue")
-                    .body(&body)
-                    .appname("youtui")
-                    .timeout(Timeout::Milliseconds(8000))
-                    .show()
-                {
-                    debug!("auth notification failed: {e}");
-                }
-            }));
-        }
+        spawn_notification("YouTube Authentication Issue", &body, 8000);
     }
 
     pub fn volume(&self) -> Percentage {
@@ -1018,22 +1006,9 @@ impl Playlist {
             .map(|s| s.title.clone())
             .unwrap_or_default();
 
-        if self.notifications_enabled
-            && !title.is_empty()
-            && let Ok(rt) = tokio::runtime::Handle::try_current()
-        {
-            drop(rt.spawn(async move {
-                let body = format!("{title} — no longer available on YouTube, removed from playlist");
-                if let Err(e) = Notification::new()
-                    .summary("Song Unavailable")
-                    .body(&body)
-                    .appname("youtui")
-                    .timeout(Timeout::Milliseconds(5000))
-                    .show()
-                {
-                    debug!("unavailable-song notification failed: {e}");
-                }
-            }));
+        if self.notifications_enabled && !title.is_empty() {
+            let body = format!("{title} — no longer available on YouTube, removed from playlist");
+            spawn_notification("Song Unavailable", &body, 5000);
         }
 
         self.cancel_song_download(id);
@@ -1546,5 +1521,26 @@ impl Playlist {
             self.preloaded_sources.clear();
             cache_clear();
         }
+    }
+}
+
+/// Fire-and-forget desktop notification. Only runs when called from inside a
+/// Tokio runtime (the app event loop); callers guard `notifications_enabled`
+/// themselves. Single source of truth for the notify_rust invocation.
+fn spawn_notification(summary: &str, body: &str, timeout_ms: u32) {
+    if let Ok(rt) = tokio::runtime::Handle::try_current() {
+        let summary = summary.to_string();
+        let body = body.to_string();
+        drop(rt.spawn(async move {
+            if let Err(e) = Notification::new()
+                .summary(&summary)
+                .body(&body)
+                .appname("youtui")
+                .timeout(Timeout::Milliseconds(timeout_ms))
+                .show()
+            {
+                debug!("notification failed: {e}");
+            }
+        }));
     }
 }

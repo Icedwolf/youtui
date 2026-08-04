@@ -466,6 +466,19 @@ mod state_transitions {
     }
 
     #[test]
+    fn draw_get_items_survives_desynced_shuffle_map() {
+        use crate::app::view::TableView;
+        let mut p = undownloaded_songs(3);
+        p.shuffle_enabled = true;
+        p.shuffle_indices = vec![0, 1, 2];
+        // Simulate a stale inverse map: one entry points at a removed row.
+        p.shuffle_visual_map = vec![Some(0), Some(1), Some(5)];
+        // Must render an empty row instead of panicking the whole TUI.
+        let rows: Vec<_> = p.get_items().collect();
+        assert_eq!(rows.len(), 3, "all rows must still render, no panic");
+    }
+
+    #[test]
     fn play_pause_resume_cycle() {
         let mut p = downloaded_songs(3);
         p.play_status = PlayState::Playing(ListSongID(0));

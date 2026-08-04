@@ -265,20 +265,19 @@ impl SearchBlock {
     }
     pub fn increment_list(&mut self, amount: isize) {
         if !self.search_suggestions.is_empty() {
-            self.suggestions_cur = Some(
-                self.suggestions_cur
-                    .map(|cur| {
-                        cur.saturating_add_signed(amount)
-                            .min(self.search_suggestions.len() - 1)
-                    })
-                    .unwrap_or_default(),
-            );
-            // Safe - clamped above
-            // Clone is ok here as we want to duplicate the search suggestion.
-            self.replace_text(
-                self.search_suggestions[self.suggestions_cur.expect("Set to non-None value above")]
-                    .get_text(),
-            );
+            let cur = self
+                .suggestions_cur
+                .map(|cur| {
+                    cur.saturating_add_signed(amount)
+                        .min(self.search_suggestions.len() - 1)
+                })
+                .unwrap_or_default();
+            self.suggestions_cur = Some(cur);
+            // Bounds-checked via get(): a desync must not panic the event loop.
+            if let Some(value) = self.search_suggestions.get(cur) {
+                // Clone is ok here as we want to duplicate the search suggestion.
+                self.replace_text(value.get_text());
+            }
         }
     }
 }
