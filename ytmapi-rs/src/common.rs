@@ -138,11 +138,47 @@ pub enum Explicit {
     NotExplicit,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub enum AlbumType {
     Single,
     Album,
     EP,
+    /// An album category YouTube added after this enum was written ("Upcoming
+    /// Album", ...). Never produced by deserialization (that stays strict so
+    /// search classification can rely on failures); constructed explicitly by
+    /// [`album_type_from_text`].
+    Other,
+}
+
+impl<'de> Deserialize<'de> for AlbumType {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let text = String::deserialize(deserializer)?;
+        match text.as_str() {
+            "Single" => Ok(Self::Single),
+            "Album" => Ok(Self::Album),
+            "EP" => Ok(Self::EP),
+            other => Err(serde::de::Error::unknown_variant(
+                other,
+                &["Single", "Album", "EP"],
+            )),
+        }
+    }
+}
+
+/// Map a raw album-category string to an [`AlbumType`], degrading unknown
+/// values ("Upcoming Album", ...) to [`AlbumType::Other`] instead of aborting
+/// the whole album/artist parse. Used only where a lenient category is
+/// acceptable; search classification keeps strict [`Deserialize`] behaviour.
+pub(crate) fn album_type_from_text(text: &str) -> AlbumType {
+    match text {
+        "Single" => AlbumType::Single,
+        "Album" => AlbumType::Album,
+        "EP" => AlbumType::EP,
+        _ => AlbumType::Other,
+    }
 }
 
 /// Type safe version of API ID used as part of YTM's interface.
@@ -230,3 +266,21 @@ impl_youtube_id!(MoodCategoryParams<'a>);
 impl_youtube_id!(SongTrackingUrl<'a>);
 impl_youtube_id!(UserVideosParams<'a>);
 impl_youtube_id!(UserPlaylistsParams<'a>);
+
+#[cfg(test)]
+mod tests {
+    use super::{AlbumType, album_type_from_text};
+
+    #[test]
+    fn album_type_strict_deserialize_lenient_mapping() {
+        // Strict: unknown category text still fails serde — the search
+        // classifier relies on this to map unrecognized categories to `None`.
+        assert!(serde_json::from_str::<AlbumType>("\"Upcoming Album\"").is_err());
+        // Lenient: the album/artist paths map unknown text to `Other` instead
+        // of aborting the whole parse.
+        assert_eq!(album_type_from_text("Upcoming Album"), AlbumType::Other);
+        assert_eq!(album_type_from_text("Album"), AlbumType::Album);
+        assert_eq!(album_type_from_text("Single"), AlbumType::Single);
+        assert_eq!(album_type_from_text("EP"), AlbumType::EP);
+    }
+}

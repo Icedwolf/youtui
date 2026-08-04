@@ -402,35 +402,53 @@ fn cookie_export_needed(path: &Path) -> bool {
         .map_or(true, |age| age > COOKIE_EXPORT_TTL)
 }
 
-/// Export the browser's cookies to a Netscape file, reusing yt-dlp. Returns
-/// false (and warns) on any failure — a silent failed export is what left a
-/// 0-byte file that disabled downloads for weeks. Honors the configured
-/// `yt_dlp_command` so the export always uses the same binary as downloads.
-fn export_browser_cookies(browser: &str, dest: &Path, yt_dlp_cmd: &str) -> bool {
-    // Mirror the download path's empty-string fallback (song_downloader).
-    let cmd = if yt_dlp_cmd.is_empty() { "yt-dlp" } else { yt_dlp_cmd };
-    let ok = std::process::Command::new(cmd)
+/// Run yt-dlp's cookie export. Returns `Err(stderr)` on a non-zero exit so the
+/// caller can report *why* the export failed (locked browser profile, wrong
+/// browser, unsupported DB, ...) instead of a bare "Failed".
+fn run_cookie_export(cmd: &str, browser: &str, dest: &Path) -> Result<(), String> {
+    let output = std::process::Command::new(cmd)
         .args(["--ignore-config", "--cookies-from-browser", browser, "--cookies"])
         .arg(dest)
         .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status()
-        .map(|s| s.success())
-        .unwrap_or(false)
-        && std::fs::metadata(dest).map(|m| m.len() > 0).unwrap_or(false);
-    if ok {
-        use std::os::unix::fs::PermissionsExt;
-        let mut perms = match std::fs::metadata(dest) {
-            Ok(m) => m.permissions(),
-            Err(_) => std::fs::Permissions::from_mode(0o600),
-        };
-        perms.set_mode(0o600);
-        let _ = std::fs::set_permissions(dest, perms);
-        info!("Exported cookies to {}", dest.display());
+        .output()
+        .map_err(|e| e.to_string())?;
+    if output.status.success() {
+        Ok(())
     } else {
-        warn!("Failed to export cookies from {browser} to {}", dest.display());
+        Err(String::from_utf8_lossy(&output.stderr).trim().to_string())
     }
-    ok
+}
+
+/// Export the browser's cookies to a Netscape file, reusing yt-dlp. Returns
+/// false (and warns with the actual failure reason) on any failure — a silent
+/// failed export is what left a 0-byte file that disabled downloads for weeks.
+/// Honors the configured `yt_dlp_command` so the export always uses the same
+/// binary as downloads.
+fn export_browser_cookies(browser: &str, dest: &Path, yt_dlp_cmd: &str) -> bool {
+    // Mirror the download path's empty-string fallback (song_downloader).
+    let cmd = if yt_dlp_cmd.is_empty() { "yt-dlp" } else { yt_dlp_cmd };
+    let reason = match run_cookie_export(cmd, browser, dest) {
+        Ok(()) => {
+            if std::fs::metadata(dest).map(|m| m.len() > 0).unwrap_or(false) {
+                use std::os::unix::fs::PermissionsExt;
+                let mut perms = match std::fs::metadata(dest) {
+                    Ok(m) => m.permissions(),
+                    Err(_) => std::fs::Permissions::from_mode(0o600),
+                };
+                perms.set_mode(0o600);
+                let _ = std::fs::set_permissions(dest, perms);
+                info!("Exported cookies to {}", dest.display());
+                return true;
+            }
+            "export succeeded but produced an empty file".to_string()
+        }
+        Err(err) => err,
+    };
+    warn!(
+        "Failed to export cookies from {browser} to {}: {reason}",
+        dest.display()
+    );
+    false
 }
 
 #[cfg(test)]
@@ -503,5 +521,33 @@ mod tests {
         let ok = export_browser_cookies("youtui-no-such-browser", &dest, "");
         assert!(!ok);
         std::fs::remove_file(&dest).ok();
+    }
+
+    #[test]
+    fn run_cookie_export_reports_failure_stderr() {
+        // A fake yt-dlp that fails loudly. The exported failure reason must
+        // surface so users can tell "browser locked" from "no cookies found".
+        let script = std::env::temp_dir().join(format!("youtui_fail_export_{}.sh", std::process::id()));
+        std::fs::write(
+            &script,
+            "#!/bin/sh\necho 'LockedProfileException: profile is locked' >&2\nexit 1\n",
+        )
+        .unwrap();
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = std::fs::metadata(&script).unwrap().permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(&script, perms).unwrap();
+
+        let dest = std::env::temp_dir().join(format!("youtui_export_fail_{}.txt", std::process::id()));
+        let _ = std::fs::remove_file(&dest);
+        let err = run_cookie_export(script.to_str().unwrap(), "fake-browser", &dest)
+            .expect_err("failing export must produce an Err");
+        assert!(
+            err.contains("LockedProfileException"),
+            "stderr must be surfaced, got: {err:?}"
+        );
+        assert!(!dest.exists(), "failed export must not leave a file");
+
+        std::fs::remove_file(&script).ok();
     }
 }

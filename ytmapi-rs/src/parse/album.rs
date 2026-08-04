@@ -166,7 +166,11 @@ fn parse_album_query(p: ProcessedResult<GetAlbumQuery>) -> Result<GetAlbum> {
     let mut header =
         columns.borrow_pointer(concatcp!(TAB_CONTENT, SECTION_LIST_ITEM, RESPONSIVE_HEADER))?;
     let title = header.take_value_pointer(TITLE_TEXT)?;
-    let category = header.take_value_pointer(SUBTITLE)?;
+    // Category text can drift upstream ("Upcoming Album"); map unknowns to
+    // `Other` instead of failing the whole album parse.
+    let category = header
+        .take_value_pointer::<String>(SUBTITLE)
+        .map(|s| crate::common::album_type_from_text(&s))?;
     let year = header.take_value_pointer(SUBTITLE2)?;
     let artists = header
         .borrow_pointer("/straplineTextOne/runs")?

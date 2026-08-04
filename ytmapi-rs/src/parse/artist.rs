@@ -44,19 +44,29 @@ pub struct GetArtistAlbumsAlbum {
 impl<'a> ParseFrom<GetArtistQuery<'a>> for GetArtist {
     fn parse_from(p: ProcessedResult<GetArtistQuery<'a>>) -> crate::Result<Self> {
         let mut json_crawler: JsonCrawlerOwned = p.into();
-        let mut results =
-            json_crawler.borrow_pointer(concatcp!(SINGLE_COLUMN_TAB, SECTION_LIST))?;
-        let mut maybe_description_shelf = results.try_iter_mut()?.find_path(DESCRIPTION_SHELF).ok();
-        let description = maybe_description_shelf
-            .as_mut()
-            .map(|description_shelf| description_shelf.take_value_pointer(DESCRIPTION))
-            .transpose()?;
-        let views = maybe_description_shelf.and_then(|mut description_shelf| {
-            description_shelf
-                .take_value_pointer(concatcp!("/subheader", RUN_TEXT))
-                .ok()
-        });
-        let top_releases = parse_artist_top_releases_from_section_list_contents(results)?;
+        // The section list is optional: some artist pages (API format drift,
+        // auto-generated channels) omit it. Falling back to empty top releases
+        // keeps the artist loadable rather than failing the whole fetch (R2).
+        let section = json_crawler.borrow_pointer(concatcp!(SINGLE_COLUMN_TAB, SECTION_LIST));
+        let (description, views, top_releases) = match section {
+            Ok(mut results) => {
+                let mut maybe_description_shelf =
+                    results.try_iter_mut()?.find_path(DESCRIPTION_SHELF).ok();
+                let description = maybe_description_shelf
+                    .as_mut()
+                    .map(|description_shelf| description_shelf.take_value_pointer(DESCRIPTION))
+                    .transpose()?;
+                let views = maybe_description_shelf.and_then(|mut description_shelf| {
+                    description_shelf
+                        .take_value_pointer(concatcp!("/subheader", RUN_TEXT))
+                        .ok()
+                });
+                let top_releases =
+                    parse_artist_top_releases_from_section_list_contents(results)?;
+                (description, views, top_releases)
+            }
+            Err(_) => (None, None, GetArtistTopReleases::default()),
+        };
         let mut header = json_crawler.navigate_pointer("/header/musicImmersiveHeaderRenderer")?;
         let name = header.take_value_pointer(TITLE_TEXT)?;
         let shuffle_id = header
@@ -338,7 +348,12 @@ pub(crate) fn parse_album_from_mtrir(mut navigator: impl JsonCrawler) -> Result<
         Ok(subtitle2) => {
             // See https://github.com/nick42d/youtui/issues/211
             ab_warn!();
-            (subtitle2, navigator.take_value_pointer(SUBTITLE)?)
+            // Map unknown category text ("Upcoming Album", ...) to `Other`
+            // rather than aborting the artist's top-releases parse.
+            let album_type = navigator
+                .take_value_pointer::<String>(SUBTITLE)
+                .map(|s| Some(crate::common::album_type_from_text(&s)))?;
+            (subtitle2, album_type)
         }
         Err(_) => (navigator.take_value_pointer(SUBTITLE)?, None),
     };
@@ -527,5 +542,50 @@ mod tests {
             crate::query::UnsubscribeArtistsQuery::new([]),
             BrowserToken
         );
+    }
+
+    #[test]
+    fn artist_parses_without_section_list() {
+        // Regression for R2: some artist pages (format drift) omit the
+        // `sectionListRenderer`. The artist must still load (name + header)
+        // with empty top releases instead of failing the whole fetch.
+        use super::GetArtist;
+        use crate::common::{ArtistChannelID, YoutubeID};
+        use crate::json::Json;
+        use crate::parse::{GetArtistTopReleases, ParseFrom, ProcessedResult};
+        use crate::query::GetArtistQuery;
+        use serde_json::json;
+
+        let query = GetArtistQuery::new(ArtistChannelID::from_raw("UC123"));
+        let processed = ProcessedResult {
+            query: &query,
+            source: String::new(),
+            json: Json::new(json!({
+                "contents": {
+                    "singleColumnBrowseResultsRenderer": {
+                        "tabs": [{
+                            "tabRenderer": {
+                                "content": { "musicShelfRenderer": { "contents": [] } }
+                            }
+                        }]
+                    }
+                },
+                "header": {
+                    "musicImmersiveHeaderRenderer": {
+                        "title": { "runs": [{ "text": "Some Artist" }] },
+                        "subscriptionButton": {
+                            "subscribeButtonRenderer": {
+                                "channelId": "UC123",
+                                "subscribed": true
+                            }
+                        }
+                    }
+                }
+            })),
+        };
+        let artist = GetArtist::parse_from(processed)
+            .expect("artist with a missing section list must still parse");
+        assert_eq!(artist.name, "Some Artist");
+        assert_eq!(artist.top_releases, GetArtistTopReleases::default());
     }
 }
