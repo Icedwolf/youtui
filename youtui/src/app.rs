@@ -488,7 +488,9 @@ fn copy_cookie_db_for_export(browser: &str) -> Option<(String, PathBuf)> {
     }
     let task_dir = std::env::temp_dir().join(format!("youtui-cookies-{}", std::process::id()));
     let db_dir = task_dir.join("profile");
-    if std::fs::create_dir_all(&db_dir).is_err() {
+    // Create the temp dirs with 0700 from the start so the SID-bearing DB copy
+    // is never world-readable for even a moment during creation in /tmp.
+    if create_private_dirs(&db_dir).is_err() {
         return None;
     }
     let mut copied = false;
@@ -506,15 +508,29 @@ fn copy_cookie_db_for_export(browser: &str) -> Option<(String, PathBuf)> {
     Some((format!("{name}:{}", db_dir.display()), task_dir))
 }
 
+#[cfg(unix)]
+fn create_private_dirs(db_dir: &Path) -> std::io::Result<()> {
+    use std::os::unix::fs::DirBuilderExt;
+    let mut builder = std::fs::DirBuilder::new();
+    builder.recursive(true);
+    builder.mode(0o700);
+    builder.create(db_dir)
+}
+
 /// The temp dir holds a copy of the browser's cookies.sqlite (SID auth
 /// tokens). `/tmp` is world-readable, so the dirs are 0700 and the copied
 /// files 0600 — other local users cannot traverse in or read the tokens.
 fn lock_down_export_perms(task_dir: &Path, db_dir: &Path) {
     use std::os::unix::fs::PermissionsExt;
     let set_mode = |p: &Path, mode: u32| {
-        if let Ok(mut perms) = std::fs::metadata(p).map(|m| m.permissions()) {
-            perms.set_mode(mode);
-            let _ = std::fs::set_permissions(p, perms);
+        match std::fs::metadata(p).map(|m| m.permissions()) {
+            Ok(mut perms) => {
+                perms.set_mode(mode);
+                if let Err(e) = std::fs::set_permissions(p, perms) {
+                    warn!("could not restrict perms on {}: {e}", p.display());
+                }
+            }
+            Err(e) => warn!("could not stat {} for perms: {e}", p.display()),
         }
     };
     set_mode(task_dir, 0o700);
