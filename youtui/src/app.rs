@@ -502,7 +502,28 @@ fn copy_cookie_db_for_export(browser: &str) -> Option<(String, PathBuf)> {
         let _ = std::fs::remove_dir_all(&task_dir);
         return None;
     }
+    lock_down_export_perms(&task_dir, &db_dir);
     Some((format!("{name}:{}", db_dir.display()), task_dir))
+}
+
+/// The temp dir holds a copy of the browser's cookies.sqlite (SID auth
+/// tokens). `/tmp` is world-readable, so the dirs are 0700 and the copied
+/// files 0600 — other local users cannot traverse in or read the tokens.
+fn lock_down_export_perms(task_dir: &Path, db_dir: &Path) {
+    use std::os::unix::fs::PermissionsExt;
+    let set_mode = |p: &Path, mode: u32| {
+        if let Ok(mut perms) = std::fs::metadata(p).map(|m| m.permissions()) {
+            perms.set_mode(mode);
+            let _ = std::fs::set_permissions(p, perms);
+        }
+    };
+    set_mode(task_dir, 0o700);
+    set_mode(db_dir, 0o700);
+    if let Ok(rd) = std::fs::read_dir(db_dir) {
+        for e in rd.flatten() {
+            set_mode(&e.path(), 0o600);
+        }
+    }
 }
 
 /// Run yt-dlp's cookie export. Returns `Err(stderr)` on a non-zero exit so the
@@ -686,12 +707,14 @@ mod tests {
 
         // Fake yt-dlp: fails when pointed at the original profile (locked), but
         // succeeds when pointed at a copied profile (which the fallback makes).
+        // Also enforces that the copied profile dir is 0700 — the temp copy holds
+        // SID auth tokens in world-readable /tmp and must not leak them.
         let script = std::env::temp_dir().join(format!("youtui_copy_export_{}.sh", std::process::id()));
         let orig = srcdir.to_str().unwrap();
         std::fs::write(
             &script,
             format!(
-                "#!/bin/sh\nbr='' out='' nxt=''\nfor a in \"$@\"; do\n  if [ \"$nxt\" = browser ]; then br=\"$a\"; nxt=''; fi\n  if [ \"$nxt\" = cookies ]; then out=\"$a\"; nxt=''; fi\n  if [ \"$a\" = --cookies-from-browser ]; then nxt=browser; fi\n  if [ \"$a\" = --cookies ]; then nxt=cookies; fi\ndone\ncase \"$br\" in *{orig}*) exit 1;; esac\nprintf '.youtube.com\\tTRUE\\t/\\tTRUE\\t1819286662\\tSID\\tabc\\n' > \"$out\"\nexit 0\n",
+                "#!/bin/sh\nbr='' out='' nxt=''\nfor a in \"$@\"; do\n  if [ \"$nxt\" = browser ]; then br=\"$a\"; nxt=''; fi\n  if [ \"$nxt\" = cookies ]; then out=\"$a\"; nxt=''; fi\n  if [ \"$a\" = --cookies-from-browser ]; then nxt=browser; fi\n  if [ \"$a\" = --cookies ]; then nxt=cookies; fi\ndone\ncase \"$br\" in *{orig}*) exit 1;; esac\np=\"${{br#firefox:}}\"\n[ \"$(stat -c %a \"$p\" 2>/dev/null)\" = 700 ] || exit 1\nprintf '.youtube.com\\tTRUE\\t/\\tTRUE\\t1819286662\\tSID\\tabc\\n' > \"$out\"\nexit 0\n",
             ),
         )
         .unwrap();
