@@ -1,10 +1,25 @@
 # Youtui Backlog
 
 **Build:** 0 errors, 0 warnings, 0 clippy
-**Tests:** 286 youtui unit + 98 ytmapi-rs unit + 75 ytmapi-rs doctest passed
-**Last updated:** 2026-07-17
+**Tests:** 553 youtui/ytmapi-rs passed + 20 ignored
+**Last updated:** 2026-08-04
 
 ## Completed
+
+### Session 2026-08-04 — Skip-loop fix, API drift tolerance, cookie-export hardening
+
+- **Auth with browser running (18+ skips, closed)** — the export hard-failed on the locked profile (browser open) leaving a 0-byte/stale Netscape file → guest-only `--add-header` → age-restricted songs skipped. Root-caused via live dry-runs: yt-dlp's `--cookies-from-browser` *resolve* flow always yields storyboards (no audio), but the app's Netscape-file → `--add-header Cookie:` mechanism returns `251 opus` with signed-in cookies. Fix (`1154fdc`): `run_cookie_export` falls back to copying `cookies.sqlite`(+WAL) to a temp profile and exporting from the copy when the live DB is locked or empty. Copy is never locked → auth works with Floorp open. End-to-end verified live (Floorp running → 1378-line export with SID → header → `251 opus`). New test `run_cookie_export_falls_back_to_copied_profile_when_locked` (fail-first).
+- **Dead stream-URL loop (song skips)** — `resolve_url` caches a stream URL (6h). When a cached URL died, ffmpeg got 0 bytes with nulled stderr (buffer never marked failed) and the `empty pipe after 5s` bail fired **without evicting the cache** → every retry reused the dead URL forever (observed: same song ×4 identical skips). Fixed: empty-pipe bail now evicts via `url_cache_remove`; 3 duplicate eviction sites consolidated onto the helper (mod.rs/resolve.rs, `e75d207`); fast-fail ffmpeg bail also evicts (`4dd54ab`).
+- **Long songs skip mid-song** — `spawn_bg_cache_task` hard-capped the *post-playback* download at `DOWNLOAD_TIMEOUT_S = 120s` and `kill_and_reap`'d ffmpeg on expiry. For a long song whose WAV download+transcode exceeds 120s, killing ffmpeg closed the pipe → `writer.finish()` → buffer EOF → decoder truncated mid-playback. Fixed (`997be06`): no absolute deadline — the bg task now kills only when the buffer stops growing for `BG_STALL_TIMEOUT_S = 60s` (`track_download_progress` helper, 3 unit tests). Pre-playback `DOWNLOAD_TIMEOUT_S` sites (init-fallback + M4A) unchanged — those skip before playing, not mid-song.
+- **AlbumType drift (`Upcoming Album`)** — YouTube began sending unknown album categories; strict serde made the *whole GetAlbumQuery* fail. Fixed with a split design: `AlbumType` keeps a **strict** custom `Deserialize` (search classification relies on unknown→`None`), plus a new `Other` variant + `album_type_from_text` lenient mapper used only by album/artist paths (common.rs, album.rs, artist.rs). First attempt with `#[serde(other)]` broke 7 search tests — reverted.
+- **GetArtistQuery (R2 → closed)** — artist page missing `sectionListRenderer/contents` failed the whole artist fetch. Section list is now optional → artist loads with empty top-releases. (Was confirmed hitting in logs: `ArtistChannelID UCJK0856RNSlCDFNK4XbLIiw`.)
+- **Cookie-export hardening** (4 commits):
+  - `--ignore-config` — host yt-dlp config with 0-byte `cookies.txt` was hard-failing every download.
+  - Export honors `config.yt_dlp_command` (was hardcoded `yt-dlp`) with the same `""`→fallback as downloads.
+  - `run_cookie_export` now captures yt-dlp **stderr** — the WARN shows *why* an export failed (locked browser, unsupported DB) instead of a bare "Failed".
+  - **Atomic export** — writes to `<dest>.tmp`, publishes via rename only on success/non-empty. A failed re-export (browser running at startup) no longer nukes the last good export to 0 bytes — the historical 0-byte trap is closed for good.
+- **Render-time panic elimination** (P0) — `draw.rs` per-frame `expect(visual_to_actual_index out-of-bounds)` → empty `Cow` row + `debug!`; `shared_components.rs` suggestions `expect` → bounds-checked `.get()`. Regression test `draw_get_items_survives_desynced_shuffle_map`.
+- **Notification consolidation** — duplicate `notify_rust` spawn blocks merged into `spawn_notification(summary, body, timeout_ms)`; auth bail now tags `po_token set|no po_token`; `short_type_name` `unwrap` → `unwrap_or`.
 
 ### Session 2026-07-31 — Dep pruning, module splits, Phase 8 close
 
@@ -204,8 +219,7 @@ Net: 19 `info!` → `debug!` demotions, 3 `info` imports removed. Remaining 10 `
 
 ### Open
 
-- **R2 — `GetArtistQuery` JSON path error** — 🔜 Pending
-  Investigate when API format drift is observed.
+- **R2 — `GetArtistQuery` JSON path error** — ✅ FIXED 2026-08-04 — missing `sectionListRenderer/contents` now tolerated (optional section list); closed in session 2026-08-04.
 
 ## Backlog
 
@@ -269,6 +283,7 @@ Net: 19 `info!` → `debug!` demotions, 3 `info` imports removed. Remaining 10 `
 | F2 | Gapless playback | Blocked on symphonia AAC gapless support (upstream). Not actionable. |
 | F3 | Mouse support | Needs ratatui MouseEvent impl across key stack. Pure scope. |
 | F4 | Offline disk cache | ❌ **REJECTED** — streaming client, not offline jukebox. Serializing 42MB WAV buffers to disk on every shutdown wastes I/O and flash endurance. Song re-downloads faster than disk read. See DECISIONS.md:16. |
+| F8 | Auth when browser is running | ✅ **RESOLVED** 2026-08-04 — yt-dlp's `--cookies-from-browser` *resolve* flow (and a direct locked-DB export) yield only storyboards (no audio). The app's real mechanism — Netscape file → `--add-header Cookie:` — **does** return `251 opus` with signed-in cookies. Fix: `run_cookie_export` now falls back to exporting from a **copy** of the profile's `cookies.sqlite`(+WAL) when the live DB is locked/empty, so auth works with the browser open. End-to-end verified live. (`1154fdc`.) |
 | F5 | Display lyrics | ❌ **REJECTED** — no new features. Suckless music player. See AGENTS.md. |
 | F6 | Theming | ❌ **REJECTED** — no new features. Suckless music player. See AGENTS.md. |
 | F7 | Stats Tab | ❌ **REJECTED** — no new features. Suckless music player. See AGENTS.md. |
