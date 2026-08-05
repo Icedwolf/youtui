@@ -384,6 +384,12 @@ async fn init_tracing(debug: bool, logging: bool) -> Result<()> {
 /// rotated or throttled by YouTube.
 const COOKIE_EXPORT_TTL: Duration = Duration::from_secs(7 * 24 * 60 * 60);
 
+/// URL yt-dlp is pointed at so it dumps browser cookies into the Netscape
+/// export file. The `.invalid` TLD is reserved (RFC 2606) and never resolves,
+/// so yt-dlp fails fast — *after* extracting and writing the cookies at
+/// startup. No network and no external video is required for the export.
+const COOKIE_EXPORT_PROBE_URL: &str = "https://cookie-export.invalid/";
+
 /// True when the exported Netscape cookie file should be regenerated: it is
 /// missing, empty (the historical 0-byte export trap), or older than
 /// `COOKIE_EXPORT_TTL`. Self-heals a stale export on every startup.
@@ -402,21 +408,29 @@ fn cookie_export_needed(path: &Path) -> bool {
         .map_or(true, |age| age > COOKIE_EXPORT_TTL)
 }
 
-/// Run a single yt-dlp cookie export to `out`. Returns `Err(stderr)` on a
-/// non-zero exit and removes a partial output file so a failed attempt never
-/// leaves a corrupt half-export behind.
+/// Run a single yt-dlp cookie export to `out`. yt-dlp refuses to run without a
+/// URL and, against a live browser profile, the probe URL's own extraction can
+/// legitimately fail (storyboards-only) while the cookies were already written.
+/// Success is therefore a *non-empty cookie file*, not the exit code — the
+/// stderr is only surfaced when the file came out empty.
 fn run_one_cookie_export(cmd: &str, browser: &str, out: &Path) -> Result<(), String> {
     let output = std::process::Command::new(cmd)
-        .args(["--ignore-config", "--cookies-from-browser", browser, "--cookies"])
+        .args([
+            "--ignore-config",
+            "--cookies-from-browser",
+            browser,
+            "--cookies",
+        ])
         .arg(out)
+        .args(["--simulate", COOKIE_EXPORT_PROBE_URL])
         .stdout(std::process::Stdio::null())
         .output()
         .map_err(|e| e.to_string())?;
-    if !output.status.success() {
-        let _ = std::fs::remove_file(out);
-        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
+    if std::fs::metadata(out).map(|m| m.len() > 0).unwrap_or(false) {
+        return Ok(());
     }
-    Ok(())
+    let _ = std::fs::remove_file(out);
+    Err(String::from_utf8_lossy(&output.stderr).trim().to_string())
 }
 
 /// Resolve the on-disk profile directory for a browser spec like
@@ -701,10 +715,15 @@ mod tests {
     fn export_browser_cookies_failure_preserves_existing_dest() {
         use std::os::unix::fs::PermissionsExt;
         // A pre-existing valid export must survive a subsequent failed
-        // re-export (the historical 0-byte-trap). The fake yt-dlp writes
-        // garbage to its output then fails — proving the atomic publish.
+        // re-export (the historical 0-byte-trap). The fake yt-dlp writes an
+        // empty output then fails — under the new success rule (non-empty
+        // file) that is a true failure, proving the atomic publish.
         let script = std::env::temp_dir().join(format!("youtui_corrupt_export_{}.sh", std::process::id()));
-        std::fs::write(&script, "#!/bin/sh\necho 'garbage' > \"$5\"\nexit 1\n").unwrap();
+        std::fs::write(
+            &script,
+            "#!/bin/sh\nout='' nxt=''\nfor a in \"$@\"; do\n  if [ \"$nxt\" = cookies ]; then out=\"$a\"; nxt=''; fi\n  if [ \"$a\" = --cookies ]; then nxt=cookies; fi\ndone\n: > \"$out\"\nexit 1\n",
+        )
+        .unwrap();
         let mut perms = std::fs::metadata(&script).unwrap().permissions();
         perms.set_mode(0o755);
         std::fs::set_permissions(&script, perms).unwrap();
