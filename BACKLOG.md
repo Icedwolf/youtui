@@ -1,8 +1,16 @@
 # Youtui Backlog
 
 **Build:** 0 errors, 0 warnings, 0 clippy
-**Tests:** 559 youtui/ytmapi-rs passed + 20 ignored
+**Tests:** 560 youtui/ytmapi-rs passed + 20 ignored
 **Last updated:** 2026-08-05
+
+## Completed
+
+### Session 2026-08-05 — Download-task panic net, cookie temp-dir perms
+
+- **Stranded-Buffering bug (P4)** — `download_song`'s fire-and-forget task sent `Completed`/`Error` via channel on Ok/Err, but a *panic* inside `download_and_decode` skipped both → song stuck in `Buffering` forever with a leaked `active_downloads` entry. Fixed (`d32fa3e`): the await is wrapped in `std::panic::AssertUnwindSafe(...).catch_unwind()` (same convention as `effect.rs:239`); a panic now emits `Error("download panicked: …")` → song marked Failed + skipped.
+- **Latent downcast bug caught by test-first** — a `&(dyn Any + Send)` reference fails to `downcast_ref` (probe-verified) while auto-deref through `&Box<dyn Any + Send>` works. The new `panic_message` helper (core.rs) takes `&Box` — the same reason `effect.rs` downcasts on the Box. Dedup: `effect.rs` now reuses `panic_message` (removed its inline copy). Unit test `panic_message_normalizes_panic_payload` covers `&str`, `String`, and opaque payloads. Test count 559 → 560.
+- **Cookie temp-dir perms** — the copied-profile fallback (`copy_cookie_db_for_export`) created `youtui-cookies-{pid}` with 0755 in world-readable `/tmp` and copied `cookies.sqlite` (SID tokens) at 0644. `lock_down_export_perms` now sets dirs 0700 + copied files 0600 (`fd6ec13`). The existing fallback test's fake yt-dlp now `stat -c %a`-enforces 0700 on the copied profile dir, so the test discriminates pre/post fix (umask 022 → 0755 fails).
 
 ## Completed
 
