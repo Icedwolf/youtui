@@ -21,6 +21,13 @@ const READ_BUF_SIZE: usize = 64 * 1024;
 const STREAM_INIT_THRESHOLD: usize = 512;
 const DOWNLOAD_TIMEOUT_S: u64 = 120;
 const DECODER_INIT_DEADLINE_S: u64 = 5;
+/// Poll interval for background download progress tracking.
+const BG_PROGRESS_POLL_MS: u64 = 1000;
+/// A background (post-playback) download is killed only when it makes NO
+/// progress for this long. Unlike `DOWNLOAD_TIMEOUT_S` there is no absolute
+/// deadline: a long song legitimately takes minutes to finish downloading
+/// after playback starts, and a hard cap truncates the buffer mid-song.
+const BG_STALL_TIMEOUT_S: u64 = 60;
 const M4A_TOTAL_LEN_TIMEOUT_S: u64 = 15;
 
 pub(crate) struct DownloadConfig {
@@ -117,65 +124,92 @@ async fn kill_and_reap(
     }
 }
 
+/// Track whether a background download is still making progress. Returns the
+/// new baseline length + last-progress instant, and whether the download has
+/// stalled: no new bytes arrived for `stall` or longer.
+fn track_download_progress(
+    last_len: usize,
+    cur_len: usize,
+    last_progress: std::time::Instant,
+    stall: std::time::Duration,
+) -> (usize, std::time::Instant, bool) {
+    if cur_len != last_len {
+        (cur_len, std::time::Instant::now(), false)
+    } else if last_progress.elapsed() >= stall {
+        (last_len, last_progress, true)
+    } else {
+        (last_len, last_progress, false)
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn spawn_bg_cache_task(
     vid: String,
     ct: tokio_util::sync::CancellationToken,
     mut child: tokio::process::Child,
     mut yt_child: Option<tokio::process::Child>,
-    write_handle: tokio::task::JoinHandle<()>,
+    mut write_handle: tokio::task::JoinHandle<()>,
     buf: Arc<SharedBuffer>,
     log_prefix: &'static str,
     _t0: Option<tokio::time::Instant>,
 ) {
-    tokio::select! {
-        biased;
-        _ = ct.cancelled() => {
-            debug!(%vid, "{log_prefix} background cancelled, killing child");
-            kill_and_reap(&mut child, &mut yt_child).await;
+    let stall = std::time::Duration::from_secs(BG_STALL_TIMEOUT_S);
+    let mut last_len = buf.len();
+    let mut last_progress = std::time::Instant::now();
+    let write_result = loop {
+        tokio::select! {
+            biased;
+            _ = ct.cancelled() => {
+                debug!(%vid, "{log_prefix} background cancelled, killing child");
+                kill_and_reap(&mut child, &mut yt_child).await;
+                return;
+            }
+            res = &mut write_handle => break res,
+            _ = tokio::time::sleep(std::time::Duration::from_millis(BG_PROGRESS_POLL_MS)) => {
+                let (new_len, new_progress, stalled) =
+                    track_download_progress(last_len, buf.len(), last_progress, stall);
+                if stalled {
+                    warn!(%vid, seconds = BG_STALL_TIMEOUT_S,
+                        "{log_prefix} no download progress, killing");
+                    kill_and_reap(&mut child, &mut yt_child).await;
+                    return;
+                }
+                last_len = new_len;
+                last_progress = new_progress;
+            }
         }
-        result = tokio::time::timeout(
-            std::time::Duration::from_secs(DOWNLOAD_TIMEOUT_S),
-            write_handle,
-        ) => {
-            match result {
-                Ok(Ok(())) => {}
-                Ok(Err(join_err)) => {
-                    error!(%vid, error = %join_err, "{log_prefix} writer task panicked");
-                    kill_and_reap(&mut child, &mut yt_child).await;
-                    return;
-                }
-                Err(_elapsed) => {
-                    warn!(%vid, "{log_prefix} download timed out ({}s), killing", DOWNLOAD_TIMEOUT_S);
-                    kill_and_reap(&mut child, &mut yt_child).await;
-                    return;
-                }
-            }
-            let status = child.wait().await;
-            if let Some(yt) = yt_child.as_mut() {
-                let _ = yt.wait().await;
-            }
-            match status {
-                Ok(s) if !s.success() => {
-                    debug!(%vid, code = exit_code_string(&s),
-                        "{log_prefix} exited with non-zero code (post-stream)");
-                    return;
-                }
-                Ok(_) => {
-                    if let Some(t0) = _t0 {
-                        debug!(%vid, elapsed = ?t0.elapsed(), "{log_prefix} completed successfully");
-                    }
-                }
-                Err(e) => {
-                    debug!(%vid, error = %e, "{log_prefix} wait failed");
-                    return;
-                }
-            }
-            let data = buf.finalize();
-            debug!(%vid, len = data.len(), "Caching completed download ({log_prefix})");
-            cache_put(vid, data);
+    };
+    match write_result {
+        Ok(()) => {}
+        Err(join_err) => {
+            error!(%vid, error = %join_err, "{log_prefix} writer task panicked");
+            kill_and_reap(&mut child, &mut yt_child).await;
+            return;
         }
     }
+    let status = child.wait().await;
+    if let Some(yt) = yt_child.as_mut() {
+        let _ = yt.wait().await;
+    }
+    match status {
+        Ok(s) if !s.success() => {
+            debug!(%vid, code = exit_code_string(&s),
+                "{log_prefix} exited with non-zero code (post-stream)");
+            return;
+        }
+        Ok(_) => {
+            if let Some(t0) = _t0 {
+                debug!(%vid, elapsed = ?t0.elapsed(), "{log_prefix} completed successfully");
+            }
+        }
+        Err(e) => {
+            debug!(%vid, error = %e, "{log_prefix} wait failed");
+            return;
+        }
+    }
+    let data = buf.finalize();
+    debug!(%vid, len = data.len(), "Caching completed download ({log_prefix})");
+    cache_put(vid, data);
 }
 
 /// Classify a yt-dlp stderr line as a *permanently* unavailable video
@@ -725,6 +759,37 @@ mod tests {
     use symphonia::core::io::MediaSourceStream;
 
     const TEST_WAV: &[u8] = include_bytes!("../../../../../ytmapi-rs/test_json/test_silence.wav");
+
+    #[test]
+    fn track_download_progress_growth_resets_stall() {
+        let start = Instant::now();
+        let (len, progress, stalled) =
+            track_download_progress(100, 200, start, Duration::from_secs(BG_STALL_TIMEOUT_S));
+        assert!(!stalled, "new bytes arriving means the download is alive");
+        assert_eq!(len, 200, "baseline must advance to the new length");
+        // Progress instant is reset: even with the baseline unchanged, a fresh
+        // timestamp means no stall yet.
+        let (_, _, stalled) =
+            track_download_progress(len, len, progress, Duration::from_secs(BG_STALL_TIMEOUT_S));
+        assert!(!stalled);
+    }
+
+    #[test]
+    fn track_download_progress_no_growth_within_stall_not_stalled() {
+        let now = Instant::now();
+        let (_, _, stalled) =
+            track_download_progress(100, 100, now, Duration::from_secs(BG_STALL_TIMEOUT_S));
+        assert!(!stalled, "no growth yet, but within the stall window");
+    }
+
+    #[test]
+    fn track_download_progress_no_growth_beyond_stall_reports_stalled() {
+        // Baseline untouched for longer than the stall window -> stuck.
+        let old = Instant::now() - Duration::from_secs(BG_STALL_TIMEOUT_S + 1);
+        let (_, _, stalled) =
+            track_download_progress(100, 100, old, Duration::from_secs(BG_STALL_TIMEOUT_S));
+        assert!(stalled, "zero progress beyond the stall window must be reported");
+    }
 
     // Tests touching the global BYTE_CACHE must run serially (they share the
     // same cache behind one Mutex, so parallel runs evict each other's entries).
