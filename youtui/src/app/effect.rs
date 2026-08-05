@@ -245,13 +245,9 @@ fn spawn_work<C: 'static>(
                 let _ = result_tx.send(TaskResult::Mutation(mutation));
             }
             Err(panic) => {
-                let msg = panic
-                    .downcast_ref::<&str>()
-                    .copied()
-                    .or_else(|| panic.downcast_ref::<String>().map(|s: &String| s.as_str()))
-                    .unwrap_or("unknown panic");
+                let msg = crate::core::panic_message(&panic);
                 error!("Background task panicked: {msg}");
-                let _ = result_tx.send(TaskResult::Panic(msg.to_string()));
+                let _ = result_tx.send(TaskResult::Panic(msg));
             }
         }
         if let Some(tid) = tid {

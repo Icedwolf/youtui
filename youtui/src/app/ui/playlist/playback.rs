@@ -1,4 +1,5 @@
 use super::*;
+use futures::FutureExt;
 
 pub fn playback_stream(
     server: crate::app::server::ArcServer,
@@ -658,35 +659,50 @@ Re-log into your browser, or refresh your cookie file / po_token, then restart."
                     });
                     let _ = tx.send(emit);
 
-                    match download_and_decode(crate::app::server::song_downloader::DownloadConfig {
-                        yt_dlp_command: yt_cmd,
-                        video_id: vid,
-                        po_token: pt,
-                        cookie_path: cp,
-                        cookie_header: ch,
-                        js_runtime: jr,
-                        cancel_token: (*cancel_token_for_stream).clone(),
-                    }).await {
-                        Ok(decoder) => {
+                    let result = std::panic::AssertUnwindSafe(
+                        download_and_decode(crate::app::server::song_downloader::DownloadConfig {
+                            yt_dlp_command: yt_cmd,
+                            video_id: vid,
+                            po_token: pt,
+                            cookie_path: cp,
+                            cookie_header: ch,
+                            js_runtime: jr,
+                            cancel_token: (*cancel_token_for_stream).clone(),
+                        }),
+                    )
+                    .catch_unwind()
+                    .await;
+
+                    let emit: MutationFn<Playlist> = match result {
+                        Ok(Ok(decoder)) => {
                             let decoder = Box::new(decoder)
                                 as Box<dyn Source<Item = f32> + Send>;
-                            let emit: MutationFn<Playlist> = Box::new(move |this: &mut Playlist| {
+                            Box::new(move |this: &mut Playlist| {
                                 this.handle_song_download_progress_update(
                                     DownloadProgressUpdate::Completed(decoder), song_id,
                                 )
-                            });
-                            let _ = tx.send(emit);
+                            })
                         }
-                        Err(e) => {
+                        Ok(Err(e)) => {
                             let err = e.to_string();
-                            let emit: MutationFn<Playlist> = Box::new(move |this: &mut Playlist| {
+                            Box::new(move |this: &mut Playlist| {
                                 this.handle_song_download_progress_update(
                                     DownloadProgressUpdate::Error(err), song_id,
                                 )
-                            });
-                            let _ = tx.send(emit);
+                            })
                         }
-                    }
+                        Err(panic) => {
+                            let msg = crate::core::panic_message(&panic);
+                            error!("download_and_decode panicked: {msg}");
+                            Box::new(move |this: &mut Playlist| {
+                                this.handle_song_download_progress_update(
+                                    DownloadProgressUpdate::Error(format!("download panicked: {msg}")),
+                                    song_id,
+                                )
+                            })
+                        }
+                    };
+                    let _ = tx.send(emit);
                 });
 
                 UnboundedReceiverStream::new(rx)

@@ -153,6 +153,19 @@ impl<T> PoisonRecovery for Result<T, PoisonError<T>> {
     }
 }
 
+/// Extract a readable message from a panic payload (the `Box<dyn Any + Send>`
+/// captured by `catch_unwind`). Must take the payload as `&Box`, not `&dyn Any`,
+/// because `downcast_ref` on a materialized `&(dyn Any + Send)` reference
+/// silently fails while auto-deref through the Box works.
+pub(crate) fn panic_message(payload: &Box<dyn std::any::Any + Send>) -> String {
+    payload
+        .downcast_ref::<&str>()
+        .copied()
+        .or_else(|| payload.downcast_ref::<String>().map(String::as_str))
+        .unwrap_or("unknown panic")
+        .to_string()
+}
+
 /// Get monotonically increasing file handles with prefix filename and ext
 /// fileext, but if there are more than max_files with this pattern, delete the
 /// lowest one first.
@@ -163,6 +176,21 @@ mod tests {
     use tempfile::TempDir;
     use tokio_stream::StreamExt;
     use tokio_stream::wrappers::ReadDirStream;
+
+    #[test]
+    fn panic_message_normalizes_panic_payload() {
+        use crate::core::panic_message;
+        let str_payload: Box<dyn std::any::Any + Send> =
+            std::panic::catch_unwind(|| panic!("boom")).unwrap_err();
+        assert_eq!(panic_message(&str_payload), "boom");
+
+        let owned_payload: Box<dyn std::any::Any + Send> =
+            std::panic::catch_unwind(|| panic!("{}", String::from("boom2"))).unwrap_err();
+        assert_eq!(panic_message(&owned_payload), "boom2");
+
+        let opaque: Box<dyn std::any::Any + Send> = Box::new(42u32);
+        assert_eq!(panic_message(&opaque), "unknown panic");
+    }
 
     #[tokio::test]
     async fn test_get_limited_sequential_file_has_correct_filename() {
