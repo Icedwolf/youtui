@@ -19,7 +19,7 @@ use server::Server;
 use std::borrow::Cow;
 use std::fmt::Display;
 use std::io;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use server::song_downloader;
@@ -402,24 +402,110 @@ fn cookie_export_needed(path: &Path) -> bool {
         .map_or(true, |age| age > COOKIE_EXPORT_TTL)
 }
 
-/// Run yt-dlp's cookie export. Returns `Err(stderr)` on a non-zero exit so the
-/// caller can report *why* the export failed (locked browser profile, wrong
-/// browser, unsupported DB, ...) instead of a bare "Failed". Writes to a
-/// sibling temp file so a failed/partial export can never corrupt the live
-/// cookie file.
-fn run_cookie_export(cmd: &str, browser: &str, dest: &Path) -> Result<(), String> {
-    let tmp = dest.with_extension("tmp");
+/// Run a single yt-dlp cookie export to `out`. Returns `Err(stderr)` on a
+/// non-zero exit and removes a partial output file so a failed attempt never
+/// leaves a corrupt half-export behind.
+fn run_one_cookie_export(cmd: &str, browser: &str, out: &Path) -> Result<(), String> {
     let output = std::process::Command::new(cmd)
         .args(["--ignore-config", "--cookies-from-browser", browser, "--cookies"])
-        .arg(&tmp)
+        .arg(out)
         .stdout(std::process::Stdio::null())
         .output()
         .map_err(|e| e.to_string())?;
     if !output.status.success() {
-        let _ = std::fs::remove_file(&tmp);
+        let _ = std::fs::remove_file(out);
         return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
     }
     Ok(())
+}
+
+/// Resolve the on-disk profile directory for a browser spec like
+/// `firefox:/home/u/.floorp/PROFILE`. Bare `firefox` (no path) resolves to the
+/// default profile via profiles.ini, mirroring `detect_browser_source`. Returns
+/// `None` when the profile cannot be located.
+fn resolve_profile_dir(browser: &str) -> Option<(String, PathBuf)> {
+    if let Some((name, path)) = browser.split_once(':') {
+        let dir = PathBuf::from(path);
+        return dir.join("cookies.sqlite").exists().then(|| (name.to_string(), dir));
+    }
+    if browser == "firefox" {
+        let home = PathBuf::from(std::env::var("HOME").ok()?);
+        for ini in [
+            home.join(".mozilla").join("firefox").join("profiles.ini"),
+            home.join(".config").join("mozilla").join("firefox").join("profiles.ini"),
+        ] {
+            if let Ok(content) = std::fs::read_to_string(&ini)
+                && let Some(parent) = ini.parent()
+            {
+                for line in content.lines() {
+                    if let Some(p) = line.strip_prefix("Path=") {
+                        let dir = parent.join(p.trim());
+                        if dir.join("cookies.sqlite").exists() {
+                            return Some((browser.to_string(), dir));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Export cookies from a copy of the profile's cookie database instead of the
+/// live one. The live DB is locked while the browser is running, but a copy is
+/// always readable, so yt-dlp can export signed-in cookies regardless of
+/// whether the browser is open. Returns the copy spec + its parent dir (to be
+/// removed by the caller), or `None` when the profile cannot be copied.
+fn copy_cookie_db_for_export(browser: &str) -> Option<(String, PathBuf)> {
+    let (name, profile_dir) = resolve_profile_dir(browser)?;
+    let src = profile_dir.join("cookies.sqlite");
+    if !src.exists() {
+        return None;
+    }
+    let task_dir = std::env::temp_dir().join(format!("youtui-cookies-{}", std::process::id()));
+    let db_dir = task_dir.join("profile");
+    if std::fs::create_dir_all(&db_dir).is_err() {
+        return None;
+    }
+    let mut copied = false;
+    for f in ["cookies.sqlite", "cookies.sqlite-wal", "cookies.sqlite-shm"] {
+        let p = profile_dir.join(f);
+        if p.exists() && std::fs::copy(&p, db_dir.join(f)).is_ok() {
+            copied = true;
+        }
+    }
+    if !copied {
+        let _ = std::fs::remove_dir_all(&task_dir);
+        return None;
+    }
+    Some((format!("{name}:{}", db_dir.display()), task_dir))
+}
+
+/// Run yt-dlp's cookie export. Returns `Err(stderr)` on a non-zero exit so the
+/// caller can report *why* the export failed (locked browser profile, wrong
+/// browser, unsupported DB, ...) instead of a bare "Failed". Writes to a
+/// sibling temp file so a failed/partial export can never corrupt the live
+/// cookie file. When the live profile DB is locked (browser running) or yields
+/// nothing, retries from a copy of the cookie database, which is never locked.
+fn run_cookie_export(cmd: &str, browser: &str, dest: &Path) -> Result<(), String> {
+    let tmp = dest.with_extension("tmp");
+    let direct_err = match run_one_cookie_export(cmd, browser, &tmp) {
+        Ok(()) if std::fs::metadata(&tmp).map(|m| m.len() > 0).unwrap_or(false) => return Ok(()),
+        Ok(()) => {
+            let _ = std::fs::remove_file(&tmp);
+            "export produced an empty file".to_string()
+        }
+        Err(e) => e,
+    };
+    if let Some((copied_browser, task_dir)) = copy_cookie_db_for_export(browser) {
+        let res = run_one_cookie_export(cmd, &copied_browser, &tmp);
+        let _ = std::fs::remove_dir_all(&task_dir);
+        match res {
+            Ok(()) if std::fs::metadata(&tmp).map(|m| m.len() > 0).unwrap_or(false) => return Ok(()),
+            _ => {}
+        }
+    }
+    Err(direct_err)
 }
 
 /// Export the browser's cookies to a Netscape file, reusing yt-dlp. Returns
@@ -562,6 +648,53 @@ mod tests {
         );
 
         std::fs::remove_file(&script).ok();
+    }
+
+    #[test]
+    fn run_cookie_export_falls_back_to_copied_profile_when_locked() {
+        use std::os::unix::fs::PermissionsExt;
+        // A fake Firefox profile whose cookies.sqlite exists but whose live DB
+        // "export" fails (simulates the locked-profile case: browser running).
+        let srcdir = std::env::temp_dir().join(format!("youtui_fake_profile_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&srcdir);
+        std::fs::create_dir_all(&srcdir).unwrap();
+        std::fs::write(srcdir.join("cookies.sqlite"), b"cookie-db-bytes").unwrap();
+
+        // Fake yt-dlp: fails when pointed at the original profile (locked), but
+        // succeeds when pointed at a copied profile (which the fallback makes).
+        let script = std::env::temp_dir().join(format!("youtui_copy_export_{}.sh", std::process::id()));
+        let orig = srcdir.to_str().unwrap();
+        std::fs::write(
+            &script,
+            format!(
+                "#!/bin/sh\nbr='' out='' nxt=''\nfor a in \"$@\"; do\n  if [ \"$nxt\" = browser ]; then br=\"$a\"; nxt=''; fi\n  if [ \"$nxt\" = cookies ]; then out=\"$a\"; nxt=''; fi\n  if [ \"$a\" = --cookies-from-browser ]; then nxt=browser; fi\n  if [ \"$a\" = --cookies ]; then nxt=cookies; fi\ndone\ncase \"$br\" in *{orig}*) exit 1;; esac\nprintf '.youtube.com\\tTRUE\\t/\\tTRUE\\t1819286662\\tSID\\tabc\\n' > \"$out\"\nexit 0\n",
+            ),
+        )
+        .unwrap();
+        let mut perms = std::fs::metadata(&script).unwrap().permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(&script, perms).unwrap();
+
+        let dest = std::env::temp_dir().join(format!("youtui_export_copy_{}.txt", std::process::id()));
+        let _ = std::fs::remove_file(&dest);
+        let browser = format!("firefox:{}", srcdir.display());
+
+        let res = run_cookie_export(script.to_str().unwrap(), &browser, &dest);
+        assert!(res.is_ok(), "copy fallback must recover from locked profile, got: {res:?}");
+        assert!(
+            std::fs::metadata(dest.with_extension("tmp"))
+                .map(|m| m.len() > 0)
+                .unwrap_or(false),
+            "fallback export must write a non-empty cookie file"
+        );
+
+        // The temp copy of the profile must be cleaned up afterwards.
+        let task_dir = std::env::temp_dir().join(format!("youtui-cookies-{}", std::process::id()));
+        assert!(!task_dir.exists(), "temporary profile copy must be removed");
+
+        std::fs::remove_file(&script).ok();
+        std::fs::remove_dir_all(&srcdir).ok();
+        std::fs::remove_file(&dest).ok();
     }
 
     #[test]
