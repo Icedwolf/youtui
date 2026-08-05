@@ -1,8 +1,17 @@
 # Youtui Backlog
 
 **Build:** 0 errors, 0 warnings, 0 clippy
-**Tests:** 560 youtui/ytmapi-rs passed + 20 ignored
+**Tests:** 561 youtui/ytmapi-rs passed + 20 ignored
 **Last updated:** 2026-08-05
+
+## Completed
+
+### Session 2026-08-05 — Review follow-up: empty-pipe classification, cookie-dir window
+
+Scrutiny of the day's commits surfaced and closed two issues:
+
+- **Classification dropped on zero-byte failure** — the empty-pipe patience loop checked `is_finished()` before `buffer.is_failed()`, so a source that *failed* with zero bytes (auth-blocked 18+, or permanently-dead video at download time) had its writer exit → generic `format not available (empty pipe)` bail. The buffer's dead-video/auth classification (set by the stderr handler) never surfaced: no auth notification, no auto-removal. Extracted `empty_pipe_verdict` (pure, priority: failed beats exited) + reordered via `1be3a2e`; regression test `empty_pipe_verdict_prioritizes_failed_over_exited`. Also dropped the misleading `"empty pipe after {DECODER_INIT_DEADLINE_S}s"` label (that branch isn't a timeout — the source just exited). Test count 560 → 561.
+- **Cookie-dir created world-readable pre-lockdown** — `copy_cookie_db_for_export` still created `youtui-cookies-{pid}` at 0755 then locked it down *after* copying, leaving a (microsecond) window where the SID copy sits in world-readable `/tmp`. Now the dirs are built at 0700 up-front (`DirBuilder::mode(0o700)`), and a chmod failure logs a warning instead of being swallowed (`1e13efe`).
 
 ## Completed
 
