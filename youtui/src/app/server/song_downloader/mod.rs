@@ -21,6 +21,12 @@ const READ_BUF_SIZE: usize = 64 * 1024;
 const STREAM_INIT_THRESHOLD: usize = 512;
 const DOWNLOAD_TIMEOUT_S: u64 = 120;
 const DECODER_INIT_DEADLINE_S: u64 = 5;
+/// Additional patience granted when a source has produced ZERO bytes by the
+/// init deadline but its pipe is still open. A source that already exited is
+/// dead/unavailable (bail immediately), but one that is still running may just
+/// be slow to deliver its first byte (cold TLS, throttled start) — a playable
+/// song must not be skipped because the first byte took >5s to arrive.
+const EMPTY_PIPE_PATIENCE_S: u64 = 20;
 /// Poll interval for background download progress tracking.
 const BG_PROGRESS_POLL_MS: u64 = 1000;
 /// A background (post-playback) download is killed only when it makes NO
@@ -491,18 +497,69 @@ async fn ytdlp_pipeline(
         }
         let current = buffer.len();
         if current == 0 {
-            // A cached URL that has died server-side yields zero bytes while
-            // ffmpeg's (nulled) stderr never marks the buffer failed. Evict it
-            // so the retry re-resolves instead of looping on the same dead URL.
-            if from_url_cache {
-                resolve::url_cache_remove(&cfg.video_id);
+            // A source that has already exited without emitting a byte is dead
+            // or unavailable (dead cached URL, format gone). Evict a cached URL
+            // so the retry re-resolves. But a source that is still running may
+            // simply be slow to produce its first byte; skipping a playable
+            // song because it warmed up slowly is worse than waiting, so keep
+            // polling until it exits, produces data, fails, is cancelled, or
+            // the patience window elapses.
+            let empty_pipe_deadline =
+                tokio::time::Instant::now() + std::time::Duration::from_secs(EMPTY_PIPE_PATIENCE_S);
+            loop {
+                if stdout_handle.is_finished() {
+                    if from_url_cache {
+                        resolve::url_cache_remove(&cfg.video_id);
+                    }
+                    debug!(%cfg.video_id, elapsed = ?t0.elapsed(),
+                        "Source exited with an empty pipe ({}s)",
+                        DECODER_INIT_DEADLINE_S);
+                    bail!(
+                        "format not available (empty pipe after {}s)",
+                        DECODER_INIT_DEADLINE_S
+                    );
+                }
+                if buffer.len() > 0 {
+                    break;
+                }
+                if buffer.is_failed() {
+                    break;
+                }
+                if cfg.cancel_token.is_cancelled() {
+                    bail!("download cancelled during empty-pipe wait");
+                }
+                if tokio::time::Instant::now() >= empty_pipe_deadline {
+                    if from_url_cache {
+                        resolve::url_cache_remove(&cfg.video_id);
+                    }
+                    debug!(%cfg.video_id, elapsed = ?t0.elapsed(),
+                        "Empty pipe persisted {}s — treating as unavailable",
+                        EMPTY_PIPE_PATIENCE_S);
+                    bail!(
+                        "format not available (empty pipe after {}s)",
+                        EMPTY_PIPE_PATIENCE_S
+                    );
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
             }
-            debug!(%cfg.video_id, elapsed = ?t0.elapsed(),
-                "No data after {}s, format may be unavailable — bailing early", DECODER_INIT_DEADLINE_S);
-            bail!(
-                "format not available (empty pipe after {}s)",
-                DECODER_INIT_DEADLINE_S
-            );
+            if buffer.is_failed() {
+                if buffer.is_dead_video() {
+                    debug!(%cfg.video_id, "Video unavailable (permanently dead), bailing early");
+                    bail!("video unavailable (yt-dlp error)");
+                }
+                if buffer.is_auth_error() {
+                    warn!(%cfg.video_id,
+                        "Auth error during empty-pipe wait (stale cookies?), bailing early");
+                    bail!("authentication error (stale cookies)");
+                }
+                let reason = if from_url_cache { "ffmpeg" } else { "yt-dlp" };
+                if from_url_cache {
+                    resolve::url_cache_remove(&cfg.video_id);
+                }
+                debug!(%cfg.video_id, elapsed = ?t0.elapsed(),
+                    "{reason} failed during empty-pipe wait — bailing early");
+                bail!("format not available ({reason} error)");
+            }
         }
         let stream_type = if from_url_cache {
             "url-cache→ffmpeg→wav"
