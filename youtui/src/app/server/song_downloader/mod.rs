@@ -148,6 +148,42 @@ fn track_download_progress(
     }
 }
 
+#[derive(Debug, PartialEq)]
+enum EmptyPipeVerdict {
+    Break,
+    SourceExited,
+    Cancelled,
+    PatienceElapsed,
+    Wait,
+}
+
+/// Decide the next step of the empty-pipe patience loop from its observable
+/// conditions. Priority order matters: a **failed** buffer wins over a finished
+/// source, so a source that failed with zero bytes (dead video / auth error,
+/// classified on the buffer by the stderr handler) breaks into the post-loop
+/// classification and surfaces the specific error — not a generic empty-pipe
+/// bail that would drop the notification and skip the auto-removal.
+#[allow(clippy::too_many_arguments)]
+fn empty_pipe_verdict(
+    has_bytes: bool,
+    source_exited: bool,
+    buffer_failed: bool,
+    cancelled: bool,
+    patience_elapsed: bool,
+) -> EmptyPipeVerdict {
+    if has_bytes || buffer_failed {
+        EmptyPipeVerdict::Break
+    } else if source_exited {
+        EmptyPipeVerdict::SourceExited
+    } else if cancelled {
+        EmptyPipeVerdict::Cancelled
+    } else if patience_elapsed {
+        EmptyPipeVerdict::PatienceElapsed
+    } else {
+        EmptyPipeVerdict::Wait
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn spawn_bg_cache_task(
     vid: String,
@@ -510,40 +546,42 @@ async fn ytdlp_pipeline(
             let empty_pipe_deadline =
                 tokio::time::Instant::now() + std::time::Duration::from_secs(EMPTY_PIPE_PATIENCE_S);
             loop {
-                if buffer.len() > 0 {
-                    break;
-                }
-                if stdout_handle.is_finished() {
-                    if from_url_cache {
-                        resolve::url_cache_remove(&cfg.video_id);
+                let verdict = empty_pipe_verdict(
+                    buffer.len() > 0,
+                    stdout_handle.is_finished(),
+                    buffer.is_failed(),
+                    cfg.cancel_token.is_cancelled(),
+                    tokio::time::Instant::now() >= empty_pipe_deadline,
+                );
+                match verdict {
+                    EmptyPipeVerdict::Break => break,
+                    EmptyPipeVerdict::SourceExited => {
+                        if from_url_cache {
+                            resolve::url_cache_remove(&cfg.video_id);
+                        }
+                        debug!(%cfg.video_id, elapsed = ?t0.elapsed(),
+                            "Source exited with an empty pipe");
+                        bail!("format not available (source exited, empty pipe)");
                     }
-                    debug!(%cfg.video_id, elapsed = ?t0.elapsed(),
-                        "Source exited with an empty pipe ({}s)",
-                        DECODER_INIT_DEADLINE_S);
-                    bail!(
-                        "format not available (empty pipe after {}s)",
-                        DECODER_INIT_DEADLINE_S
-                    );
-                }
-                if buffer.is_failed() {
-                    break;
-                }
-                if cfg.cancel_token.is_cancelled() {
-                    bail!("download cancelled during empty-pipe wait");
-                }
-                if tokio::time::Instant::now() >= empty_pipe_deadline {
-                    if from_url_cache {
-                        resolve::url_cache_remove(&cfg.video_id);
+                    EmptyPipeVerdict::Cancelled => {
+                        bail!("download cancelled during empty-pipe wait");
                     }
-                    debug!(%cfg.video_id, elapsed = ?t0.elapsed(),
-                        "Empty pipe persisted {}s — treating as unavailable",
-                        EMPTY_PIPE_PATIENCE_S);
-                    bail!(
-                        "format not available (empty pipe after {}s)",
-                        EMPTY_PIPE_PATIENCE_S
-                    );
+                    EmptyPipeVerdict::PatienceElapsed => {
+                        if from_url_cache {
+                            resolve::url_cache_remove(&cfg.video_id);
+                        }
+                        debug!(%cfg.video_id, elapsed = ?t0.elapsed(),
+                            "Empty pipe persisted {}s — treating as unavailable",
+                            EMPTY_PIPE_PATIENCE_S);
+                        bail!(
+                            "format not available (empty pipe after {}s)",
+                            EMPTY_PIPE_PATIENCE_S
+                        );
+                    }
+                    EmptyPipeVerdict::Wait => {
+                        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                    }
                 }
-                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
             }
             if buffer.is_failed() {
                 if buffer.is_dead_video() {
@@ -840,6 +878,22 @@ mod tests {
         let (_, _, stalled) =
             track_download_progress(100, 100, now, Duration::from_secs(BG_STALL_TIMEOUT_S));
         assert!(!stalled, "no growth yet, but within the stall window");
+    }
+
+    #[test]
+    fn empty_pipe_verdict_prioritizes_failed_over_exited() {
+        use EmptyPipeVerdict::*;
+        // Data present → proceed regardless of source state.
+        assert_eq!(empty_pipe_verdict(true, true, false, false, false), Break);
+        // A source that FAILED with zero bytes must break into classification
+        // (dead video / auth), NOT be swallowed as a generic empty pipe. This
+        // is the regression guard for the empty-pipe patience-loop fix.
+        assert_eq!(empty_pipe_verdict(false, true, true, false, false), Break);
+        // Exited-but-not-failed, still empty → genuinely dead pipe.
+        assert_eq!(empty_pipe_verdict(false, true, false, false, false), SourceExited);
+        assert_eq!(empty_pipe_verdict(false, false, false, true, false), Cancelled);
+        assert_eq!(empty_pipe_verdict(false, false, false, false, true), PatienceElapsed);
+        assert_eq!(empty_pipe_verdict(false, false, false, false, false), Wait);
     }
 
     #[test]
