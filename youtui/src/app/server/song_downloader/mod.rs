@@ -330,13 +330,16 @@ async fn ytdlp_pipeline(
     stream_url: Option<String>,
 ) -> anyhow::Result<SymphoniaDecoder> {
     let from_url_cache = stream_url.is_some();
-    let is_wav = ffmpeg_avail || from_url_cache;
+    // WAV transcoding requires ffmpeg; without it the pipeline must use the
+    // direct M4A path even when a (webm) URL resolved, since symphonia cannot
+    // decode Opus in a webm container.
+    let is_wav = ffmpeg_avail;
 
     let buffer = SharedBuffer::new();
     let writer = buffer.writer();
 
     let (_stderr_handle, stdout_handle, mut child, _relay_handle, mut yt_child) =
-        if let Some(url) = &stream_url {
+        if ffmpeg_avail && let Some(url) = &stream_url {
             let mut ffmpeg = tokio::process::Command::new("ffmpeg");
             ffmpeg
                 .args([
@@ -507,6 +510,9 @@ async fn ytdlp_pipeline(
             let empty_pipe_deadline =
                 tokio::time::Instant::now() + std::time::Duration::from_secs(EMPTY_PIPE_PATIENCE_S);
             loop {
+                if buffer.len() > 0 {
+                    break;
+                }
                 if stdout_handle.is_finished() {
                     if from_url_cache {
                         resolve::url_cache_remove(&cfg.video_id);
@@ -518,9 +524,6 @@ async fn ytdlp_pipeline(
                         "format not available (empty pipe after {}s)",
                         DECODER_INIT_DEADLINE_S
                     );
-                }
-                if buffer.len() > 0 {
-                    break;
                 }
                 if buffer.is_failed() {
                     break;
@@ -566,7 +569,7 @@ async fn ytdlp_pipeline(
         } else {
             "ffmpeg→wav"
         };
-        debug!(%cfg.video_id, stream_type, buf_len = current, elapsed = ?t0.elapsed(),
+        debug!(%cfg.video_id, stream_type, buf_len = buffer.len(), elapsed = ?t0.elapsed(),
             "Trying early decoder init");
 
         match try_streaming_init(&buffer, None).await {
