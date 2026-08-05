@@ -86,7 +86,7 @@ fn extract_cookie_header(api_key: &crate::config::ApiKey) -> Option<String> {
 /// exports carry only `VISITOR_INFO1_LIVE`/`__Secure-YEC` etc., which are not
 /// enough for authenticated API calls — an export without one of these must
 /// not shadow the manual login header.
-const AUTH_COOKIE_NAMES: [&str; 6] = [
+pub(crate) const AUTH_COOKIE_NAMES: [&str; 6] = [
     "SID",
     "__Secure-1PSID",
     "__Secure-3PSID",

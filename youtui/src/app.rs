@@ -142,6 +142,16 @@ impl Youtui {
         } else {
             (None, false)
         };
+        match &cookie_path {
+            Some(cp) if server::song_downloader::resolve::file_has_auth_cookie(cp) => {
+                info!(path = %cp.display(), "auth: signed-in (browser cookies)")
+            }
+            Some(cp) => info!(
+                path = %cp.display(),
+                "auth: browser cookies are guest-only (no signed-in session)"
+            ),
+            None => info!("auth: no browser detected — guest"),
+        }
 
         // Setup components
         let task_manager = effect::TaskManager::<YoutuiWindow>::new();

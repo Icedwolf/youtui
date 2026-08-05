@@ -1,8 +1,21 @@
 # Youtui Backlog
 
 **Build:** 0 errors, 0 warnings, 0 clippy
-**Tests:** 557 youtui/ytmapi-rs passed + 20 ignored
+**Tests:** 559 youtui/ytmapi-rs passed + 20 ignored
 **Last updated:** 2026-08-05
+
+## Completed
+
+### Session 2026-08-05 — Review follow-up: auth consistency, patience ordering, M4A reachability
+
+Follow-up review of the day's fixes surfaced and closed four issues:
+
+- **yt-dlp auth shadowing (18+ skips when the export is guest)** — `apply_ytdlp_auth_args` passed `--cookies <file>` on non-empty alone, so a guest/stale Netscape file shadowed the `--add-header` fallback. The API client (`server::resolve_cookie_header`) was already auth-aware; yt-dlp is now too: `file_has_auth_cookie` (shares the `AUTH_COOKIE_NAMES` set with server.rs) gates `--cookies`, falling back to the header. Two new tests (`guest_cookie_file_falls_back_to_header`, `signed_in_cookie_file_uses_cookies_arg`).
+- **Patience-loop ordering** — the empty-pipe loop checked `is_finished()` before `buffer.len() > 0`, so a source that wrote bytes then exited was mislabeled "empty pipe". Produced-bytes now wins. Also fixed a stale `buf_len = current` (0) in the init debug line.
+- **M4A fallback unreachable without ffmpeg** — `is_wav = ffmpeg_avail || from_url_cache` plus an unguarded ffmpeg-spawn branch meant a no-ffmpeg system with a resolved (webm) URL tried `ffmpeg.spawn()` and failed; the documented M4A fallback only ran when resolve failed. `is_wav = ffmpeg_avail` + the URL branch is now gated on ffmpeg.
+- **Startup auth-state log** — `auth: signed-in|guest-only|no browser` line after cookie resolution, so 18+ skips are diagnosable from logs.
+
+Verified live: export → SID-bearing file → `file_has_auth_cookie` true → full app-args resolve returns `itag=251 audio/webm`.
 
 ## Completed
 

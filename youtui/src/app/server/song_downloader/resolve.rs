@@ -56,6 +56,27 @@ pub(crate) fn is_nonempty_cookie_file(path: &Path) -> bool {
     }
 }
 
+/// True when a Netscape cookies file actually carries a signed-in YouTube
+/// session (one of `AUTH_COOKIE_NAMES` in its name column). A non-empty guest
+/// export (`VISITOR_INFO1_LIVE`, `__Secure-YEC`, ...) adds nothing over an
+/// anonymous run — and must not shadow a manual auth header, mirroring
+/// `server::resolve_cookie_header`'s auth-aware decision for the API client.
+pub(crate) fn file_has_auth_cookie(path: &Path) -> bool {
+    let Ok(content) = std::fs::read_to_string(path) else {
+        return false;
+    };
+    let auth = crate::app::server::AUTH_COOKIE_NAMES;
+    for line in content.lines() {
+        // Netscape: domain<TAB>flag<TAB>path<TAB>secure<TAB>expiry<TAB>name<TAB>value
+        if let Some(name) = line.split('\t').nth(5)
+            && auth.contains(&name)
+        {
+            return true;
+        }
+    }
+    false
+}
+
 pub fn apply_ytdlp_auth_args(
     cmd: &mut tokio::process::Command,
     po_token: Option<&str>,
@@ -64,9 +85,9 @@ pub fn apply_ytdlp_auth_args(
     js_runtime: Option<&str>,
     video_id: &str,
 ) {
-    // Ignore yt-dlp's own config files (~/.config/yt-dlp/config etc). A
-    // zero-byte --cookies entry there hard-fails every download; youtui owns
-    // the full argument list and must not inherit broken host config.
+// Ignore yt-dlp's own config files (~/.config/yt-dlp/config etc). A
+    // zero-byte `--cookies` entry there would hard-fail every download; youtui
+    // owns the full argument list and must not inherit broken host config.
     cmd.arg("--ignore-config");
     let skip = "hls,translated_subs";
     let extractor_args = match po_token {
@@ -75,10 +96,13 @@ pub fn apply_ytdlp_auth_args(
     };
     cmd.arg("--extractor-args");
     cmd.arg(&extractor_args);
-    // Only pass --cookies when the file actually exists and has content. An
-    // empty or missing cookie file makes yt-dlp hard-fail every download, so
-    // never let a bad export disable playback — fall back to header/unauth.
-    if let Some(cp) = cookie_path.filter(|cp| is_nonempty_cookie_file(cp)) {
+    // Pass --cookies only for a file that exists, has content, AND holds a
+    // signed-in session. A non-empty but guest/stale file must not shadow the
+    // manual auth header (or degrade playback — yt-dlp aborts on a malformed
+    // --cookies file). Fall back to the header, then to neither.
+    if let Some(cp) = cookie_path
+        .filter(|cp| is_nonempty_cookie_file(cp) && file_has_auth_cookie(cp))
+    {
         cmd.arg("--cookies");
         cmd.arg(cp);
     } else if let Some(ch) = cookie_header {
@@ -269,6 +293,83 @@ mod tests {
 
         std::fs::remove_file(&empty).ok();
         std::fs::remove_file(&full).ok();
+    }
+
+    #[test]
+    fn guest_cookie_file_falls_back_to_header() {
+        use tokio::process::Command;
+        // A non-empty but guest-only export (no SID family) must NOT produce
+        // `--cookies`: it shadows a manual auth header for zero benefit and
+        // would silently drop 18+ playback. The header must win instead.
+        let guest = unique_tmp("guest_cookies");
+        std::fs::write(
+            &guest,
+            ".youtube.com\tTRUE\t/\tTRUE\t1801487197\tVISITOR_INFO1_LIVE\togWC2WQgc2A\n",
+        )
+        .expect("write guest cookie file");
+
+        let mut cmd = Command::new("yt-dlp");
+        apply_ytdlp_auth_args(
+            &mut cmd,
+            None,
+            Some(&guest),
+            Some("SID=manual-signed-in; x=y"),
+            None,
+            "dQw4w9WgXcQ",
+        );
+        let args: Vec<String> = cmd
+            .as_std()
+            .get_args()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect();
+        assert!(
+            !args.windows(2).any(|w| w[0] == "--cookies"),
+            "guest-only file must not be passed as --cookies: {args:?}"
+        );
+        assert!(
+            args.windows(2)
+                .any(|w| w[0] == "--add-header" && w[1].contains("SID=manual-signed-in")),
+            "manual auth header must be used when the file is guest-only: {args:?}"
+        );
+        std::fs::remove_file(&guest).ok();
+    }
+
+    #[test]
+    fn signed_in_cookie_file_uses_cookies_arg() {
+        use tokio::process::Command;
+        // A file carrying a signed-in session is the preferred auth source:
+        // `--cookies` wins over the manual header.
+        let signed = unique_tmp("signed_cookies");
+        std::fs::write(
+            &signed,
+            ".youtube.com\tTRUE\t/\tTRUE\t1820496362\t__Secure-1PSID\tabc.signed\n",
+        )
+        .expect("write signed-in cookie file");
+
+        let mut cmd = Command::new("yt-dlp");
+        apply_ytdlp_auth_args(
+            &mut cmd,
+            None,
+            Some(&signed),
+            Some("SID=manual-header"),
+            None,
+            "dQw4w9WgXcQ",
+        );
+        let args: Vec<String> = cmd
+            .as_std()
+            .get_args()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect();
+        assert!(
+            args.windows(2)
+                .any(|w| w[0] == "--cookies" && w[1] == signed.to_str().unwrap()),
+            "signed-in file must be passed as --cookies: {args:?}"
+        );
+        assert!(
+            !args.windows(2).any(|w| w[0] == "--add-header"),
+            "manual header must not override a signed-in file: {args:?}"
+        );
+        std::fs::remove_file(&signed).ok();
     }
 
     #[test]
