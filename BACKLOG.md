@@ -1,10 +1,15 @@
 # Youtui Backlog
 
 **Build:** 0 errors, 0 warnings, 0 clippy
-**Tests:** 553 youtui/ytmapi-rs passed + 20 ignored
-**Last updated:** 2026-08-04
+**Tests:** 557 youtui/ytmapi-rs passed + 20 ignored
+**Last updated:** 2026-08-05
 
 ## Completed
+
+### Session 2026-08-05 — Auth was silently broken; slow-start songs falsely skipped
+
+- **Cookie export never worked (root cause of every 18+/age-restricted skip)** — `run_one_cookie_export` invoked `yt-dlp --cookies-from-browser <browser> --cookies <out>` with **no URL**, so yt-dlp always errored `You must provide at least one URL` and the export left a 0-byte file. Auth therefore never reached yt-dlp in-app; the copy-profile fallback (`1154fdc`) was unreachable because the direct attempt always failed first. Fixed (`023578a`): point the export at a fast-failing probe URL `https://cookie-export.invalid/` (RFC-2606 `.invalid` never resolves; yt-dlp dumps cookies at startup *before* URL validation), and change success from `exit code == 0` to **non-empty cookie file** (the probe URL's own extraction can fail — storyboards only — while the cookies were already written). Verified live: 1398-line Netscape export with SID from the running Floorp profile, and from a copied `cookies.sqlite` fallback. (The original `is_nonempty_cookie_file` + `--add-header` auth was fine all along — the export feeding it was the broken half.)
+- **Playable songs skipped (slow start, not dead pipe)** — log `debug302.log`: `F_Utndr52QA ... format not available (empty pipe after 5s)`, then played fine on the press. A fresh resolve is valid but can take >5s to deliver its first 512 bytes (cold TLS, throttled start); the old empty-pipe bail at `DECODER_INIT_DEADLINE_S = 5s` treated that as a dead pipe. Fixed (`8c089e7`): the bail now checks `stdout_handle.is_finished()` — a source that **already exited** is dead/unavailable (bail + evict), while one **still running** is given `EMPTY_PIPE_PATIENCE_S = 20s` more for the first byte before being called empty. A song that needs a slow first byte is now waited on, not skipped.
 
 ### Session 2026-08-04 — Skip-loop fix, API drift tolerance, cookie-export hardening
 
