@@ -12,6 +12,7 @@ Diagnosis of a live "looped skipped/removed all the songs" report (debug304.log,
 
 - **Systemic failure drained the whole queue** — 2376 × `error=spawn yt-dlp` across one session: the OS refused to exec new processes (fd/pid/mem limits all healthy afterward — a transient system-wide exec failure). Every buffering failure called `handle_set_to_error` → `play_next_or_stop` → next download → fail, walking the entire playlist off with no visible reason. Fixed (`69cef25`): a `consecutive_download_failures` counter — incremented on every non-cancellation failure of the currently-buffering song, reset on any successful `Completed`. At `HALT_AFTER_CONSECUTIVE_FAILURES = 5` the player halts (`NotPlaying`), clears the queue, and fires one "Download Failures" notification instead of draining the list. Tests written fail-first: `repeated_transient_failures_halt_instead_of_draining` (failed before — advanced to `Buffering(5)`), plus `transient_errors_below_threshold_still_advance` and `successful_download_resets_failure_counter` guards. Test count 561 → 564.
 - **Resolve spawn errors were silent** — `resolve.rs` swallowed the `io::Error` from `cmd.spawn()` (`Err(_) => Failed`), so a systemic spawn failure surfaced only as the pipeline's cryptic `spawn yt-dlp` fallback. Now `warn!`s the actual io error (`2ebbf55`), making the next occurrence self-diagnosing. Next time the OS exec fails, the log says *which* error (EMFILE/EAGAIN/ENOMEM/ENOENT).
+- **Pipeline dedup + audit** (`bbabbd8`) — three duplicated patterns collapsed into helpers: `evict_cached_url` (7× `if from_url_cache { url_cache_remove }`), `bail_failed_buffer` (2× dead/auth/generic failure-classify blocks), `build_ytdlp_command` (2× yt-dlp `Command` + auth-args). Streaming confirmed: WAV is true streaming (decoder init at 512B of a growing buffer); the M4A full-download path is the no-ffmpeg fallback only. Startup-latency deep dive: ffmpeg `-probesize`/`-analyzeduration`/`-vn` measured **no gain** (~120ms floor regardless — `-fflags nobuffer` already neutralizes probing, dominant cost is resolve + first-chunk network fetch), so **no flag change added**. No per-chunk allocation/noise (bg stall poll = 1s; no `Downloading(%)` spam). Tests remaining 564-green.
 
 ### Session 2026-08-05 — Review follow-up: empty-pipe classification, cookie-dir window
 
@@ -82,7 +83,7 @@ Verified live: export → SID-bearing file → `file_has_auth_cookie` true → f
 
 ### P2 — Code Quality
 
-- **P2.1** — Remove dead `decoder_integration_test.rs` (coverage subsumed by song_downloader tests).
+- **P2.1** — Remove dead `decoder_integration_test.rs` ✅ DONE (file already absent; backlog entry stale)
 - **P2.2** — Deduplicate code generators: deleted `gen_output.rs` + `gen_output/`, kept `gen_expected.rs`.
 - **P2.3** — English-only browser UA check: removed `contains` on localized YouTube error message. INNERTUBE_CLIENT_VERSION fallback works for all locales. Removed dead `InvalidUserAgent` error variant.
 - **P2.4** — `type_name::<A>()` → short type names via `rsplit("::")`. Added `short_type_name` helper in `error.rs`.
