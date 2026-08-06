@@ -334,6 +334,22 @@ fn spawn_stderr_handler(
     })
 }
 
+/// Logs every ffmpeg stderr line. ffmpeg runs with `-loglevel error`, so it
+/// prints nothing on success and only real diagnostics on failure — the line
+/// logged just before an empty-pipe bail names the actual cause (bad/cached
+/// URL, codec, auth block). Read-only: never touches the buffer, so it cannot
+/// change stream behaviour — it only makes failures self-diagnosing.
+fn spawn_ffmpeg_stderr_handler(stderr: tokio::process::ChildStderr) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
+        use tokio::io::AsyncBufReadExt;
+        let reader = tokio::io::BufReader::new(stderr);
+        let mut lines = reader.lines();
+        while let Ok(Some(line)) = lines.next_line().await {
+            warn!(stderr_line = %line.trim(), "ffmpeg stderr (error)");
+        }
+    })
+}
+
 fn spawn_stdout_writer(
     reader: tokio::process::ChildStdout,
     mut writer: SharedBufferWriter,
@@ -466,14 +482,21 @@ async fn ytdlp_pipeline(
                     "pipe:1",
                 ])
                 .stdout(std::process::Stdio::piped())
-                .stderr(std::process::Stdio::null())
+                .stderr(std::process::Stdio::piped())
                 .kill_on_drop(true);
             let mut child = ffmpeg.spawn().context("spawn ffmpeg (stream_url)")?;
             let ffmpeg_stdout = child.stdout.take().context("no ffmpeg stdout")?;
+            let ffmpeg_stderr = child.stderr.take().context("no ffmpeg stderr")?;
 
             let write_handle = spawn_stdout_writer(ffmpeg_stdout, writer, "ffmpeg (stream_url)");
 
-            (tokio::spawn(async {}), write_handle, child, None, None)
+            (
+                spawn_ffmpeg_stderr_handler(ffmpeg_stderr),
+                write_handle,
+                child,
+                None,
+                None,
+            )
         } else if ffmpeg_avail {
             let mut yt_cmd = build_ytdlp_command(cfg, "ba/bestaudio");
             yt_cmd.stdout(std::process::Stdio::piped());
@@ -512,11 +535,13 @@ async fn ytdlp_pipeline(
                 ])
                 .stdin(std::process::Stdio::piped())
                 .stdout(std::process::Stdio::piped())
-                .stderr(std::process::Stdio::null())
+                .stderr(std::process::Stdio::piped())
                 .kill_on_drop(true);
             let mut ffmpeg_child = ffmpeg.spawn().context("spawn ffmpeg")?;
             let mut ffmpeg_stdin = ffmpeg_child.stdin.take().context("no ffmpeg stdin")?;
             let ffmpeg_stdout = ffmpeg_child.stdout.take().context("no ffmpeg stdout")?;
+            let ffmpeg_stderr = ffmpeg_child.stderr.take().context("no ffmpeg stderr")?;
+            let _ffmpeg_stderr_handle = spawn_ffmpeg_stderr_handler(ffmpeg_stderr);
 
             let relay = tokio::spawn(async move {
                 use tokio::io::{AsyncReadExt, AsyncWriteExt};
