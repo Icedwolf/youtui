@@ -338,8 +338,8 @@ mod state_transitions {
         DownloadStatus, ListSong, ListSongID, ListStatus, Percentage, PlayState,
     };
     use crate::app::ui::playlist::{
-        DownloadProgressUpdate, Playlist, PlaylistAction, QueueState, is_auth_error,
-        is_dead_video_error,
+        DownloadProgressUpdate, HALT_AFTER_CONSECUTIVE_FAILURES, Playlist, PlaylistAction,
+        QueueState, is_auth_error, is_dead_video_error,
     };
     use crate::app::view::HasTitle;
     use pretty_assertions::assert_eq;
@@ -463,6 +463,83 @@ mod state_transitions {
         // queue — it is a login problem, not a dead video.
         assert_eq!(p.list.get_list_iter().count(), 2);
         assert!(p.get_index_from_id(ListSongID(0)).is_some());
+    }
+
+    #[test]
+    fn repeated_transient_failures_halt_instead_of_draining() {
+        let n = HALT_AFTER_CONSECUTIVE_FAILURES as usize + 5;
+        let mut p = downloaded_songs(n);
+        p.set_notifications_enabled(false);
+        for i in 0..HALT_AFTER_CONSECUTIVE_FAILURES as usize {
+            p.play_status = PlayState::Buffering(ListSongID(i));
+            let _effect = p.handle_song_download_progress_update(
+                DownloadProgressUpdate::Error("HTTP Error 429: Too Many Requests".to_string()),
+                ListSongID(i),
+            );
+        }
+        // A systemic failure must halt the player instead of walking the queue.
+        assert_eq!(p.play_status, PlayState::NotPlaying);
+        assert_eq!(p.queue_status, QueueState::NotQueued);
+        assert_eq!(
+            p.list.get_list_iter().count(),
+            n,
+            "transient failures must never remove songs"
+        );
+    }
+
+    #[test]
+    fn transient_errors_below_threshold_still_advance() {
+        let mut p = downloaded_songs(HALT_AFTER_CONSECUTIVE_FAILURES as usize + 5);
+        p.set_notifications_enabled(false);
+        for i in 0..(HALT_AFTER_CONSECUTIVE_FAILURES as usize - 1) {
+            p.play_status = PlayState::Buffering(ListSongID(i));
+            let _effect = p.handle_song_download_progress_update(
+                DownloadProgressUpdate::Error("HTTP Error 429: Too Many Requests".to_string()),
+                ListSongID(i),
+            );
+        }
+        // Just below the threshold the player keeps advancing.
+        assert_eq!(
+            p.play_status,
+            PlayState::Buffering(ListSongID(HALT_AFTER_CONSECUTIVE_FAILURES as usize - 1))
+        );
+    }
+
+    #[test]
+    fn successful_download_resets_failure_counter() {
+        let mut p = downloaded_songs(HALT_AFTER_CONSECUTIVE_FAILURES as usize * 2);
+        p.set_notifications_enabled(false);
+
+        for i in 0..2usize {
+            p.play_status = PlayState::Buffering(ListSongID(i));
+            let _effect = p.handle_song_download_progress_update(
+                DownloadProgressUpdate::Error("HTTP Error 429: Too Many Requests".to_string()),
+                ListSongID(i),
+            );
+        }
+
+        // A success resets the run, so the count restarts from zero.
+        p.play_status = PlayState::NotPlaying;
+        let _effect = p.handle_song_download_progress_update(
+            DownloadProgressUpdate::Completed(Box::new(
+                rodio::buffer::SamplesBuffer::new(
+                    std::num::NonZeroU16::new(1).unwrap(),
+                    std::num::NonZeroU32::new(44100).unwrap(),
+                    vec![0.0f32; 4410],
+                ),
+            )),
+            ListSongID(2),
+        );
+
+        // Two failures after the success are still below the threshold.
+        for i in 3..5usize {
+            p.play_status = PlayState::Buffering(ListSongID(i));
+            let _effect = p.handle_song_download_progress_update(
+                DownloadProgressUpdate::Error("HTTP Error 429: Too Many Requests".to_string()),
+                ListSongID(i),
+            );
+        }
+        assert_eq!(p.play_status, PlayState::Buffering(ListSongID(5)));
     }
 
     #[test]

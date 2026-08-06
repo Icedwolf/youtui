@@ -70,6 +70,11 @@ fn is_auth_error(msg: &str) -> bool {
 /// not spam one popup per song.
 const AUTH_ERROR_NOTIF_COOLDOWN: Duration = Duration::from_secs(30);
 
+/// After this many consecutive download failures of the currently-buffering
+/// song, halt playback instead of walking the whole queue (a systemic failure
+/// like a dead yt-dlp or exhausted resources would otherwise drain the list).
+const HALT_AFTER_CONSECUTIVE_FAILURES: u8 = 5;
+
 pub enum DownloadProgressUpdate {
     Downloading,
     Completed(Box<dyn Source<Item = f32> + Send + 'static>),
@@ -125,6 +130,7 @@ pub struct Playlist {
     cached_title: RefCell<Option<Line<'static>>>,
     notifications_enabled: bool,
     auth_notif_last: Option<std::time::Instant>,
+    consecutive_download_failures: u8,
 }
 
 impl Component for Playlist {}

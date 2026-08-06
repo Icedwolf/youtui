@@ -65,6 +65,7 @@ impl Playlist {
             cached_title: RefCell::new(None),
             notifications_enabled: true,
             auth_notif_last: None,
+            consecutive_download_failures: 0,
         };
 
         (playlist, task)
@@ -95,6 +96,32 @@ impl Playlist {
 Re-log into your browser, or refresh your cookie file / po_token, then restart."
         );
         spawn_notification("YouTube Authentication Issue", &body, 8000);
+    }
+
+    /// Park the player and stop the queue after a run of consecutive download
+    /// failures of the currently-buffering song. A systemic failure (dead
+    /// yt-dlp, exhausted resources) would otherwise walk the whole queue,
+    /// skipping/removing every song. Keeps the list intact; the user can
+    /// retry a song manually once the root cause is addressed.
+    fn halt_on_download_failures(&mut self, detail: &str) {
+        warn!(
+            "Halting playback after {} consecutive download failures: {}",
+            HALT_AFTER_CONSECUTIVE_FAILURES, detail
+        );
+        self.play_status = PlayState::NotPlaying;
+        self.queue_status = QueueState::NotQueued;
+        self.cancel_all_downloads();
+        self.consecutive_download_failures = 0;
+        if !self.notifications_enabled {
+            return;
+        }
+        let clipped: String = detail.chars().take(200).collect();
+        let body = format!(
+            "{clipped} — {N} consecutive downloads failed and playback was halted. \
+             Check your network / yt-dlp install, then play a song again.",
+            N = HALT_AFTER_CONSECUTIVE_FAILURES
+        );
+        spawn_notification("Download Failures", &body, 8000);
     }
 
     pub fn volume(&self) -> Percentage {
@@ -1361,6 +1388,7 @@ impl Playlist {
             }
             DownloadProgressUpdate::Completed(decoder) => {
                 debug!("download_done: song_id={}", video_id);
+                self.consecutive_download_failures = 0;
                 if let Some(idx) = self.get_index_from_id(id)
                     && let Some(s) = self.list.get_list_iter_mut().nth(idx)
                 {
@@ -1416,6 +1444,12 @@ impl Playlist {
                         warn!("download failed while buffering, skipping: {}", e);
                         if is_auth_error(&e) {
                             self.notify_auth_error(&e);
+                        }
+                        self.consecutive_download_failures =
+                            self.consecutive_download_failures.saturating_add(1);
+                        if self.consecutive_download_failures >= HALT_AFTER_CONSECUTIVE_FAILURES {
+                            self.halt_on_download_failures(&e);
+                            return Effects::none();
                         }
                     }
                     let is_dead = is_dead_video_error(&e);
