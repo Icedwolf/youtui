@@ -22,25 +22,27 @@ Critical invariants and rationale. **Read before changing playback/download code
 
 8. **Buffering state requires an active download.** `play_status == Buffering(id)` implies there MUST be a download task for that id. If not, song never transitions to Playing.
 
+22. **Dead/deleted tracks are never auto-removed.** The `video unavailable` signal is not reliable (has falsely flagged valid songs). A dead song stays in the queue, marked `Failed`; playback advances past it. `session_dead_videos` (in-memory only, per-process) makes auto-advance and the end-of-queue wrap skip that song so the same refused video is never retried on its own; a dead-only queue stops cleanly. A wrongly-flagged song recovers on restart. Manual re-select still allowed (retries once, fails fast).
+
 ## Audio Format Constraints (symphonia 0.5)
 
 9. **No Opus support.** symphonia 0.5's `all-codecs` = {aac, adpcm, alac, flac, mp1, mp2, mp3, pcm, vorbis}. No `opus` feature exists in any 0.5.x version.
 
-10. **WebM/Opus → ffmpeg pipe to WAV.** Default path: `bestaudio[ext=webm]` piped through ffmpeg to raw PCM in RIFF/WAV container. No MP3 compression step saves ~300ms per song.
+10. **WebM/Opus → ffmpeg pipe to fragmented MP4+ALAC.** Default path: `bestaudio[ext=webm]` piped through ffmpeg to lossless ALAC in a **fragmented MP4** container (`-f mp4 -movflags empty_moov+default_base_moof+frag_every_frame -c:a alac`). `frag_every_frame` is the ONLY flag that streams incrementally — `frag_keyframe`/`frag_duration` buffer the whole file until the pipe closes (measured). ALAC is lossless (no quality regression) at ~16MB/song vs 42MB WAV. `empty_moov` puts ftyp+moov (with the ALAC sample entry) in the first ~700 bytes, so the decoder inits from a partial buffer exactly like WAV did. (Changed from WAV 2026-08-06 — see item 12.)
 
-11. **M4A/AAC works but cannot stream.** isomp4 format reader + aac codec enabled via rodio's `symphonia-isomp4`/`symphonia-aac`. `byte_len` MUST be actual total file size because isomp4 seeks to end for moov atom. Full download-then-decode only.
+11. **M4A/AAC works but cannot stream.** isomp4 format reader + aac codec enabled via rodio's `symphonia-isomp4`/`symphonia-aac`. `byte_len` MUST be actual total file size because isomp4 seeks to end for moov atom. Full download-then-decode only. This is the no-ffmpeg fallback.
 
-12. **WAV streams from partial buffer.** RIFF/WAV header (~78 bytes) is at the start, so symphonia's WAV reader can probe and init from the first few KB. `byte_len` can be `None` for WAV.
+12. **Fragmented MP4 streams from partial buffer via a NON-SEEKABLE source.** isomp4's seekable branch seeks past mdat during decode (`seek error during decode`) and the growing `SharedBuffer` can't serve those seeks. A non-seekable MediaSource (`NonSeekableReadSource`) forces isomp4's incremental branch (demuxer.rs:388-398). The ALAC streamed path uses `try_streaming_init_nonseekable`; the full-file fallbacks keep the seekable `ReadSeekSource`. `byte_len` is `None` for the streamed path.
 
 ## Cache Design
 
-13. **`Arc<[u8]>` for BYTE_CACHE.** Cache hits avoid cloning 50MB+ buffers — refcount bump ~8 bytes vs full Vec clone. `cache_get()` returns `Arc<[u8]>`.
+13. **`Arc<[u8]>` for BYTE_CACHE.** Cache hits avoid cloning large buffers — refcount bump ~8 bytes vs full Vec clone. `cache_get()` returns `Arc<[u8]>`.
 
 14. **LRU eviction with 3 entries.** `AudioCache` struct with `HashMap<String, Arc<[u8]>>` + `VecDeque<String>` order behind single `Mutex`. Oldest entry evicted when full.
 
 15. **Single Mutex for cache.** `BYTE_CACHE` and `CACHE_ORDER` are merged into `AudioCache` behind one `Mutex` — no deadlock risk from nested lock acquisition.
 
-16. **NEVER implement offline/disk cache.** This is a streaming YouTube Music client, not an offline jukebox. Serializing ~42MB WAV buffers to disk on shutdown and reloading them on restart wastes I/O bandwidth and flash write endurance for zero user-facing benefit (the song will be re-downloaded faster than disk can read 42MB). Every prior session that explored this direction reached the same conclusion. This file exists to prevent re-proposing it. (Rejected: F4)
+16. **NEVER implement offline/disk cache.** This is a streaming YouTube Music client, not an offline jukebox. Serializing multi-MB in-memory buffers (WAV ~42MB, ALAC ~16MB) to disk on shutdown and reloading them on restart wastes I/O bandwidth and flash write endurance for zero user-facing benefit (the song will be re-downloaded faster than disk can read it). Every prior session that explored this direction reached the same conclusion. This file exists to prevent re-proposing it. (Rejected: F4)
 
 ## Rendering / UI
 
@@ -56,4 +58,4 @@ Critical invariants and rationale. **Read before changing playback/download code
 
 20. **Defensive WARN in `download_song`.** If a song's status is `Queued` but no active download exists, logs a warning and falls through instead of silently returning no-op.
 
-21. **Stay on symphonia 0.5 until rodio supports 0.6.** symphonia 0.6.0 (2026-05-15) is a full rewrite; rodio 0.22.2 (latest) pins symphonia 0.5.5. A direct symphonia 0.6 bump would create a dual-version tree (0.6 direct + 0.5.5 via rodio), duplicating the entire codec stack in the binary. 0.6's additions (video/subtitle groundwork, metadata formats, SIMD) are irrelevant to a WAV/AAC-only streaming player. (Phase 8 closed 2026-07-31)
+21. **Stay on symphonia 0.5 until rodio supports 0.6.** symphonia 0.6.0 (2026-05-15) is a full rewrite; rodio 0.22.2 (latest) pins symphonia 0.5.5. A direct symphonia 0.6 bump would create a dual-version tree (0.6 direct + 0.5.5 via rodio), duplicating the entire codec stack in the binary. 0.6's additions (video/subtitle groundwork, metadata formats, SIMD) are irrelevant to a WAV/AAC/ALAC-only streaming player. (Phase 8 closed 2026-07-31)

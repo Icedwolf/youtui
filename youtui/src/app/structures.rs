@@ -47,6 +47,10 @@ pub struct BrowserSongsList {
     pub state: ListStatus,
     list: Vec<ListSong>,
     pub next_id: ListSongID,
+    /// video_ids whose stream is permanently unavailable, remembered for the
+    /// lifetime of this process only (never persisted). Used to skip them on
+    /// auto-advance without removing them from the user's queue.
+    pub(crate) session_dead_videos: std::collections::HashSet<String>,
 }
 
 // As this is a simple wrapper type we implement Copy for ease of handling
@@ -348,6 +352,7 @@ impl Default for BrowserSongsList {
             state: ListStatus::New,
             list: Vec::new(),
             next_id: ListSongID(0),
+            session_dead_videos: std::collections::HashSet::new(),
         }
     }
 }

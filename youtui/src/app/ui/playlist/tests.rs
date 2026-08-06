@@ -387,7 +387,7 @@ mod state_transitions {
     }
 
     #[test]
-    fn permanently_unavailable_song_is_removed_and_advances() {
+    fn permanently_unavailable_song_is_skipped_but_kept_in_queue() {
         let mut p = downloaded_songs(2);
         p.set_notifications_enabled(false);
         p.play_status = PlayState::Buffering(ListSongID(0));
@@ -395,14 +395,11 @@ mod state_transitions {
             DownloadProgressUpdate::Error("video unavailable (yt-dlp error)".to_string()),
             ListSongID(0),
         );
-        // Dead song is removed, next song starts buffering.
-        assert_eq!(p.list.get_list_iter().count(), 1);
-        assert_eq!(p.get_index_from_id(ListSongID(0)), None);
+        // Dead song is session-remembered but never removed; next song starts.
+        assert_eq!(p.list.get_list_iter().count(), 2);
+        assert!(p.get_index_from_id(ListSongID(0)).is_some());
+        assert!(p.list.session_dead_videos.contains("video0"));
         assert_eq!(p.play_status, PlayState::Buffering(ListSongID(1)));
-        assert_eq!(
-            p.list.get_list_iter().next().unwrap().download_status,
-            DownloadStatus::Queued
-        );
     }
 
     #[test]
@@ -414,11 +411,31 @@ mod state_transitions {
             DownloadProgressUpdate::Error("video unavailable (yt-dlp error)".to_string()),
             ListSongID(0),
         );
-        // Only song removed; playback must stop, not dangle in Buffering.
-        assert_eq!(p.list.get_list_iter().count(), 0);
-        assert_eq!(p.get_index_from_id(ListSongID(0)), None);
+        // Song is kept in the queue (never removed), but playback stops.
+        assert_eq!(p.list.get_list_iter().count(), 1);
+        assert!(p.get_index_from_id(ListSongID(0)).is_some());
         assert_eq!(p.play_status, PlayState::NotPlaying);
         assert_eq!(p.queue_status, QueueState::NotQueued);
+    }
+
+    #[test]
+    fn session_dead_song_is_skipped_on_auto_advance() {
+        let mut p = downloaded_songs(3);
+        p.set_notifications_enabled(false);
+        p.list.session_dead_videos.insert("video1".to_string());
+        p.play_status = PlayState::Buffering(ListSongID(0));
+        // Error on song 0 must auto-advance, jumping over the session-dead song 1.
+        let _effect = p.handle_song_download_progress_update(
+            DownloadProgressUpdate::Error("HTTP Error 429: Too Many Requests".to_string()),
+            ListSongID(0),
+        );
+        assert_eq!(p.play_status, PlayState::Buffering(ListSongID(2)));
+    }
+
+    #[test]
+    fn session_dead_is_not_persisted_across_playlists() {
+        // New sessions start with an empty dead set (no disk persistence).
+        assert!(Playlist::new(Percentage(50)).0.list.session_dead_videos.is_empty());
     }
 
     #[test]

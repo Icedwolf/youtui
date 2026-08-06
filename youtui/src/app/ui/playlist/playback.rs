@@ -458,13 +458,18 @@ Re-log into your browser, or refresh your cookie file / po_token, then restart."
                     self.play_song(next_song_id)
                 } else {
                     debug!("No next song - {no_next_msg}, reshuffling/wrapping");
-                    let first_visual = self.reshuffle_or_wrap();
-                    let first_actual = self.visual_to_actual_index(first_visual);
-                    if let Some(first_id) = self.get_id_from_index(first_actual) {
+                    self.reshuffle_or_wrap();
+                    if let Some(first_id) = self.first_live_song_id() {
+                        let first_visual = self
+                            .get_index_from_id(first_id)
+                            .and_then(|idx| self.actual_to_visual_index(idx))
+                            .unwrap_or(0);
                         self.cur_selected = first_visual;
                         self.play_song(first_id)
                     } else {
+                        self.play_status = PlayState::NotPlaying;
                         self.queue_status = QueueState::NotQueued;
+                        self.preloaded_sources.clear();
                         self.stop_song_id(id)
                     }
                 }
@@ -1036,66 +1041,7 @@ impl Playlist {
         return_task
     }
 
-    /// Remove a single song whose video is permanently unavailable at YouTube
-    /// and notify the user. Conservative by design: touches only `id`, never
-    /// the rest of the queue. Mirrors `delete_selected`'s index maintenance.
-    fn remove_unavailable_song(&mut self, id: ListSongID) {
-        let Some(actual_index) = self.get_index_from_id(id) else {
-            return;
-        };
-        let visual_before = self.actual_to_visual_index(actual_index).unwrap_or(self.cur_selected);
-        let title = self
-            .get_song_from_id(id)
-            .map(|s| s.title.clone())
-            .unwrap_or_default();
-
-        if self.notifications_enabled && !title.is_empty() {
-            let body = format!("{title} — no longer available on YouTube, removed from playlist");
-            spawn_notification("Song Unavailable", &body, 5000);
-        }
-
-        self.cancel_song_download(id);
-        self.download_queue.retain(|qid| *qid != id);
-
-        self.list.remove_song_index(actual_index);
-        self.rebuild_id_cache();
-
-        if !self.search_text.is_empty() {
-            self.update_search_indices();
-            self.cur_selected = if self.search_indices.is_empty() {
-                0
-            } else {
-                visual_before.min(self.search_indices.len() - 1)
-            };
-        } else {
-            let new_max = self.list.get_list_iter().len().saturating_sub(1);
-            self.cur_selected = self.cur_selected.min(new_max);
-        }
-
-        if self.shuffle_enabled {
-            if let Some(pos) = self.shuffle_indices.iter().position(|&i| i == actual_index) {
-                self.shuffle_indices.remove(pos);
-            }
-            for idx in &mut self.shuffle_indices {
-                if *idx > actual_index {
-                    *idx = idx.saturating_sub(1);
-                }
-            }
-            self.shuffle_visual_map =
-                build_visual_map(&self.shuffle_indices, self.list.get_list_iter().count());
-        }
-
-        if self.list.get_list_iter().len() == 0 {
-            self.play_status = PlayState::NotPlaying;
-            self.queue_status = QueueState::NotQueued;
-            self.preloaded_sources.clear();
-            debug!("Removed the only remaining song — stopped playback");
-        }
-
-        debug!("Removed permanently unavailable song id={:?}", id);
-    }
-
-    fn cancel_song_download(&self, id: ListSongID) {
+fn cancel_song_download(&self, id: ListSongID) {
         let token = {
             let mut downloads = self.active_downloads.lock().unwrap_or_warn();
             let pos = downloads.iter().position(|(song_id, _)| *song_id == id);
@@ -1277,13 +1223,41 @@ impl Playlist {
             .get_cur_playing_index()
             .and_then(|idx| self.actual_to_visual_index(idx))?;
 
-        if current_visual >= self.get_max_visual_index() {
-            return None;
+        for next_visual in (current_visual + 1)..=self.get_max_visual_index() {
+            let next_actual = self.visual_to_actual_index(next_visual);
+            let Some(next_id) = self.get_id_from_index(next_actual) else {
+                continue;
+            };
+            let dead = self
+                .get_song_from_id(next_id)
+                .map(|s| self.list.session_dead_videos.contains(s.video_id.get_raw()))
+                .unwrap_or(false);
+            if !dead {
+                return Some(next_id);
+            }
+            debug!("skipping session-dead song on auto-advance id={next_id:?}");
         }
+        None
+    }
 
-        let next_visual = current_visual.saturating_add(1);
-        let next_actual = self.visual_to_actual_index(next_visual);
-        self.get_id_from_index(next_actual)
+    /// First song (in visual order) not remembered as session-dead, or `None`
+    /// if every song is dead/absent. Used by the end-of-queue wrap path so a
+    /// dead-only queue stops instead of re-playing the refused song.
+    fn first_live_song_id(&self) -> Option<ListSongID> {
+        for visual in 0..=self.get_max_visual_index() {
+            let actual = self.visual_to_actual_index(visual);
+            let Some(id) = self.get_id_from_index(actual) else {
+                continue;
+            };
+            let dead = self
+                .get_song_from_id(id)
+                .map(|s| self.list.session_dead_videos.contains(s.video_id.get_raw()))
+                .unwrap_or(false);
+            if !dead {
+                return Some(id);
+            }
+        }
+        None
     }
 
     fn get_prev_song_id(&self) -> Option<ListSongID> {
@@ -1453,10 +1427,23 @@ impl Playlist {
                         }
                     }
                     let is_dead = is_dead_video_error(&e);
-                    effect = effect.push(self.handle_set_to_error(id));
                     if is_dead {
-                        self.remove_unavailable_song(id);
+                        let video_id = self
+                            .get_song_from_id(id)
+                            .map(|s| s.video_id.get_raw().to_string())
+                            .unwrap_or_default();
+                        self.list.session_dead_videos.insert(video_id);
+                        let title = self
+                            .get_song_from_id(id)
+                            .map(|s| s.title.clone())
+                            .unwrap_or_default();
+                        if self.notifications_enabled && !title.is_empty() {
+                            let body =
+                                format!("{title} — no longer available on YouTube, skipped");
+                            spawn_notification("Song Unavailable", &body, 5000);
+                        }
                     }
+                    effect = effect.push(self.handle_set_to_error(id));
                 }
                 effect
             }

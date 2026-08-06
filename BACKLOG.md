@@ -1,10 +1,32 @@
 # Youtui Backlog
 
 **Build:** 0 errors, 0 warnings, 0 clippy
-**Tests:** 564 youtui/ytmapi-rs passed + 20 ignored
+**Tests:** 486 youtui/ytmapi-rs passed + 20 ignored (live network tests are flaky)
 **Last updated:** 2026-08-06
 
 ## Completed
+
+### Session 2026-08-06 — Deleted/stale tracks: session-only skip, no auto-removal
+
+Fix for "tracks I already played keep coming back / removed from queue but still replay". The dead-video signal (`video unavailable`) is not reliable — it has falsely flagged valid songs — so auto-removal was the wrong lever. Per user: failsafe first.
+
+- **No song is ever auto-removed for a dead video.** Deleted `remove_unavailable_song` + its list-drain index maintenance. A dead song stays in the queue, marked `Failed`; playback advances past it as before (`handle_set_to_error` → `play_next_or_stop`).
+- **Session-only memory (`session_dead_videos: HashSet<String>` on `BrowserSongsList`).** Filled on any dead-video error, never persisted, cleared on process exit — a wrongly-flagged valid song recovers next restart. Auto-advance (`get_next_song_id`) and the end-of-queue wrap (`first_live_song_id`) skip session-dead songs, so the same refused song is never retried on its own and a dead-only queue stops cleanly instead of looping. Manual re-select still allowed (retries once, fails fast).
+- **Wrap-stop made synchronous** (set `NotPlaying` + `NotQueued` + clear preloaded inline) so a dead-only single-song queue stops immediately rather than dangle in `Error` pending an effect — matches `halt_on_download_failures`.
+- **Tests (fail-first):** `permanently_unavailable_song_is_skipped_but_kept_in_queue` (kept + session-remembered + advances), `single_dead_song_stops_cleanly` (kept, playback stops), `session_dead_song_is_skipped_on_auto_advance` (jumps over dead to song 2), `session_dead_is_not_persisted_across_playlists`. Test count 308 → 310.
+- Verified: 310 youtui tests green, clippy 0, fmt clean, `cargo build --release` clean.
+
+### Session 2026-08-06 — Primary stream format: WAV → fragmented-MP4 ALAC
+
+**RAM cut 42MB → ~16MB per song (2.6×), lossless, true streaming preserved — all measured, not assumed.**
+
+- **Gate proven first (no gambling):** dry-ran the ffmpeg muxer on a real stream. `-movflags empty_moov+frag_keyframe` (and `frag_duration`) **buffer the whole file until the pipe closes** — they do NOT stream (observed with real-time `-re` input: output stayed at 28B `ftyp` until the end). **`+frag_every_frame` is the only flag that streams incrementally** — moof/mdat pairs appear progressively (t=3.2/6.6/10.1s). Atom order `ftyp(28B)→moov(683B, with the `alac` sample entry)→moof→mdat`, so the decoder inits from the first ~700B — the same partial-buffer streaming WAV had.
+- **symphonia 0.5.5 decodes ALAC-in-fragmented-mp4** — added `symphonia-alac` to rodio's features (one line); unification enables `alac` on the shared `symphonia` crate, so BOTH rodio and the direct `decoder::register_enabled_codecs` get it. Single 0.5.5 tree verified.
+- **Non-seekable MediaSource required for streaming** — isomp4's *seekable* branch `seek error during decode` on a growing buffer (seekable + `byte_len=None` → reader's `SeekFrom::End` blocks until `finish()`). Added `NonSeekableReadSource` (read-only, `is_seekable()=false`); isomp4 then takes its incremental branch (demuxer.rs:388-398). The full-file fallbacks still use seekable `ReadSeekSource`.
+- **Production change:** both ffmpeg arg sites (stream_url + relay) → `-f mp4 -movflags empty_moov+default_base_moof+frag_every_frame -c:a alac`; streamed init uses `try_streaming_init_nonseekable`; `is_wav` → `ffmpeg_streaming`; `"wav"` labels → `"alac-mp4"`/`"mp4-fallback"`. M4A no-ffmpeg fallback unchanged. `set_total_len` left in place (reserves the opus size, harmless).
+- **Tests (fail-first):** `alac_fragmented_decodes_from_full_buffer` + `alac_fragmented_streams_from_partial_buffer` (asserts streaming TTF < full-write time) via new fixture `test_alac_fragmented.mp4` (19743B, 130 fragments). Both red until the non-seekable fix.
+- **RAM inventory (point 2-mandate):** UI side already lean (`get_title` guarded draw.rs:85 — allocs only on invalidation; rows/artists pre-cached). The stream buffer was the only fat lever → now ~16MB. Cache max=1: ~16MB playing + ~16MB cached ≈ 32MB (vs 84MB WAV).
+- Docs updated: DECISIONS.md (9-12, 13, 16, 21), AGENTS.md (constraints + code decisions + preference #5 now "Prefer lossless streaming"), Cargo.toml comments.
 
 ### Session 2026-08-06 — Halt on download-failure cascade, resolve spawn logging
 
