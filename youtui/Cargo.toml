@@ -48,18 +48,19 @@ rand = "0.10"
 fs-err = { version = "3.3.1", features=["tokio"] }
 tokio-util = { version = "0.7.19", features = ["io"] }
 
-# Audio playback library (rodio with symphonia-all codecs)
+# Audio playback library (rodio with symphonia codecs)
 [dependencies.rodio]
 version = "0.22.2"
 default-features = false
-features = ["playback", "tracing", "symphonia-wav", "symphonia-pcm", "symphonia-isomp4", "symphonia-aac"]
+features = ["playback", "tracing", "symphonia-wav", "symphonia-pcm", "symphonia-isomp4", "symphonia-aac", "symphonia-alac"]
 
 
 # Direct Symphonia usage (not through rodio, avoiding SeekError panic)
 # Symphonia 0.5 supports: isomp4 (MP4/M4A), mkv (WebM), ogg (Ogg/Vorbis)
-# Codecs: aac, alac, flac, mp3, pcm, vorbis (via rodio's symphonia-all).
-# NO Opus support. Feature unification with rodio provides the full set,
-# so no additional features needed here.
+# Codecs: aac, alac, flac, mp3, pcm, vorbis via feature unification with rodio's
+# features (alac comes from rodio's "symphonia-alac"; the shared facade enables
+# it for BOTH rodio and the direct decoder's register_enabled_codecs).
+# NO Opus support. No additional features needed on the direct dep.
 [dependencies.symphonia]
 version = "0.5"
 

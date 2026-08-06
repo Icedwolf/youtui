@@ -14,7 +14,7 @@ use tracing::{debug, error, warn};
 pub(crate) use cache::{cache_get, cache_put};
 use crate::app::server::streaming_buffer::{SharedBuffer, SharedBufferWriter};
 use crate::decoder::SymphoniaDecoder;
-use crate::decoder::read_seek_source::ReadSeekSource;
+use crate::decoder::read_seek_source::{NonSeekableReadSource, ReadSeekSource};
 
 const MAX_CONCURRENT_DOWNLOADS: usize = 1;
 const READ_BUF_SIZE: usize = 64 * 1024;
@@ -95,14 +95,7 @@ fn check_ffmpeg() -> bool {
 /// few KB works.  For M4A (isomp4): the moov atom may be at the end, so
 /// `byte_len` must be the total file size (from yt-dlp progress line).
 /// Spawns on a blocking thread for isomp4 seeking (could block Condvar).
-async fn try_streaming_init(
-    buffer: &Arc<SharedBuffer>,
-    byte_len: Option<u64>,
-) -> Result<SymphoniaDecoder, String> {
-    let reader = buffer.reader();
-    let source = ReadSeekSource::new(reader, byte_len);
-    let mss = MediaSourceStream::new(Box::new(source), Default::default());
-
+async fn init_decoder_from(mss: MediaSourceStream) -> Result<SymphoniaDecoder, String> {
     let deadline = std::time::Duration::from_secs(DECODER_INIT_DEADLINE_S);
     let handle = tokio::task::spawn_blocking(move || SymphoniaDecoder::new(mss));
 
@@ -114,6 +107,25 @@ async fn try_streaming_init(
             Err("decoder init timed out (isomp4 seek blocked on Condvar)".to_string())
         }
     }
+}
+
+async fn try_streaming_init(
+    buffer: &Arc<SharedBuffer>,
+    byte_len: Option<u64>,
+) -> Result<SymphoniaDecoder, String> {
+    let reader = buffer.reader();
+    let source = ReadSeekSource::new(reader, byte_len);
+    let mss = MediaSourceStream::new(Box::new(source), Default::default());
+    init_decoder_from(mss).await
+}
+
+async fn try_streaming_init_nonseekable(
+    buffer: &Arc<SharedBuffer>,
+) -> Result<SymphoniaDecoder, String> {
+    let reader = buffer.reader();
+    let source = NonSeekableReadSource::new(reader);
+    let mss = MediaSourceStream::new(Box::new(source), Default::default());
+    init_decoder_from(mss).await
 }
 
 async fn kill_and_reap(
@@ -427,7 +439,7 @@ async fn ytdlp_pipeline(
     // WAV transcoding requires ffmpeg; without it the pipeline must use the
     // direct M4A path even when a (webm) URL resolved, since symphonia cannot
     // decode Opus in a webm container.
-    let is_wav = ffmpeg_avail;
+    let ffmpeg_streaming = ffmpeg_avail;
 
     let buffer = SharedBuffer::new();
     let writer = buffer.writer();
@@ -444,7 +456,11 @@ async fn ytdlp_pipeline(
                     "-flags",
                     "low_delay",
                     "-f",
-                    "wav",
+                    "mp4",
+                    "-movflags",
+                    "empty_moov+default_base_moof+frag_every_frame",
+                    "-c:a",
+                    "alac",
                     "-loglevel",
                     "error",
                     "pipe:1",
@@ -485,7 +501,11 @@ async fn ytdlp_pipeline(
                     "-flags",
                     "low_delay",
                     "-f",
-                    "wav",
+                    "mp4",
+                    "-movflags",
+                    "empty_moov+default_base_moof+frag_every_frame",
+                    "-c:a",
+                    "alac",
                     "-loglevel",
                     "error",
                     "pipe:1",
@@ -542,7 +562,7 @@ async fn ytdlp_pipeline(
             (stderr_handle, write_handle, yt_dlp_child, None, None)
         };
 
-    let (decoder, needs_cache) = if is_wav {
+    let (decoder, needs_cache) = if ffmpeg_streaming {
         let deadline =
             tokio::time::Instant::now() + std::time::Duration::from_secs(DECODER_INIT_DEADLINE_S);
         while buffer.len() < STREAM_INIT_THRESHOLD
@@ -604,14 +624,14 @@ async fn ytdlp_pipeline(
             bail_failed_buffer(&buffer, from_url_cache, &cfg.video_id, t0, "during empty-pipe wait")?;
         }
         let stream_type = if from_url_cache {
-            "url-cache→ffmpeg→wav"
+            "url-cache→ffmpeg→alac-mp4"
         } else {
-            "ffmpeg→wav"
+            "ffmpeg→alac-mp4"
         };
         debug!(%cfg.video_id, stream_type, buf_len = buffer.len(), elapsed = ?t0.elapsed(),
             "Trying early decoder init");
 
-        match try_streaming_init(&buffer, None).await {
+        match try_streaming_init_nonseekable(&buffer).await {
             Ok(decoder) => {
                 debug!(%cfg.video_id, buf_len = buffer.len(), elapsed = ?t0.elapsed(),
                     "Streaming decoder init succeeded");
@@ -669,7 +689,7 @@ async fn ytdlp_pipeline(
 
                 debug!(%cfg.video_id, buf_len = buffer.len(),
                     "Creating decoder from completed download (fallback)");
-                let d = decoder_from_buffer(&buffer, None, "wav-fallback")?;
+                let d = decoder_from_buffer(&buffer, None, "mp4-fallback")?;
                 (d, !from_url_cache)
             }
         }
@@ -844,7 +864,6 @@ mod tests {
     use crate::app::server::song_downloader::cache::CACHE_MAX_ENTRIES;
     use crate::app::server::streaming_buffer::SharedBuffer;
     use crate::decoder::SymphoniaDecoder;
-    use crate::decoder::read_seek_source::ReadSeekSource;
     use std::sync::Arc;
     use std::sync::Mutex;
     use std::sync::atomic::Ordering;
@@ -852,6 +871,8 @@ mod tests {
     use symphonia::core::io::MediaSourceStream;
 
     const TEST_WAV: &[u8] = include_bytes!("../../../../../ytmapi-rs/test_json/test_silence.wav");
+    const TEST_ALAC: &[u8] =
+        include_bytes!("../../../../../ytmapi-rs/test_json/test_alac_fragmented.mp4");
 
     #[test]
     fn track_download_progress_growth_resets_stall() {
@@ -914,6 +935,27 @@ mod tests {
         std::thread::spawn(move || {
             let mut writer = buf.writer();
             let chunk: usize = 64 * 1024;
+            for chunk_start in (0..data.len()).step_by(chunk) {
+                let end = (chunk_start + chunk).min(data.len());
+                writer.write(&data[chunk_start..end]);
+                if end < data.len() {
+                    std::thread::sleep(chunk_delay);
+                }
+            }
+            writer.finish();
+        })
+    }
+
+    fn spawn_slow_write_chunked(
+        buf: &Arc<SharedBuffer>,
+        data: &[u8],
+        chunk: usize,
+        chunk_delay: Duration,
+    ) -> std::thread::JoinHandle<()> {
+        let buf = buf.clone();
+        let data = data.to_vec();
+        std::thread::spawn(move || {
+            let mut writer = buf.writer();
             for chunk_start in (0..data.len()).step_by(chunk) {
                 let end = (chunk_start + chunk).min(data.len());
                 writer.write(&data[chunk_start..end]);
@@ -1153,6 +1195,41 @@ mod tests {
     }
 
     #[test]
+    fn alac_fragmented_decodes_from_full_buffer() {
+        let buf = SharedBuffer::new();
+        let mut w = buf.writer();
+        w.write(TEST_ALAC);
+        w.finish();
+        let mut dec = create_decoder_from(&buf).expect("ALAC fragmented-mp4 decoder");
+        let ttf = time_to_first_frame(&mut dec, 1024);
+        assert!(ttf.is_some(), "ALAC fragmented mp4 should decode from full buffer");
+    }
+
+    #[test]
+    fn alac_fragmented_streams_from_partial_buffer() {
+        let chunk_delay = Duration::from_millis(8);
+        let buf = SharedBuffer::new();
+        let handle = spawn_slow_write_chunked(&buf, TEST_ALAC, 64, chunk_delay);
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while buf.len() < STREAM_INIT_THRESHOLD && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        assert!(buf.len() >= STREAM_INIT_THRESHOLD, "buffer must reach init threshold");
+        let reader = buf.reader();
+        let source = crate::decoder::read_seek_source::NonSeekableReadSource::new(reader);
+        let mss = MediaSourceStream::new(Box::new(source), Default::default());
+        let mut dec = SymphoniaDecoder::new(mss)
+            .expect("ALAC decoder created from streaming buffer (may block briefly)");
+        let streaming_ttf = time_to_first_frame(&mut dec, 1024);
+        assert!(streaming_ttf.is_some(), "ALAC fragmented mp4 must stream from partial buffer");
+        handle.join().unwrap();
+        let full_write_estimate = TEST_ALAC.len().div_ceil(64) as u64 * chunk_delay.as_millis() as u64;
+        println!("alac streaming: first frames in {:?} (full write would take ~{full_write_estimate} ms)", streaming_ttf.unwrap());
+        assert!(streaming_ttf.unwrap() < Duration::from_millis(full_write_estimate),
+            "ALAC streaming TTF {:?} must be < {full_write_estimate} ms (full write time)", streaming_ttf.unwrap());
+    }
+
+    #[test]
     fn streaming_vs_full_timing_comparison() {
         let chunk_delay = Duration::from_millis(5);
         let num_chunks = TEST_WAV.len().div_ceil(64 * 1024);
@@ -1373,7 +1450,8 @@ mod tests {
 
         let mut ffmpeg = std::process::Command::new("ffmpeg");
         ffmpeg.args(["-i", "pipe:0", "-fflags", "nobuffer", "-flags", "low_delay",
-            "-f", "wav", "-loglevel", "error", "pipe:1"])
+            "-f", "mp4", "-movflags", "empty_moov+default_base_moof+frag_every_frame",
+            "-c:a", "alac", "-loglevel", "error", "pipe:1"])
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::null());
@@ -1431,7 +1509,10 @@ mod tests {
         }
         let relay_data_arrival = t0.elapsed();
         let t_dec = Instant::now();
-        let mut dec_relay = create_decoder_from(&relay_buf).expect("decoder from relay stream");
+        let relay_reader = relay_buf.reader();
+        let relay_source = NonSeekableReadSource::new(relay_reader);
+        let relay_mss = MediaSourceStream::new(Box::new(relay_source), Default::default());
+        let mut dec_relay = SymphoniaDecoder::new(relay_mss).expect("decoder from relay stream");
         let _relay_decoder_dur = t_dec.elapsed();
         let relay_ttf = time_to_first_frame(&mut dec_relay, 44100);
         relay_handle.join().unwrap();
