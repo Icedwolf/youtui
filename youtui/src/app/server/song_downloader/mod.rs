@@ -358,6 +358,64 @@ fn decoder_from_buffer(
     SymphoniaDecoder::new(mss).with_context(|| format!("decoder (fallback, {pipeline})"))
 }
 
+/// Evict a cached stream URL after a download failed on it. The URL may have
+/// died server-side, so the retry must re-resolve instead of reusing it.
+fn evict_cached_url(from_url_cache: bool, video_id: &str) {
+    if from_url_cache {
+        resolve::url_cache_remove(video_id);
+    }
+}
+
+/// Common bail-out for a failed source buffer: permanently unavailable video,
+/// auth/cookie problem, or a generic format/network error. Each class surfaces
+/// a distinct error; a cached URL is evicted so the retry re-resolves.
+#[allow(clippy::too_many_arguments)]
+fn bail_failed_buffer(
+    buffer: &SharedBuffer,
+    from_url_cache: bool,
+    video_id: &str,
+    t0: tokio::time::Instant,
+    context: &str,
+) -> anyhow::Result<()> {
+    if !buffer.is_failed() {
+        return Ok(());
+    }
+    if buffer.is_dead_video() {
+        debug!(%video_id, "Video unavailable (permanently dead), bailing early");
+        anyhow::bail!("video unavailable (yt-dlp error)");
+    }
+    if buffer.is_auth_error() {
+        warn!(%video_id, "Auth error {context} (stale cookies?), bailing early");
+        anyhow::bail!("authentication error (stale cookies)");
+    }
+    evict_cached_url(from_url_cache, video_id);
+    let reason = if from_url_cache { "ffmpeg" } else { "yt-dlp" };
+    debug!(%video_id, elapsed = ?t0.elapsed(), "{reason} failed {context} — bailing early");
+    anyhow::bail!("format not available ({reason} error)")
+}
+
+/// Build the yt-dlp command for streaming a song to stdout, with the auth
+/// cookie/header applied. Shared by the relay (WebM→ffmpeg) and direct M4A
+/// paths; the caller configures stdio and spawns.
+fn build_ytdlp_command(cfg: &DownloadConfig, format: &str) -> tokio::process::Command {
+    let yt_dlp_cmd = if cfg.yt_dlp_command.is_empty() {
+        "yt-dlp".to_string()
+    } else {
+        cfg.yt_dlp_command.clone()
+    };
+    let mut cmd = tokio::process::Command::new(&yt_dlp_cmd);
+    cmd.args(["-f", format, "-o", "-", "--no-warnings", "--no-playlist"]);
+    resolve::apply_ytdlp_auth_args(
+        &mut cmd,
+        cfg.po_token.as_deref(),
+        cfg.cookie_path.as_deref(),
+        cfg.cookie_header.as_deref(),
+        cfg.js_runtime.as_deref(),
+        &cfg.video_id,
+    );
+    cmd
+}
+
 async fn ytdlp_pipeline(
     cfg: &DownloadConfig,
     ffmpeg_avail: bool,
@@ -401,17 +459,7 @@ async fn ytdlp_pipeline(
 
             (tokio::spawn(async {}), write_handle, child, None, None)
         } else if ffmpeg_avail {
-            let quality = "ba/bestaudio";
-            let yt_dlp_cmd = if cfg.yt_dlp_command.is_empty() {
-                "yt-dlp".to_string()
-            } else {
-                cfg.yt_dlp_command.clone()
-            };
-
-            let mut yt_cmd = tokio::process::Command::new(&yt_dlp_cmd);
-            yt_cmd.args(["-f", quality, "-o", "-", "--no-warnings", "--no-playlist"]);
-
-            resolve::apply_ytdlp_auth_args(&mut yt_cmd, cfg.po_token.as_deref(), cfg.cookie_path.as_deref(), cfg.cookie_header.as_deref(), cfg.js_runtime.as_deref(), &cfg.video_id);
+            let mut yt_cmd = build_ytdlp_command(cfg, "ba/bestaudio");
             yt_cmd.stdout(std::process::Stdio::piped());
             yt_cmd.stderr(std::process::Stdio::piped());
             // yt_dlp_child is held for the whole pipeline (returned in the tuple)
@@ -472,17 +520,7 @@ async fn ytdlp_pipeline(
 
             (stderr_handle, write_handle, ffmpeg_child, Some(relay), Some(yt_dlp_child))
         } else {
-            let quality = "bestaudio[ext=m4a]/bestaudio/bestaudio*";
-            let yt_dlp_cmd = if cfg.yt_dlp_command.is_empty() {
-                "yt-dlp".to_string()
-            } else {
-                cfg.yt_dlp_command.clone()
-            };
-
-            let mut yt_cmd = tokio::process::Command::new(&yt_dlp_cmd);
-            yt_cmd.args(["-f", quality, "-o", "-", "--no-warnings", "--no-playlist"]);
-
-            resolve::apply_ytdlp_auth_args(&mut yt_cmd, cfg.po_token.as_deref(), cfg.cookie_path.as_deref(), cfg.cookie_header.as_deref(), cfg.js_runtime.as_deref(), &cfg.video_id);
+            let mut yt_cmd = build_ytdlp_command(cfg, "bestaudio[ext=m4a]/bestaudio/bestaudio*");
             yt_cmd.stdout(std::process::Stdio::piped());
             yt_cmd.stderr(std::process::Stdio::piped());
             yt_cmd.kill_on_drop(true);
@@ -517,23 +555,7 @@ async fn ytdlp_pipeline(
         if cfg.cancel_token.is_cancelled() {
             bail!("download cancelled during buffering");
         }
-        if buffer.is_failed() {
-            if buffer.is_dead_video() {
-                debug!(%cfg.video_id, "Video unavailable (permanently dead), bailing early");
-                bail!("video unavailable (yt-dlp error)");
-            }
-            if buffer.is_auth_error() {
-                warn!(%cfg.video_id, "Auth error before data arrived (stale cookies?), bailing early");
-                bail!("authentication error (stale cookies)");
-            }
-            let reason = if from_url_cache { "ffmpeg" } else { "yt-dlp" };
-            if from_url_cache {
-                resolve::url_cache_remove(&cfg.video_id);
-            }
-            debug!(%cfg.video_id, elapsed = ?t0.elapsed(),
-                "{reason} failed before data arrived — bailing early");
-            bail!("format not available ({reason} error)");
-        }
+        bail_failed_buffer(&buffer, from_url_cache, &cfg.video_id, t0, "before data arrived")?;
         let current = buffer.len();
         if current == 0 {
             // A source that has already exited without emitting a byte is dead
@@ -556,9 +578,7 @@ async fn ytdlp_pipeline(
                 match verdict {
                     EmptyPipeVerdict::Break => break,
                     EmptyPipeVerdict::SourceExited => {
-                        if from_url_cache {
-                            resolve::url_cache_remove(&cfg.video_id);
-                        }
+                        evict_cached_url(from_url_cache, &cfg.video_id);
                         debug!(%cfg.video_id, elapsed = ?t0.elapsed(),
                             "Source exited with an empty pipe");
                         bail!("format not available (source exited, empty pipe)");
@@ -567,9 +587,7 @@ async fn ytdlp_pipeline(
                         bail!("download cancelled during empty-pipe wait");
                     }
                     EmptyPipeVerdict::PatienceElapsed => {
-                        if from_url_cache {
-                            resolve::url_cache_remove(&cfg.video_id);
-                        }
+                        evict_cached_url(from_url_cache, &cfg.video_id);
                         debug!(%cfg.video_id, elapsed = ?t0.elapsed(),
                             "Empty pipe persisted {}s — treating as unavailable",
                             EMPTY_PIPE_PATIENCE_S);
@@ -583,24 +601,7 @@ async fn ytdlp_pipeline(
                     }
                 }
             }
-            if buffer.is_failed() {
-                if buffer.is_dead_video() {
-                    debug!(%cfg.video_id, "Video unavailable (permanently dead), bailing early");
-                    bail!("video unavailable (yt-dlp error)");
-                }
-                if buffer.is_auth_error() {
-                    warn!(%cfg.video_id,
-                        "Auth error during empty-pipe wait (stale cookies?), bailing early");
-                    bail!("authentication error (stale cookies)");
-                }
-                let reason = if from_url_cache { "ffmpeg" } else { "yt-dlp" };
-                if from_url_cache {
-                    resolve::url_cache_remove(&cfg.video_id);
-                }
-                debug!(%cfg.video_id, elapsed = ?t0.elapsed(),
-                    "{reason} failed during empty-pipe wait — bailing early");
-                bail!("format not available ({reason} error)");
-            }
+            bail_failed_buffer(&buffer, from_url_cache, &cfg.video_id, t0, "during empty-pipe wait")?;
         }
         let stream_type = if from_url_cache {
             "url-cache→ffmpeg→wav"
@@ -648,16 +649,12 @@ async fn ytdlp_pipeline(
                 match wait_result {
                     Ok(Ok(())) => {}
                     Ok(Err(join_err)) => {
-                        if from_url_cache {
-                            resolve::url_cache_remove(&cfg.video_id);
-                        }
+                        evict_cached_url(from_url_cache, &cfg.video_id);
                         bail!("{pipe_label} writer task panicked: {join_err}");
                     }
                     Err(_elapsed) => {
                         kill_and_reap(&mut child, &mut yt_child).await;
-                        if from_url_cache {
-                            resolve::url_cache_remove(&cfg.video_id);
-                        }
+                        evict_cached_url(from_url_cache, &cfg.video_id);
                         bail!("{pipe_label} download timed out ({}s)", DOWNLOAD_TIMEOUT_S);
                     }
                 }
@@ -665,9 +662,7 @@ async fn ytdlp_pipeline(
                 let status = child.wait().await.with_context(|| format!("wait {pipe_label}"))?;
                 if !status.success() {
                     let code = exit_code_string(&status);
-                    if from_url_cache {
-                        resolve::url_cache_remove(&cfg.video_id);
-                    }
+                    evict_cached_url(from_url_cache, &cfg.video_id);
                     bail!("{pipe_label} exited with code {code}");
                 }
                 debug!(%cfg.video_id, "{pipe_label} completed successfully");
