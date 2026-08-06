@@ -4,6 +4,7 @@ use std::sync::{LazyLock, Mutex};
 use std::time::Instant;
 
 use crate::core::PoisonRecovery;
+use tracing::warn;
 
 const URL_CACHE_TTL: std::time::Duration = std::time::Duration::from_secs(6 * 3600);
 
@@ -147,7 +148,10 @@ pub async fn resolve_url(
     cmd.kill_on_drop(true);
     let child = match cmd.spawn() {
         Ok(child) => child,
-        Err(_) => return ResolveOutcome::Failed,
+        Err(e) => {
+            warn!(%video_id, error = %e, "resolve: cannot spawn {cmd_name}");
+            return ResolveOutcome::Failed;
+        }
     };
 
     let resolve = async {
