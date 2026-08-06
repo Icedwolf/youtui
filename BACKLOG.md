@@ -1,10 +1,17 @@
 # Youtui Backlog
 
 **Build:** 0 errors, 0 warnings, 0 clippy
-**Tests:** 561 youtui/ytmapi-rs passed + 20 ignored
-**Last updated:** 2026-08-05
+**Tests:** 564 youtui/ytmapi-rs passed + 20 ignored
+**Last updated:** 2026-08-06
 
 ## Completed
+
+### Session 2026-08-06 — Halt on download-failure cascade, resolve spawn logging
+
+Diagnosis of a live "looped skipped/removed all the songs" report (debug304.log, an older build) surfaced two gaps:
+
+- **Systemic failure drained the whole queue** — 2376 × `error=spawn yt-dlp` across one session: the OS refused to exec new processes (fd/pid/mem limits all healthy afterward — a transient system-wide exec failure). Every buffering failure called `handle_set_to_error` → `play_next_or_stop` → next download → fail, walking the entire playlist off with no visible reason. Fixed (`69cef25`): a `consecutive_download_failures` counter — incremented on every non-cancellation failure of the currently-buffering song, reset on any successful `Completed`. At `HALT_AFTER_CONSECUTIVE_FAILURES = 5` the player halts (`NotPlaying`), clears the queue, and fires one "Download Failures" notification instead of draining the list. Tests written fail-first: `repeated_transient_failures_halt_instead_of_draining` (failed before — advanced to `Buffering(5)`), plus `transient_errors_below_threshold_still_advance` and `successful_download_resets_failure_counter` guards. Test count 561 → 564.
+- **Resolve spawn errors were silent** — `resolve.rs` swallowed the `io::Error` from `cmd.spawn()` (`Err(_) => Failed`), so a systemic spawn failure surfaced only as the pipeline's cryptic `spawn yt-dlp` fallback. Now `warn!`s the actual io error (`2ebbf55`), making the next occurrence self-diagnosing. Next time the OS exec fails, the log says *which* error (EMFILE/EAGAIN/ENOMEM/ENOENT).
 
 ### Session 2026-08-05 — Review follow-up: empty-pipe classification, cookie-dir window
 
