@@ -284,6 +284,16 @@ async fn spawn_bg_cache_task(
     cache_put(vid, data);
 }
 
+/// Error message for a definitively dead video. This exact prefix is the
+/// classification contract: the UI matches downloads on `starts_with("video
+/// unavailable")`, so it must stay in sync across all bail sites.
+pub(crate) const DEAD_VIDEO_ERR: &str = "video unavailable (yt-dlp error)";
+
+/// Error message for an authentication/cookie failure (stale login, bot check).
+/// The UI matches downloads on `starts_with("authentication error")`; the
+/// resolve path appends a po_token tag and the yt-dlp stderr line after it.
+pub(crate) const AUTH_ERR: &str = "authentication error (stale cookies)";
+
 /// Classify a yt-dlp stderr line as a *permanently* unavailable video
 /// (removed, terminated account) as opposed to a transient error (bot-check,
 /// bad cookie file, format/network issue). Only the permanent class triggers
@@ -477,11 +487,11 @@ fn bail_failed_buffer(
     }
     if buffer.is_dead_video() {
         debug!(%video_id, "Video unavailable (permanently dead), bailing early");
-        anyhow::bail!("video unavailable (yt-dlp error)");
+        anyhow::bail!("{}", DEAD_VIDEO_ERR);
     }
     if buffer.is_auth_error() {
         warn!(%video_id, "Auth error {context} (stale cookies?), bailing early");
-        anyhow::bail!("authentication error (stale cookies)");
+        anyhow::bail!("{}", AUTH_ERR);
     }
     evict_cached_url(from_url_cache, video_id);
     let reason = if from_url_cache { "ffmpeg" } else { "yt-dlp" };
@@ -742,10 +752,10 @@ async fn ytdlp_pipeline(
             loop {
                 if buffer.is_failed() {
                     if buffer.is_dead_video() {
-                        bail!("video unavailable (yt-dlp error)");
+                        bail!("{}", DEAD_VIDEO_ERR);
                     }
                     if buffer.is_auth_error() {
-                        bail!("authentication error (stale cookies)");
+                        bail!("{}", AUTH_ERR);
                     }
                     break None;
                 }
