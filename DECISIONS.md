@@ -24,6 +24,8 @@ Critical invariants and rationale. **Read before changing playback/download code
 
 22. **Dead/deleted tracks are never auto-removed.** The `video unavailable` signal is not reliable (has falsely flagged valid songs). A dead song stays in the queue, marked `Failed`; playback advances past it. `session_dead_videos` (in-memory only, per-process) makes auto-advance and the end-of-queue wrap skip that song so the same refused video is never retried on its own; a dead-only queue stops cleanly. A wrongly-flagged song recovers on restart. Manual re-select still allowed (retries once, fails fast).
 
+23. **The download-failure halt counts only transient/systemic failures.** `consecutive_download_failures` (halt + stop at `HALT_AFTER_CONSECUTIVE_FAILURES`) is incremented only for non-cancellation, non-dead, non-auth errors (rate limits, format loss, spawn errors). A dead video or auth/18+ failure is a definitive per-song/per-session condition, never a sign of a systemic download problem — it advances the queue with its own notification instead of feeding the halt. This keeps a run of deleted (or age-restricted) tracks from spuriously stopping the whole player.
+
 ## Audio Format Constraints (symphonia 0.5)
 
 9. **No Opus support.** symphonia 0.5's `all-codecs` = {aac, adpcm, alac, flac, mp1, mp2, mp3, pcm, vorbis}. No `opus` feature exists in any 0.5.x version.

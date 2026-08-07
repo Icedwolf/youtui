@@ -505,6 +505,56 @@ mod state_transitions {
     }
 
     #[test]
+    fn repeated_dead_videos_do_not_halt() {
+        let n = HALT_AFTER_CONSECUTIVE_FAILURES as usize + 5;
+        let mut p = downloaded_songs(n);
+        p.set_notifications_enabled(false);
+        for i in 0..HALT_AFTER_CONSECUTIVE_FAILURES as usize {
+            p.play_status = PlayState::Buffering(ListSongID(i));
+            let _effect = p.handle_song_download_progress_update(
+                DownloadProgressUpdate::Error("video unavailable (yt-dlp error)".to_string()),
+                ListSongID(i),
+            );
+        }
+        // Deleted videos are definitive per-song conditions, not systemic
+        // failures: the player must keep advancing, never halt.
+        assert_eq!(
+            p.play_status,
+            PlayState::Buffering(ListSongID(HALT_AFTER_CONSECUTIVE_FAILURES as usize))
+        );
+        assert_eq!(
+            p.list.get_list_iter().count(),
+            n,
+            "dead videos must never halt playback or drain the queue"
+        );
+    }
+
+    #[test]
+    fn repeated_auth_errors_do_not_halt() {
+        let n = HALT_AFTER_CONSECUTIVE_FAILURES as usize + 5;
+        let mut p = downloaded_songs(n);
+        p.set_notifications_enabled(false);
+        for i in 0..HALT_AFTER_CONSECUTIVE_FAILURES as usize {
+            p.play_status = PlayState::Buffering(ListSongID(i));
+            let _effect = p.handle_song_download_progress_update(
+                DownloadProgressUpdate::Error("authentication error (stale cookies)".to_string()),
+                ListSongID(i),
+            );
+        }
+        // Auth failures (18+ tracks, stale session) are per-song/login
+        // conditions: playback advances with per-song notifications, never halt.
+        assert_eq!(
+            p.play_status,
+            PlayState::Buffering(ListSongID(HALT_AFTER_CONSECUTIVE_FAILURES as usize))
+        );
+        assert_eq!(
+            p.list.get_list_iter().count(),
+            n,
+            "auth failures must never halt playback or drain the queue"
+        );
+    }
+
+    #[test]
     fn transient_errors_below_threshold_still_advance() {
         let mut p = downloaded_songs(HALT_AFTER_CONSECUTIVE_FAILURES as usize + 5);
         p.set_notifications_enabled(false);

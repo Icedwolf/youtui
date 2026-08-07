@@ -1,10 +1,17 @@
 # Youtui Backlog
 
 **Build:** 0 errors, 0 warnings, 0 clippy
-**Tests:** 486 youtui/ytmapi-rs passed + 20 ignored (live network tests are flaky)
-**Last updated:** 2026-08-06
+**Tests:** 312 youtui/ytmapi-rs passed + 20 ignored (live network tests are flaky)
+**Last updated:** 2026-08-07
 
 ## Completed
+
+### Session 2026-08-07 — Review: halt counter excludes dead/auth; code polish
+
+- **False halt on dead/auth songs (review finding).** `consecutive_download_failures` incremented on *every* non-cancellation error, so 5 consecutive dead-video (`video unavailable`) or auth (403/sign-in / 18+) failures fired `halt_on_download_failures` — stopping playback and cancelling all downloads on a perfectly healthy system. Dead videos and auth failures are definitive per-song/per-session conditions (each already notifies + skips + advances; dead-video additionally session-remembers), not signs of a systemic failure. The halt now counts only transient/systemic errors (429, format loss, spawn errors) — the debug304 `spawn yt-dlp` cascade it was built for. Tests (fail-first): `repeated_dead_videos_do_not_halt` + `repeated_auth_errors_do_not_halt` (312 passed). DECISIONS.md:23.
+- **Post-ALAC refactors (DRY, zero behavior change).** `ALAC_FFMPEG_ARGS` const — the 12-arg fragmented-mp4/ALAC mux tail lives in one place, both ffmpeg sites (stream_url + relay) just prepend `-i`. `is_session_dead_video(id)` helper shared by `get_next_song_id` + `first_live_song_id`. Dead-error branch extracts `(video_id, title)` in one song lookup.
+- **ffmpeg stderr piped to a read-only logger** (both sites) so a `source exited, empty pipe` bail is self-diagnosing (ffmpeg runs `-loglevel error`; the line logged right before the bail names the real cause). Handler never touches the buffer — pure diagnosability, cannot change playback.
+- Verified: 312 youtui tests green, clippy 0, `cargo build --release` clean (huge else block).
 
 ### Session 2026-08-06 — Deleted/stale tracks: session-only skip, no auto-removal
 

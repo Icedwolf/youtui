@@ -1414,27 +1414,38 @@ fn cancel_song_download(&self, id: ListSongID) {
                         debug!("download failed while buffering, skipping: {}", e);
                     } else {
                         warn!("download failed while buffering, skipping: {}", e);
-                        if is_auth_error(&e) {
+                        let is_dead = is_dead_video_error(&e);
+                        let is_auth = is_auth_error(&e);
+                        if is_auth {
                             self.notify_auth_error(&e);
                         }
-                        self.consecutive_download_failures =
-                            self.consecutive_download_failures.saturating_add(1);
-                        if self.consecutive_download_failures >= HALT_AFTER_CONSECUTIVE_FAILURES {
-                            self.halt_on_download_failures(&e);
-                            return Effects::none();
+                        if is_dead {
+                            let (video_id, title) = self
+                                .get_song_from_id(id)
+                                .map(|s| (s.video_id.get_raw().to_string(), s.title.clone()))
+                                .unwrap_or_default();
+                            self.list.session_dead_videos.insert(video_id);
+                            if self.notifications_enabled && !title.is_empty() {
+                                let body = format!(
+                                    "{title} — no longer available on YouTube, skipped"
+                                );
+                                spawn_notification("Song Unavailable", &body, 5000);
+                            }
                         }
-                    }
-                    let is_dead = is_dead_video_error(&e);
-                    if is_dead {
-                        let (video_id, title) = self
-                            .get_song_from_id(id)
-                            .map(|s| (s.video_id.get_raw().to_string(), s.title.clone()))
-                            .unwrap_or_default();
-                        self.list.session_dead_videos.insert(video_id);
-                        if self.notifications_enabled && !title.is_empty() {
-                            let body =
-                                format!("{title} — no longer available on YouTube, skipped");
-                            spawn_notification("Song Unavailable", &body, 5000);
+                        // A dead video or auth failure is a definitive per-song /
+                        // per-session condition, never a sign of a systemic
+                        // download problem. Only transient/systemic failures
+                        // (spawn errors, rate limits, format loss) count toward
+                        // the halt that protects the queue from draining.
+                        if !is_dead && !is_auth {
+                            self.consecutive_download_failures =
+                                self.consecutive_download_failures.saturating_add(1);
+                            if self.consecutive_download_failures
+                                >= HALT_AFTER_CONSECUTIVE_FAILURES
+                            {
+                                self.halt_on_download_failures(&e);
+                                return Effects::none();
+                            }
                         }
                     }
                     effect = effect.push(self.handle_set_to_error(id));
