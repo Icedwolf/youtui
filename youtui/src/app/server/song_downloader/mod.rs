@@ -223,7 +223,7 @@ async fn spawn_bg_cache_task(
     mut write_handle: tokio::task::JoinHandle<()>,
     buf: Arc<SharedBuffer>,
     log_prefix: &'static str,
-    _t0: Option<tokio::time::Instant>,
+    t0: Option<tokio::time::Instant>,
 ) {
     let stall = std::time::Duration::from_secs(BG_STALL_TIMEOUT_S);
     let mut last_len = buf.len();
@@ -270,7 +270,7 @@ async fn spawn_bg_cache_task(
             return;
         }
         Ok(_) => {
-            if let Some(t0) = _t0 {
+            if let Some(t0) = t0 {
                 debug!(%vid, elapsed = ?t0.elapsed(), "{log_prefix} completed successfully");
             }
         }
@@ -393,6 +393,55 @@ fn spawn_stdout_writer(
     })
 }
 
+/// The spawned ffmpeg's (stderr-logger, buffer-writer, child, optional stdin).
+type FfmpegSpawn = (
+    tokio::task::JoinHandle<()>,
+    tokio::task::JoinHandle<()>,
+    tokio::process::Child,
+    Option<tokio::process::ChildStdin>,
+);
+
+/// Where ffmpeg reads its webm input from.
+enum FfmpegInput {
+    /// A pre-resolved stream URL, read directly by ffmpeg.
+    Url(String),
+    /// yt-dlp stdout relayed over stdin.
+    Pipe,
+}
+
+/// Spawn ffmpeg as an ALAC-in-fragmented-mp4 muxer and wire its stdout into
+/// the shared buffer. Both ALAC pipelines (resolved-URL and yt-dlp relay) use
+/// the exact same ffmpeg invocation, differing only in input source. Returns
+/// the stderr logger, the buffer writer, the child, and (for `Pipe`) the stdin
+/// to feed the relay.
+fn spawn_ffmpeg(
+    input: FfmpegInput,
+    writer: SharedBufferWriter,
+    label: &'static str,
+) -> anyhow::Result<FfmpegSpawn> {
+    let mut ffmpeg = tokio::process::Command::new("ffmpeg");
+    match &input {
+        FfmpegInput::Url(url) => {
+            ffmpeg.args(["-i", url.as_str()]);
+        }
+        FfmpegInput::Pipe => {
+            ffmpeg.args(["-i", "pipe:0"]).stdin(std::process::Stdio::piped());
+        }
+    }
+    ffmpeg
+        .args(ALAC_FFMPEG_ARGS)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .kill_on_drop(true);
+    let mut child = ffmpeg.spawn().with_context(|| format!("spawn {label}"))?;
+    let stdin = child.stdin.take();
+    let stdout = child.stdout.take().context("no ffmpeg stdout")?;
+    let stderr = child.stderr.take().context("no ffmpeg stderr")?;
+    let stderr_handle = spawn_ffmpeg_stderr_handler(stderr);
+    let write_handle = spawn_stdout_writer(stdout, writer, label);
+    Ok((stderr_handle, write_handle, child, stdin))
+}
+
 fn decoder_from_buffer(
     buffer: &Arc<SharedBuffer>,
     byte_len: Option<u64>,
@@ -473,33 +522,15 @@ async fn ytdlp_pipeline(
     // WAV transcoding requires ffmpeg; without it the pipeline must use the
     // direct M4A path even when a (webm) URL resolved, since symphonia cannot
     // decode Opus in a webm container.
-    let ffmpeg_streaming = ffmpeg_avail;
 
     let buffer = SharedBuffer::new();
     let writer = buffer.writer();
 
     let (_stderr_handle, stdout_handle, mut child, _relay_handle, mut yt_child) =
         if ffmpeg_avail && let Some(url) = &stream_url {
-            let mut ffmpeg = tokio::process::Command::new("ffmpeg");
-            ffmpeg
-                .args(["-i", url.as_str()])
-                .args(ALAC_FFMPEG_ARGS)
-                .stdout(std::process::Stdio::piped())
-                .stderr(std::process::Stdio::piped())
-                .kill_on_drop(true);
-            let mut child = ffmpeg.spawn().context("spawn ffmpeg (stream_url)")?;
-            let ffmpeg_stdout = child.stdout.take().context("no ffmpeg stdout")?;
-            let ffmpeg_stderr = child.stderr.take().context("no ffmpeg stderr")?;
-
-            let write_handle = spawn_stdout_writer(ffmpeg_stdout, writer, "ffmpeg (stream_url)");
-
-            (
-                spawn_ffmpeg_stderr_handler(ffmpeg_stderr),
-                write_handle,
-                child,
-                None,
-                None,
-            )
+            let (stderr_handle, write_handle, ffmpeg_child, _stdin) =
+                spawn_ffmpeg(FfmpegInput::Url(url.clone()), writer, "ffmpeg (stream_url)")?;
+            (stderr_handle, write_handle, ffmpeg_child, None, None)
         } else if ffmpeg_avail {
             let mut yt_cmd = build_ytdlp_command(cfg, "ba/bestaudio");
             yt_cmd.stdout(std::process::Stdio::piped());
@@ -517,19 +548,9 @@ async fn ytdlp_pipeline(
 
             let stderr_handle = spawn_stderr_handler(yt_stderr, cfg.cancel_token.clone(), buffer.clone(), true);
 
-            let mut ffmpeg = tokio::process::Command::new("ffmpeg");
-            ffmpeg
-                .args(["-i", "pipe:0"])
-                .args(ALAC_FFMPEG_ARGS)
-                .stdin(std::process::Stdio::piped())
-                .stdout(std::process::Stdio::piped())
-                .stderr(std::process::Stdio::piped())
-                .kill_on_drop(true);
-            let mut ffmpeg_child = ffmpeg.spawn().context("spawn ffmpeg")?;
-            let mut ffmpeg_stdin = ffmpeg_child.stdin.take().context("no ffmpeg stdin")?;
-            let ffmpeg_stdout = ffmpeg_child.stdout.take().context("no ffmpeg stdout")?;
-            let ffmpeg_stderr = ffmpeg_child.stderr.take().context("no ffmpeg stderr")?;
-            let _ffmpeg_stderr_handle = spawn_ffmpeg_stderr_handler(ffmpeg_stderr);
+            let (_ffmpeg_stderr_handle, write_handle, ffmpeg_child, ffmpeg_stdin) =
+                spawn_ffmpeg(FfmpegInput::Pipe, writer, "ffmpeg")?;
+            let mut ffmpeg_stdin = ffmpeg_stdin.context("no ffmpeg stdin")?;
 
             let relay = tokio::spawn(async move {
                 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -548,8 +569,6 @@ async fn ytdlp_pipeline(
                 }
                 let _ = ffmpeg_stdin.shutdown().await;
             });
-
-            let write_handle = spawn_stdout_writer(ffmpeg_stdout, writer, "ffmpeg");
 
             (stderr_handle, write_handle, ffmpeg_child, Some(relay), Some(yt_dlp_child))
         } else {
@@ -575,7 +594,7 @@ async fn ytdlp_pipeline(
             (stderr_handle, write_handle, yt_dlp_child, None, None)
         };
 
-    let (decoder, needs_cache) = if ffmpeg_streaming {
+    let (decoder, needs_cache) = if ffmpeg_avail {
         let deadline =
             tokio::time::Instant::now() + std::time::Duration::from_secs(DECODER_INIT_DEADLINE_S);
         while buffer.len() < STREAM_INIT_THRESHOLD
@@ -707,7 +726,7 @@ async fn ytdlp_pipeline(
             }
         }
     } else {
-        let _total_len = {
+        let total_len = {
             let deadline = tokio::time::Instant::now()
                 + std::time::Duration::from_secs(M4A_TOTAL_LEN_TIMEOUT_S);
             loop {
@@ -745,7 +764,7 @@ async fn ytdlp_pipeline(
             elapsed = ?t0.elapsed(),
             "Trying early decoder init (spawn_blocking + {}s timeout)", DECODER_INIT_DEADLINE_S
         );
-        match try_streaming_init(&buffer, Some(_total_len)).await {
+        match try_streaming_init(&buffer, Some(total_len)).await {
             Ok(decoder) => {
                 debug!(%cfg.video_id, buf_len = buffer.len(), elapsed = ?t0.elapsed(),
                 "Streaming decoder init succeeded (M4A)");
@@ -803,7 +822,7 @@ async fn ytdlp_pipeline(
 
                 debug!(%cfg.video_id, buf_len = buffer.len(),
                 "Creating decoder from completed download (fallback)");
-                let d = decoder_from_buffer(&buffer, Some(_total_len), "m4a-fallback")?;
+                let d = decoder_from_buffer(&buffer, Some(total_len), "m4a-fallback")?;
                 (d, true)
             }
         }

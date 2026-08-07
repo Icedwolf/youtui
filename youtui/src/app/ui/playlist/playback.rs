@@ -383,7 +383,7 @@ Re-log into your browser, or refresh your cookie file / po_token, then restart."
         if self.shuffle_enabled {
             self.generate_shuffle_indices();
 
-            if let (Some(_current_id), Some(playing_idx)) =
+            if let (_, Some(playing_idx)) =
                 (was_playing, self.get_cur_playing_index())
             {
                 if let Some(shuffled_pos) =
@@ -1071,7 +1071,7 @@ fn cancel_song_download(&self, id: ListSongID) {
 
             self.generate_shuffle_indices();
 
-            if let (Some(_current_id), Some(playing_idx)) =
+            if let (_, Some(playing_idx)) =
                 (self.get_cur_playing_id(), self.get_cur_playing_index())
             {
                 if let Some(shuffled_pos) =
