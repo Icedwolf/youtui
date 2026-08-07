@@ -1228,11 +1228,7 @@ fn cancel_song_download(&self, id: ListSongID) {
             let Some(next_id) = self.get_id_from_index(next_actual) else {
                 continue;
             };
-            let dead = self
-                .get_song_from_id(next_id)
-                .map(|s| self.list.session_dead_videos.contains(s.video_id.get_raw()))
-                .unwrap_or(false);
-            if !dead {
+            if !self.is_session_dead_video(next_id) {
                 return Some(next_id);
             }
             debug!("skipping session-dead song on auto-advance id={next_id:?}");
@@ -1249,15 +1245,17 @@ fn cancel_song_download(&self, id: ListSongID) {
             let Some(id) = self.get_id_from_index(actual) else {
                 continue;
             };
-            let dead = self
-                .get_song_from_id(id)
-                .map(|s| self.list.session_dead_videos.contains(s.video_id.get_raw()))
-                .unwrap_or(false);
-            if !dead {
+            if !self.is_session_dead_video(id) {
                 return Some(id);
             }
         }
         None
+    }
+
+    fn is_session_dead_video(&self, id: ListSongID) -> bool {
+        self.get_song_from_id(id)
+            .map(|s| self.list.session_dead_videos.contains(s.video_id.get_raw()))
+            .unwrap_or(false)
     }
 
     fn get_prev_song_id(&self) -> Option<ListSongID> {
@@ -1428,15 +1426,11 @@ fn cancel_song_download(&self, id: ListSongID) {
                     }
                     let is_dead = is_dead_video_error(&e);
                     if is_dead {
-                        let video_id = self
+                        let (video_id, title) = self
                             .get_song_from_id(id)
-                            .map(|s| s.video_id.get_raw().to_string())
+                            .map(|s| (s.video_id.get_raw().to_string(), s.title.clone()))
                             .unwrap_or_default();
                         self.list.session_dead_videos.insert(video_id);
-                        let title = self
-                            .get_song_from_id(id)
-                            .map(|s| s.title.clone())
-                            .unwrap_or_default();
                         if self.notifications_enabled && !title.is_empty() {
                             let body =
                                 format!("{title} — no longer available on YouTube, skipped");

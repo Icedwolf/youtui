@@ -35,6 +35,24 @@ const BG_PROGRESS_POLL_MS: u64 = 1000;
 /// after playback starts, and a hard cap truncates the buffer mid-song.
 const BG_STALL_TIMEOUT_S: u64 = 60;
 const M4A_TOTAL_LEN_TIMEOUT_S: u64 = 15;
+/// Shared tail of the ffmpeg invocation for ALAC-in-fragmented-mp4 streaming.
+/// Only the `-i` input differs between the direct-URL and relay paths, so the
+/// mux flags live in one place (see DECISIONS.md:10).
+const ALAC_FFMPEG_ARGS: [&str; 13] = [
+    "-fflags",
+    "nobuffer",
+    "-flags",
+    "low_delay",
+    "-f",
+    "mp4",
+    "-movflags",
+    "empty_moov+default_base_moof+frag_every_frame",
+    "-c:a",
+    "alac",
+    "-loglevel",
+    "error",
+    "pipe:1",
+];
 
 pub(crate) struct DownloadConfig {
     pub yt_dlp_command: String,
@@ -464,23 +482,8 @@ async fn ytdlp_pipeline(
         if ffmpeg_avail && let Some(url) = &stream_url {
             let mut ffmpeg = tokio::process::Command::new("ffmpeg");
             ffmpeg
-                .args([
-                    "-i",
-                    url,
-                    "-fflags",
-                    "nobuffer",
-                    "-flags",
-                    "low_delay",
-                    "-f",
-                    "mp4",
-                    "-movflags",
-                    "empty_moov+default_base_moof+frag_every_frame",
-                    "-c:a",
-                    "alac",
-                    "-loglevel",
-                    "error",
-                    "pipe:1",
-                ])
+                .args(["-i", url.as_str()])
+                .args(ALAC_FFMPEG_ARGS)
                 .stdout(std::process::Stdio::piped())
                 .stderr(std::process::Stdio::piped())
                 .kill_on_drop(true);
@@ -516,23 +519,8 @@ async fn ytdlp_pipeline(
 
             let mut ffmpeg = tokio::process::Command::new("ffmpeg");
             ffmpeg
-                .args([
-                    "-i",
-                    "pipe:0",
-                    "-fflags",
-                    "nobuffer",
-                    "-flags",
-                    "low_delay",
-                    "-f",
-                    "mp4",
-                    "-movflags",
-                    "empty_moov+default_base_moof+frag_every_frame",
-                    "-c:a",
-                    "alac",
-                    "-loglevel",
-                    "error",
-                    "pipe:1",
-                ])
+                .args(["-i", "pipe:0"])
+                .args(ALAC_FFMPEG_ARGS)
                 .stdin(std::process::Stdio::piped())
                 .stdout(std::process::Stdio::piped())
                 .stderr(std::process::Stdio::piped())
