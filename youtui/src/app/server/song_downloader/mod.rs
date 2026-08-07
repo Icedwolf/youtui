@@ -511,6 +511,43 @@ fn build_ytdlp_command(cfg: &DownloadConfig, format: &str) -> tokio::process::Co
     cmd
 }
 
+/// A spawned yt-dlp streaming child: its stderr classifier, its stdout (fed to
+/// ffmpeg's stdin for the relay path, or to the buffer writer for direct M4A),
+/// and the child itself (held for the pipeline so `kill_on_drop` fires only on
+/// bail/timeout/cancel, rather than relying on pipe closure which left orphans).
+struct YtDlpSpawn {
+    stderr_handle: tokio::task::JoinHandle<()>,
+    stdout: tokio::process::ChildStdout,
+    child: tokio::process::Child,
+}
+
+/// Build, spawn, and wire a yt-dlp streaming child with auth applied. Shared by
+/// the relay (WebM→ffmpeg) and direct M4A fallback, which differ only in format
+/// and whether the stderr handler logs its own cancellation.
+fn spawn_ytdlp(
+    cfg: &DownloadConfig,
+    format: &str,
+    buffer: Arc<SharedBuffer>,
+    t0: tokio::time::Instant,
+    log_cancellation: bool,
+) -> anyhow::Result<YtDlpSpawn> {
+    let mut cmd = build_ytdlp_command(cfg, format);
+    cmd.stdout(std::process::Stdio::piped());
+    cmd.stderr(std::process::Stdio::piped());
+    cmd.kill_on_drop(true);
+    let mut child = cmd.spawn().context("spawn yt-dlp")?;
+    let stdout = child.stdout.take().context("no stdout from yt-dlp")?;
+    let stderr = child.stderr.take().context("no stderr from yt-dlp")?;
+    debug!(%cfg.video_id, elapsed = ?t0.elapsed(), "yt-dlp spawned");
+    let stderr_handle =
+        spawn_stderr_handler(stderr, cfg.cancel_token.clone(), buffer, log_cancellation);
+    Ok(YtDlpSpawn {
+        stderr_handle,
+        stdout,
+        child,
+    })
+}
+
 async fn ytdlp_pipeline(
     cfg: &DownloadConfig,
     ffmpeg_avail: bool,
@@ -532,21 +569,8 @@ async fn ytdlp_pipeline(
                 spawn_ffmpeg(FfmpegInput::Url(url.clone()), writer, "ffmpeg (stream_url)")?;
             (stderr_handle, write_handle, ffmpeg_child, None, None)
         } else if ffmpeg_avail {
-            let mut yt_cmd = build_ytdlp_command(cfg, "ba/bestaudio");
-            yt_cmd.stdout(std::process::Stdio::piped());
-            yt_cmd.stderr(std::process::Stdio::piped());
-            // yt_dlp_child is held for the whole pipeline (returned in the tuple)
-            // and moved into the bg cache task after streaming init, so kill_on_drop
-            // only fires on bail/timeout/cancel — killing yt-dlp directly instead of
-            // relying on pipe closure, which left orphans running for seconds.
-            yt_cmd.kill_on_drop(true);
-            let mut yt_dlp_child = yt_cmd.spawn().context("spawn yt-dlp")?;
-            let yt_stdout = yt_dlp_child.stdout.take().context("no stdout from yt-dlp")?;
-            let yt_stderr = yt_dlp_child.stderr.take().context("no stderr from yt-dlp")?;
-
-            debug!(%cfg.video_id, elapsed = ?t0.elapsed(), "yt-dlp spawned");
-
-            let stderr_handle = spawn_stderr_handler(yt_stderr, cfg.cancel_token.clone(), buffer.clone(), true);
+            let YtDlpSpawn { stderr_handle, stdout: yt_stdout, child: yt_dlp_child } =
+                spawn_ytdlp(cfg, "ba/bestaudio", buffer.clone(), t0, true)?;
 
             let (_ffmpeg_stderr_handle, write_handle, ffmpeg_child, ffmpeg_stdin) =
                 spawn_ffmpeg(FfmpegInput::Pipe, writer, "ffmpeg")?;
@@ -572,22 +596,8 @@ async fn ytdlp_pipeline(
 
             (stderr_handle, write_handle, ffmpeg_child, Some(relay), Some(yt_dlp_child))
         } else {
-            let mut yt_cmd = build_ytdlp_command(cfg, "bestaudio[ext=m4a]/bestaudio/bestaudio*");
-            yt_cmd.stdout(std::process::Stdio::piped());
-            yt_cmd.stderr(std::process::Stdio::piped());
-            yt_cmd.kill_on_drop(true);
-            let mut yt_dlp_child = yt_cmd.spawn().context("spawn yt-dlp")?;
-            let yt_stdout = yt_dlp_child
-                .stdout
-                .take()
-                .context("no stdout from yt-dlp")?;
-            let yt_stderr = yt_dlp_child
-                .stderr
-                .take()
-                .context("no stderr from yt-dlp")?;
-            debug!(%cfg.video_id, elapsed = ?t0.elapsed(), "yt-dlp spawned");
-
-            let stderr_handle = spawn_stderr_handler(yt_stderr, cfg.cancel_token.clone(), buffer.clone(), false);
+            let YtDlpSpawn { stderr_handle, stdout: yt_stdout, child: yt_dlp_child } =
+                spawn_ytdlp(cfg, "bestaudio[ext=m4a]/bestaudio/bestaudio*", buffer.clone(), t0, false)?;
 
             let write_handle = spawn_stdout_writer(yt_stdout, writer, "yt-dlp");
 
