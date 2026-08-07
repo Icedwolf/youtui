@@ -1490,7 +1490,7 @@ mod tests {
         let t0 = Instant::now();
         let mut yt = std::process::Command::new("yt-dlp");
         yt.args(["-f", "bestaudio[ext=webm]", "--download-sections", "*0-10",
-            "-o", "-", "--no-warnings", "--no-playlist", &url])
+            "--ignore-config", "-o", "-", "--no-warnings", "--no-playlist", &url])
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::null());
         let mut yt_child = match yt.spawn() {
@@ -1578,7 +1578,7 @@ mod tests {
         let output_path = "/tmp/yt_bench_m4a_comparison.m4a";
         let mut yt2 = std::process::Command::new("yt-dlp");
         yt2.args(["-f", "bestaudio[ext=m4a]", "--download-sections", "*0-10",
-            "-o", output_path, "--no-warnings", "--no-playlist", &url])
+            "--ignore-config", "-o", output_path, "--no-warnings", "--no-playlist", &url])
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null());
         match yt2.status() {
