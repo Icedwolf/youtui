@@ -534,6 +534,7 @@ impl SongSearchBrowser {
             return Effects::none();
         };
         self.search.clear_text();
+        self.song_list.state = ListStatus::Loading;
 
         Effects::new(move |server: &ArcServer| {
             let query = search_query.clone();
@@ -546,7 +547,10 @@ impl SongSearchBrowser {
                     }) as Box<dyn FnOnce(&mut SongSearchBrowser) -> Effects<SongSearchBrowser> + Send>,
                     Err(error) => {
                         warn!("Song search error: {error}");
-                        Box::new(|_: &mut SongSearchBrowser| Effects::none())
+                        Box::new(move |this: &mut SongSearchBrowser| {
+                            this.song_list.state = ListStatus::Error;
+                            Effects::none()
+                        })
                             as Box<dyn FnOnce(&mut SongSearchBrowser) -> Effects<SongSearchBrowser> + Send>
                     }
                 }
@@ -584,6 +588,7 @@ impl SongSearchBrowser {
     pub fn replace_song_list(&mut self, song_list: Vec<SearchResultSong>) {
         self.song_list.clear();
         self.song_list.append_raw_search_result_songs(song_list);
+        self.song_list.state = ListStatus::Loaded;
         self.rebuild_filtered_indices();
         if let Err(e) = self.apply_all_sort_commands() {
             debug!("Tried to sort a column that is not sortable - error {e}")
@@ -614,6 +619,26 @@ impl SongSearchBrowser {
                 debug!("go_to_last called while in search/filter mode");
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn replace_song_list_marks_results_loaded() {
+        let mut browser = SongSearchBrowser::new();
+        browser.replace_song_list(Vec::new());
+        assert_eq!(browser.song_list.state, ListStatus::Loaded);
+    }
+
+    #[test]
+    fn search_triggers_loading_state() {
+        let mut browser = SongSearchBrowser::new();
+        browser.search.replace_text("some query");
+        let _effects = browser.search();
+        assert_eq!(browser.song_list.state, ListStatus::Loading);
     }
 }
 
