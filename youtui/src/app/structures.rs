@@ -1104,7 +1104,6 @@ mod bench {
                 vec!["Artist A".into(), "Artist B".into()],
                 Some("Album".into()),
                 "3:30".into(),
-                None,
             );
             std::hint::black_box(&result);
         }
@@ -1125,7 +1124,7 @@ mod bench {
 #[cfg(all(test, not(debug_assertions)))]
 mod criterion_benches {
     use super::*;
-    use criterion::{Criterion, black_box};
+    use criterion::Criterion;
     use ytmapi_rs::common::VideoID;
 
     fn make_songs(count: usize) -> Vec<ListSong> {
@@ -1150,7 +1149,7 @@ mod criterion_benches {
         c.bench_function("get_field/artists_cached", |b| {
             b.iter(|| {
                 for song in &songs {
-                    black_box(song.get_field(ListSongDisplayableField::Artists));
+                    std::hint::black_box(song.get_field(ListSongDisplayableField::Artists));
                 }
             });
         });
@@ -1158,7 +1157,7 @@ mod criterion_benches {
         c.bench_function("get_field/track_no_cached", |b| {
             b.iter(|| {
                 for song in &songs {
-                    black_box(song.get_field(ListSongDisplayableField::TrackNo));
+                    std::hint::black_box(song.get_field(ListSongDisplayableField::TrackNo));
                 }
             });
         });
@@ -1172,7 +1171,7 @@ mod criterion_benches {
         c.bench_function("get_fields/4col", |b| {
             b.iter(|| {
                 for song in &songs {
-                    black_box(song.get_fields(fields_4));
+                    std::hint::black_box(song.get_fields(fields_4));
                 }
             });
         });
@@ -1189,14 +1188,14 @@ mod criterion_benches {
         c.bench_function("get_fields/7col", |b| {
             b.iter(|| {
                 for song in &songs {
-                    black_box(song.get_fields(fields_7));
+                    std::hint::black_box(song.get_fields(fields_7));
                 }
             });
         });
 
         c.bench_function("create_with_metadata", |b| {
             b.iter(|| {
-                black_box(ListSong::create_with_metadata(
+                std::hint::black_box(ListSong::create_with_metadata(
                     VideoID::from_raw("video_id"),
                     "Song Title".into(),
                     vec!["Artist A".into(), "Artist B".into()],
