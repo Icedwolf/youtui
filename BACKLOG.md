@@ -6,6 +6,12 @@
 
 ## Completed
 
+### Session 2026-08-07 — Release-bench repair; duration-const naming; env invariant docs
+
+- **Release-profile benchmark module repaired.** `structures.rs:1101` `bench_create_with_metadata` still passed a stale 6th arg to the 5-arg `create_with_metadata` (E0061), and `criterion_benches` used deprecated `criterion::black_box` (6 sites). Both broke `cargo test --release` / `cargo clippy --release --tests` compile of the `#[cfg(all(test, not(debug_assertions)))]` block — the P4.2 criterion workflow and the "0 clippy" full-profile claim silently died. Dropped the stale arg; `criterion::black_box` → `std::hint::black_box`. Now `cargo test --release -p youtui bench_` runs (5 passed).
+- **Magic number named.** `7200` in `resolve_display_duration` → `MAX_PLAUSIBLE_DURATION_S` (`drawutils.rs`), documented.
+- **Env-isolation invariant recorded.** DECISIONS.md:24 + AGENTS.md architecture invariants: children never inherit the parent `envp` (apply_child_env allowlist, E2BIG impossible); also fixed the stale "WebM→WAV / 42MB WAV" invariant lines to ALAC/fragmented-MP4.
+
 ### Session 2026-08-07 — Subprocess env isolation; streamed-ALAC duration display
 
 - **E2BIG spawn failures root-caused and fixed (`e9c90f6`).** A live report — every song "instantly" failing with 5 consecutive download errors — surfaced `execve` errno **E2BIG** (`Argument list too long`) via the resolve-spawn logging: the app forwarded its *entire inherited `envp`* to every child, so an oversized launch environment blew past `ARG_MAX`/`MAX_ARG_STRLEN` and the OS refused every `spawn`. Reconstructed argv was ~2.4KB max (the `--add-header Cookie:` header); injecting one 200KB env var reproduces the exact error. Fix: `apply_child_env(&mut Command)` (`song_downloader/mod.rs`) **env_clears** children and re-adds a bounded allowlist (`PATH, HOME, LANG, LC_*, TMP*/TEMP, XDG_*, proxy, SSL_CERT_*`) — child env is now provably small, so E2BIG is structurally impossible regardless of parent env. Applied to yt-dlp resolve, yt-dlp relay/M4A, and ffmpeg. This is also the errno behind the older 2376× silent `spawn yt-dlp` cascade. Init-only checks (node version, `check_ffmpeg`, cookie export) intentionally left inheriting env: they degrade gracefully (js-runtime off, M4A fallback, no auto export) rather than blocking playback. Tests (fail-first): oversized-env E2BIG, env-clear rescue, PATH/proxy preservation.

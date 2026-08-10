@@ -26,6 +26,8 @@ Critical invariants and rationale. **Read before changing playback/download code
 
 23. **The download-failure halt counts only transient/systemic failures.** `consecutive_download_failures` (halt + stop at `HALT_AFTER_CONSECUTIVE_FAILURES`) is incremented only for non-cancellation, non-dead, non-auth errors (rate limits, format loss, spawn errors). A dead video or auth/18+ failure is a definitive per-song/per-session condition, never a sign of a systemic download problem — it advances the queue with its own notification instead of feeding the halt. This keeps a run of deleted (or age-restricted) tracks from spuriously stopping the whole player.
 
+24. **Subprocesses never inherit the parent `envp`.** Every yt-dlp/ffmpeg child runs through `apply_child_env` (`song_downloader/mod.rs`): `env_clear()` + a small allowlist (`PATH, HOME, LANG, LC_*, TMP*/TEMP, XDG_*, proxy, SSL_CERT_*`). An oversized launch environment made `execve` fail with **E2BIG** (`Argument list too long`) — `spawn yt-dlp` / `ffmpeg` refused for every song (the errno behind the older 2376× silent spawn cascade, first surfaced by the resolve spawn logging). Bounding the child env makes the failure structurally impossible regardless of how the parent was launched. Init-only checks (node version, `check_ffmpeg`, cookie export) intentionally still inherit env — they degrade gracefully instead of blocking playback.
+
 ## Audio Format Constraints (symphonia 0.5)
 
 9. **No Opus support.** symphonia 0.5's `all-codecs` = {aac, adpcm, alac, flac, mp1, mp2, mp3, pcm, vorbis}. No `opus` feature exists in any 0.5.x version.
