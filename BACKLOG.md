@@ -1,10 +1,15 @@
 # Youtui Backlog
 
 **Build:** 0 errors, 0 warnings, 0 clippy
-**Tests:** 312 youtui/ytmapi-rs passed + 20 ignored (live network tests are flaky)
+**Tests:** 320 youtui passed + 2 ignored (live network tests are flaky)
 **Last updated:** 2026-08-07
 
 ## Completed
+
+### Session 2026-08-07 — Subprocess env isolation; streamed-ALAC duration display
+
+- **E2BIG spawn failures root-caused and fixed (`e9c90f6`).** A live report — every song "instantly" failing with 5 consecutive download errors — surfaced `execve` errno **E2BIG** (`Argument list too long`) via the resolve-spawn logging: the app forwarded its *entire inherited `envp`* to every child, so an oversized launch environment blew past `ARG_MAX`/`MAX_ARG_STRLEN` and the OS refused every `spawn`. Reconstructed argv was ~2.4KB max (the `--add-header Cookie:` header); injecting one 200KB env var reproduces the exact error. Fix: `apply_child_env(&mut Command)` (`song_downloader/mod.rs`) **env_clears** children and re-adds a bounded allowlist (`PATH, HOME, LANG, LC_*, TMP*/TEMP, XDG_*, proxy, SSL_CERT_*`) — child env is now provably small, so E2BIG is structurally impossible regardless of parent env. Applied to yt-dlp resolve, yt-dlp relay/M4A, and ffmpeg. This is also the errno behind the older 2376× silent `spawn yt-dlp` cascade. Init-only checks (node version, `check_ffmpeg`, cookie export) intentionally left inheriting env: they degrade gracefully (js-runtime off, M4A fallback, no auto export) rather than blocking playback. Tests (fail-first): oversized-env E2BIG, env-clear rescue, PATH/proxy preservation.
+- **Streamed-ALAC duration display fixed (`80a981c`).** Bottom bar showed no progress and `0:00` total for ALAC playback. Fragmented-MP4 with `empty_moov` writes `mdhd.duration = 0`; symphonia's isomp4 sets `n_frames = mdhd.duration` (demuxer.rs:48), so the decoder reported `duration = Some(0)` — which the footer's `secs < 7200` filter accepted, never falling back to metadata. New shared `resolve_display_duration(actual, meta_secs)` (`drawutils.rs`) rejects zero *and* bogus-huge durations and falls back to `duration_secs`; replaces the two divergent inline copies (footer.rs + draw_media_controls.rs, the latter was also missing the huge-value clamp). 5 tests.
 
 ### Session 2026-08-07 — Spawn consolidation + upstream review (nothing to merge)
 
