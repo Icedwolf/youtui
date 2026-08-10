@@ -124,10 +124,20 @@ impl Youtui {
                 );
             }
         }));
-        let js_runtime = if std::process::Command::new("node").arg("--version").stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).status().is_ok() {
-            Some("node".to_string())
-        } else {
-            None
+        let js_runtime = {
+            let mut cmd = std::process::Command::new("node");
+            song_downloader::apply_child_env(&mut cmd);
+            if cmd
+                .arg("--version")
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status()
+                .is_ok()
+            {
+                Some("node".to_string())
+            } else {
+                None
+            }
         };
         let (cookie_path, did_export) = if let Some(browser) = detect_browser_source() {
             let mut cp = get_config_dir()?;
@@ -424,7 +434,9 @@ fn cookie_export_needed(path: &Path) -> bool {
 /// Success is therefore a *non-empty cookie file*, not the exit code — the
 /// stderr is only surfaced when the file came out empty.
 fn run_one_cookie_export(cmd: &str, browser: &str, out: &Path) -> Result<(), String> {
-    let output = std::process::Command::new(cmd)
+    let mut c = std::process::Command::new(cmd);
+    song_downloader::apply_child_env(&mut c);
+    let output = c
         .args([
             "--ignore-config",
             "--cookies-from-browser",

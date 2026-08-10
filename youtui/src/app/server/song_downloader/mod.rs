@@ -97,8 +97,9 @@ fn parse_total_size(line: &str) -> Option<u64> {
 
 fn check_ffmpeg() -> bool {
     static HAS_FFMPEG: LazyLock<bool> = LazyLock::new(|| {
-        std::process::Command::new("ffmpeg")
-            .arg("-version")
+        let mut cmd = std::process::Command::new("ffmpeg");
+        apply_child_env(&mut cmd);
+        cmd.arg("-version")
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
             .status()
@@ -114,7 +115,8 @@ fn check_ffmpeg() -> bool {
 /// in the field. `env_clear` bounds the child's env to the small allowlist
 /// below, so spawning can never hit `ARG_MAX` regardless of how the parent was
 /// launched, while keeping PATH (binary lookup), proxies, and TLS cert paths
-/// intact. Applied to every yt-dlp/ffmpeg child.
+/// intact. Applied to every yt-dlp/ffmpeg child (download pipeline) and every
+/// spawn-side effect via the shared sync variant.
 const CHILD_ENV_ALLOWLIST: &[&str] = &[
     "PATH",
     "HOME",
@@ -139,12 +141,38 @@ const CHILD_ENV_ALLOWLIST: &[&str] = &[
     "SSL_CERT_DIR",
 ];
 
-pub(crate) fn apply_child_env(cmd: &mut tokio::process::Command) {
+pub(crate) fn apply_child_env(cmd: &mut impl ChildCommand) {
     cmd.env_clear();
     for key in CHILD_ENV_ALLOWLIST {
         if let Ok(value) = std::env::var(key) {
             cmd.env(key, value);
         }
+    }
+}
+
+/// Command types `apply_child_env` can shape. Implemented for both the sync and
+/// async command types so every spawn site — the download pipeline (tokio) and
+/// the init-only checks (std) — runs children with the same bounded env.
+pub(crate) trait ChildCommand {
+    fn env_clear(&mut self);
+    fn env(&mut self, key: &str, value: String);
+}
+
+impl ChildCommand for std::process::Command {
+    fn env_clear(&mut self) {
+        std::process::Command::env_clear(self);
+    }
+    fn env(&mut self, key: &str, value: String) {
+        std::process::Command::env(self, key, value);
+    }
+}
+
+impl ChildCommand for tokio::process::Command {
+    fn env_clear(&mut self) {
+        tokio::process::Command::env_clear(self);
+    }
+    fn env(&mut self, key: &str, value: String) {
+        tokio::process::Command::env(self, key, value);
     }
 }
 
@@ -982,6 +1010,15 @@ mod tests {
         cmd.env("HUGENV", "x".repeat(300 * 1024));
         apply_child_env(&mut cmd);
         let status = cmd.status().await.expect("env_clear must bound env and allow spawn");
+        assert!(status.success());
+    }
+
+    #[test]
+    fn apply_child_env_rescues_oversized_env_spawn_sync() {
+        let mut cmd = std::process::Command::new("/bin/true");
+        cmd.env("HUGENV", "x".repeat(300 * 1024));
+        apply_child_env(&mut cmd);
+        let status = cmd.status().expect("sync spawn also runs with the bounded env");
         assert!(status.success());
     }
 
