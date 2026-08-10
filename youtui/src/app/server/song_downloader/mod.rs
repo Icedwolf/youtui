@@ -108,6 +108,46 @@ fn check_ffmpeg() -> bool {
     *HAS_FFMPEG
 }
 
+/// Subprocesses run with a controlled, minimal environment instead of the
+/// unbounded parent `envp`. An oversized/inherited env makes `execve` fail with
+/// E2BIG (`Argument list too long`) — the systemic `spawn yt-dlp` failure seen
+/// in the field. `env_clear` bounds the child's env to the small allowlist
+/// below, so spawning can never hit `ARG_MAX` regardless of how the parent was
+/// launched, while keeping PATH (binary lookup), proxies, and TLS cert paths
+/// intact. Applied to every yt-dlp/ffmpeg child.
+const CHILD_ENV_ALLOWLIST: &[&str] = &[
+    "PATH",
+    "HOME",
+    "LANG",
+    "LC_ALL",
+    "LC_CTYPE",
+    "TMP",
+    "TMPDIR",
+    "TEMP",
+    "XDG_CONFIG_HOME",
+    "XDG_DATA_HOME",
+    "XDG_CACHE_HOME",
+    "http_proxy",
+    "https_proxy",
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "all_proxy",
+    "ALL_PROXY",
+    "no_proxy",
+    "NO_PROXY",
+    "SSL_CERT_FILE",
+    "SSL_CERT_DIR",
+];
+
+pub(crate) fn apply_child_env(cmd: &mut tokio::process::Command) {
+    cmd.env_clear();
+    for key in CHILD_ENV_ALLOWLIST {
+        if let Ok(value) = std::env::var(key) {
+            cmd.env(key, value);
+        }
+    }
+}
+
 /// Try to init a symphonia decoder from the buffer while it's still being
 /// written.  For WAV: the header is at the start, so probing with the first
 /// few KB works.  For M4A (isomp4): the moov atom may be at the end, so
@@ -430,6 +470,7 @@ fn spawn_ffmpeg(
     label: &'static str,
 ) -> anyhow::Result<FfmpegSpawn> {
     let mut ffmpeg = tokio::process::Command::new("ffmpeg");
+    apply_child_env(&mut ffmpeg);
     match &input {
         FfmpegInput::Url(url) => {
             ffmpeg.args(["-i", url.as_str()]);
@@ -509,6 +550,7 @@ fn build_ytdlp_command(cfg: &DownloadConfig, format: &str) -> tokio::process::Co
         cfg.yt_dlp_command.clone()
     };
     let mut cmd = tokio::process::Command::new(&yt_dlp_cmd);
+    apply_child_env(&mut cmd);
     cmd.args(["-f", format, "-o", "-", "--no-warnings", "--no-playlist"]);
     resolve::apply_ytdlp_auth_args(
         &mut cmd,
@@ -925,6 +967,42 @@ mod tests {
     const TEST_WAV: &[u8] = include_bytes!("../../../../../ytmapi-rs/test_json/test_silence.wav");
     const TEST_ALAC: &[u8] =
         include_bytes!("../../../../../ytmapi-rs/test_json/test_alac_fragmented.mp4");
+
+    #[tokio::test]
+    async fn oversized_env_var_makes_spawn_fail_with_e2big() {
+        let mut cmd = tokio::process::Command::new("/bin/true");
+        cmd.env("HUGENV", "x".repeat(300 * 1024));
+        let result = cmd.status().await;
+        assert!(result.is_err(), "oversized env must make execve fail with E2BIG");
+    }
+
+    #[tokio::test]
+    async fn apply_child_env_rescues_oversized_env_spawn() {
+        let mut cmd = tokio::process::Command::new("/bin/true");
+        cmd.env("HUGENV", "x".repeat(300 * 1024));
+        apply_child_env(&mut cmd);
+        let status = cmd.status().await.expect("env_clear must bound env and allow spawn");
+        assert!(status.success());
+    }
+
+    #[tokio::test]
+    async fn apply_child_env_preserves_path_and_proxy() {
+        const PROXY: &str = "http://proxy.invalid:8080";
+        // tokio tests are single-threaded; the parent env is not read by the
+        // runtime while we set it, so this is safe here.
+        unsafe { std::env::set_var("http_proxy", PROXY) };
+        let mut cmd = tokio::process::Command::new("/bin/sh");
+        cmd.arg("-c").arg("printf %s \"$http_proxy\"");
+        apply_child_env(&mut cmd);
+        let out = cmd.output().await.expect("must spawn with bounded env");
+        assert!(out.status.success());
+        assert_eq!(
+            String::from_utf8_lossy(&out.stdout),
+            PROXY,
+            "allowlisted proxy var must reach the child"
+        );
+        unsafe { std::env::remove_var("http_proxy") };
+    }
 
     #[test]
     fn track_download_progress_growth_resets_stall() {

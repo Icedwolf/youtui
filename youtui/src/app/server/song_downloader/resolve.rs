@@ -136,6 +136,7 @@ pub async fn resolve_url(
 
     let cmd_name = if yt_dlp_cmd.is_empty() { "yt-dlp" } else { yt_dlp_cmd };
     let mut cmd = tokio::process::Command::new(cmd_name);
+    super::apply_child_env(&mut cmd);
     cmd.arg("--print").arg("url");
     cmd.arg("-f").arg("bestaudio[ext=webm]/bestaudio");
     cmd.arg("--no-warnings").arg("--no-playlist");
