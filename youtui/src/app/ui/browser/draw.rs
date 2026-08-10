@@ -78,8 +78,10 @@ pub fn draw_artist_search_browser(
             artists_chunk,
             artistselected,
             |t, f, chunk| {
-                draw_list(f, t, chunk, cur_tick);
-                None
+                draw_loadable(f, t, chunk, cur_tick, |t, f, chunk| {
+                    draw_list(f, t, chunk, cur_tick);
+                    None
+                })
             },
         );
     } else {
@@ -94,8 +96,10 @@ pub fn draw_artist_search_browser(
             shrunk_artists_chunk,
             artistselected,
             |t, f, chunk| {
-                draw_list(f, t, chunk, cur_tick);
-                None
+                draw_loadable(f, t, chunk, cur_tick, |t, f, chunk| {
+                    draw_list(f, t, chunk, cur_tick);
+                    None
+                })
             },
         );
         draw_search_box(

@@ -2,9 +2,10 @@ use crate::app::component::actionhandler::{
     Action, KeyRouter, Scrollable, Suggestable, TextHandler,
 };
 use crate::app::effect::Effects;
+use crate::app::structures::ListStatus;
 use crate::app::ui::action::AppAction;
 use crate::app::ui::browser::shared_components::SearchBlock;
-use crate::app::view::{HasTitle, ListView};
+use crate::app::view::{HasTitle, ListView, Loadable};
 use crate::config::Config;
 use crate::config::keymap::Keymap;
 use crate::widgets::ScrollingListState;
@@ -31,6 +32,7 @@ pub trait SearchPanelConfig: Sized + 'static {
 pub struct SearchPanel<C: SearchPanelConfig> {
     pub list: Vec<C::Item>,
     pub route: SearchPanelInputRouting,
+    pub status: ListStatus,
     selected: usize,
     pub search_popped: bool,
     pub search: SearchBlock,
@@ -43,6 +45,7 @@ impl<C: SearchPanelConfig> SearchPanel<C> {
         SearchPanel {
             list: Default::default(),
             route: Default::default(),
+            status: ListStatus::New,
             selected: Default::default(),
             search_popped: true,
             search: SearchBlock::default(),
@@ -148,7 +151,27 @@ impl<C: SearchPanelConfig> ListView for SearchPanel<C> {
 
 impl<C: SearchPanelConfig> HasTitle for SearchPanel<C> {
     fn get_title(&self) -> Line<'static> {
-        Line::from(C::title())
+        match self.status {
+            ListStatus::New => Line::from(C::title()),
+            ListStatus::Loading | ListStatus::InProgress => {
+                Line::from(format!("{} - loading", C::title()))
+            }
+            ListStatus::Loaded => {
+                let len = self.list.len();
+                if len == 0 {
+                    Line::from(format!("{} - nothing found", C::title()))
+                } else {
+                    Line::from(format!("{} - {len} results", C::title()))
+                }
+            }
+            ListStatus::Error => Line::from(format!("{} - Error received", C::title())),
+        }
+    }
+}
+
+impl<C: SearchPanelConfig> Loadable for SearchPanel<C> {
+    fn is_loading(&self) -> bool {
+        matches!(self.status, ListStatus::Loading | ListStatus::InProgress)
     }
 }
 
@@ -250,5 +273,55 @@ impl Action for BrowserPlaylistsAction {
             Self::DisplaySelectedPlaylist => "Display selected playlist",
         }
         .into()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ytmapi_rs::common::{ArtistChannelID, YoutubeID};
+    use ytmapi_rs::parse::SearchResultArtist;
+
+    fn panel() -> SearchPanel<ArtistSearchConfig> {
+        SearchPanel::new()
+    }
+
+    fn artist(name: &str, id: &str) -> SearchResultArtist {
+        SearchResultArtist::new(
+            name.to_string(),
+            Some("1M subscribers".to_string()),
+            ArtistChannelID::from_raw(id.to_string()),
+        )
+    }
+
+    fn push(panel: &mut SearchPanel<ArtistSearchConfig>, name: &str, id: &str) {
+        panel.list.push(artist(name, id));
+    }
+
+    #[test]
+    fn get_title_reflects_loading_and_new_states() {
+        assert_eq!(panel().get_title().to_string(), "Artists");
+        let mut p = panel();
+        p.status = ListStatus::Loading;
+        assert_eq!(p.get_title().to_string(), "Artists - loading");
+        assert!(p.is_loading());
+    }
+
+    #[test]
+    fn get_title_loaded_shows_count_or_empty() {
+        let mut p = panel();
+        p.status = ListStatus::Loaded;
+        assert_eq!(p.get_title().to_string(), "Artists - nothing found");
+        push(&mut p, "The Beatles", "UC2XdaAVUannpujzv32jcouQ");
+        push(&mut p, "John Lennon", "UCcSL2nYSJp_IgdzH0xBBdcg");
+        assert_eq!(p.get_title().to_string(), "Artists - 2 results");
+        assert!(!p.is_loading());
+    }
+
+    #[test]
+    fn get_title_error_state() {
+        let mut p = panel();
+        p.status = ListStatus::Error;
+        assert_eq!(p.get_title().to_string(), "Artists - Error received");
     }
 }

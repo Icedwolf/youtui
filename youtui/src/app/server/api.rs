@@ -176,6 +176,48 @@ where
     }
 }
 
+/// Collapse duplicate artist search results. Keeps the first occurrence of a
+/// channel ID and the first occurrence of a (case/whitespace-insensitive) name,
+/// so the same artist returned under a duplicate channel — the "split
+/// discography" annoyance — shows once. Retains search ordering.
+fn dedup_artists(artists: Vec<SearchResultArtist>) -> Vec<SearchResultArtist> {
+    let mut seen_ids: HashSet<ArtistChannelID<'static>> = HashSet::new();
+    let mut seen_names: HashSet<String> = HashSet::new();
+    artists
+        .into_iter()
+        .filter(|a| {
+            if !seen_ids.insert(a.browse_id.clone()) {
+                return false;
+            }
+            seen_names.insert(normalize_artist_name(&a.artist))
+        })
+        .collect()
+}
+
+fn normalize_artist_name(name: &str) -> String {
+    name.split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_ascii_lowercase()
+}
+
+/// Basic-search fallback for artist search (used when the filtered artists-only
+/// query yields nothing). Kept as a separate fn so it can run concurrently.
+async fn search_artists_basic(
+    api: &ConcurrentApi,
+    text: String,
+) -> Result<Vec<SearchResultArtist>> {
+    debug!("Filtered artist search returned nothing, trying basic search");
+    let basic: ytmapi_rs::parse::SearchResults = query_api_with_retry(
+        api,
+        Into::<ytmapi_rs::query::SearchQuery<'_, ytmapi_rs::query::search::BasicSearch>>::into(
+            text,
+        ),
+    )
+    .await?;
+    Ok(basic.artists)
+}
+
 async fn search_playlists(api: ConcurrentApi, text: String) -> Result<Vec<SearchResultPlaylist>> {
     debug!("Searching playlists for {text}");
     let query = ytmapi_rs::query::SearchQuery::new_filtered(
@@ -225,38 +267,83 @@ async fn search_artists(api: ConcurrentApi, text: String) -> Result<Vec<SearchRe
             Err(e) => debug!("Channel ID lookup failed: {e}, falling back to text search"),
         }
     }
-    let exact_query =
-        ytmapi_rs::query::SearchQuery::new_filtered(text.clone(), ytmapi_rs::query::search::ArtistsFilter)
-            .with_spelling_mode(ytmapi_rs::query::search::SpellingMode::WithSuggestions);
-    let results: Vec<SearchResultArtist> = match query_api_with_retry(&api, exact_query).await {
+    // Run the filtered (artists-only) query concurrently with the basic-search
+    // fallback so an empty or slow filtered search never costs a second round
+    // trip.
+    let filtered_api = Arc::clone(&api);
+    let filtered_text = text.clone();
+    let filtered = tokio::spawn(async move {
+        query_api_with_retry(
+            &filtered_api,
+            ytmapi_rs::query::SearchQuery::new_filtered(
+                filtered_text,
+                ytmapi_rs::query::search::ArtistsFilter,
+            )
+            .with_spelling_mode(ytmapi_rs::query::search::SpellingMode::WithSuggestions),
+        )
+        .await
+    });
+    let basic_api = Arc::clone(&api);
+    let basic = tokio::spawn(async move { search_artists_basic(&basic_api, text).await });
+    let filtered_result = match filtered.await {
         Ok(r) => r,
         Err(e) => {
-            debug!("Filtered artist search error: {e}, falling back to basic search");
-            Vec::new()
+            warn!("Filtered artist search task failed: {e}");
+            Err(Error::msg("filtered artist search task failed"))
         }
     };
-    if !results.is_empty() {
-        return Ok(results);
-    }
-    debug!("Filtered artist search returned empty, trying basic search");
-    let basic: ytmapi_rs::parse::SearchResults = match query_api_with_retry(
-        &api,
-        Into::<ytmapi_rs::query::SearchQuery<'_, ytmapi_rs::query::search::BasicSearch>>::into(text),
-    )
-    .await
+    // Filtered results win; the fallback task is aborted the moment they
+    // arrive, so the common path does not wait on (or pay for) a second query.
+    if let Ok(results) = &filtered_result
+        && !results.is_empty()
     {
+        debug!("Found {} artist results", results.len());
+        basic.abort();
+        return Ok(dedup_artists(results.clone()));
+    }
+    match &filtered_result {
+        Ok(_) => debug!("Filtered artist search yielded nothing, using basic search result"),
+        Err(e) => warn!("Filtered artist search failed: {e}, falling back to basic search"),
+    }
+    wait_artist_results(filtered_result, basic).await
+}
+
+/// Fuse the two artist-search outcomes into the final list. A successful
+/// query's results win over the other; a success that returned an empty list
+/// still counts as a completed search ("nothing found"), so only when *every*
+/// query hard-failed does this yield an error — which the UI surfaces as an
+/// error state instead of a misleading empty result.
+fn fuse_artist_search(
+    filtered: Result<Vec<SearchResultArtist>>,
+    basic: Result<Vec<SearchResultArtist>>,
+) -> Result<Vec<SearchResultArtist>> {
+    let any_succeeded = filtered.is_ok() || basic.is_ok();
+    let artists = match (filtered, basic) {
+        (Ok(list), _) if !list.is_empty() => list,
+        (_, Ok(list)) if !list.is_empty() => list,
+        _ => Vec::new(),
+    };
+    if artists.is_empty() && !any_succeeded {
+        return Err(Error::msg("artist search: all queries failed"));
+    }
+    Ok(dedup_artists(artists))
+}
+
+/// Await the concurrently-running basic-search task, then fuse its outcome
+/// with the filtered search's. A `JoinError` (a task panic, not an API
+/// failure) is logged and flattened to a hard failure.
+async fn wait_artist_results(
+    filtered: Result<Vec<SearchResultArtist>>,
+    basic: tokio::task::JoinHandle<Result<Vec<SearchResultArtist>>>,
+) -> Result<Vec<SearchResultArtist>> {
+    let basic = match basic.await {
         Ok(r) => r,
         Err(e) => {
-            warn!("Basic artist search also failed: {e}");
-            return Ok(Vec::new());
+            warn!("Basic artist search task failed: {e}");
+            Err(Error::msg("basic artist search task failed"))
         }
     };
-    if !basic.artists.is_empty() {
-        debug!("Falling back to {} artist results from basic search", basic.artists.len());
-        return Ok(basic.artists);
-    }
-    debug!("No artist results found in basic search either");
-    Ok(Vec::new())
+    fuse_artist_search(filtered, basic)
 }
 
 async fn search_songs(api: ConcurrentApi, text: String) -> Result<Vec<SearchResultSong>> {
@@ -749,6 +836,112 @@ mod tests {
             SearchQuery::new_filtered("", SongsFilter),
         )
         .expect("search fixture should parse")
+    }
+
+    fn artist(name: &str, id: &str) -> SearchResultArtist {
+        SearchResultArtist::new(
+            name.to_string(),
+            None,
+            ArtistChannelID::from_raw(id.to_string()),
+        )
+    }
+
+    #[test]
+    fn dedup_artists_collapses_exact_channel_duplicates() {
+        let input = vec![
+            artist("Daft Punk", "UCSOY26gznfJIbK2T7LXujpQ"),
+            artist("Daft Punk", "UCSOY26gznfJIbK2T7LXujpQ"),
+            artist("Daft Punk", "UCSOY26gznfJIbK2T7LXujpQ"),
+        ];
+        let out = dedup_artists(input);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].artist, "Daft Punk");
+    }
+
+    #[test]
+    fn dedup_artists_collapses_same_name_across_channels_keeping_first() {
+        let input = vec![
+            artist("Eminem", "UCJcs2rxE0DfJH2PfnO6WPFw"),
+            artist("Eminem", "UCf4P_bRc1q9dL7o4vVx8mQ2"),
+        ];
+        let out = dedup_artists(input);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].browse_id.get_raw(), "UCJcs2rxE0DfJH2PfnO6WPFw");
+    }
+
+    #[test]
+    fn dedup_artists_preserves_distinct_artists_order() {
+        let input = vec![
+            artist("The Beatles", "UC2XdaAVUannpujzv32jcouQ"),
+            artist("John Lennon", "UCcSL2nYSJp_IgdzH0xBBdcg"),
+            artist("The Rolling Stones", "UCNYhhkQqeFLUc-YEDcLpSYQ"),
+        ];
+        let out = dedup_artists(input);
+        assert_eq!(out.len(), 3);
+        assert_eq!(out[0].artist, "The Beatles");
+        assert_eq!(out[1].artist, "John Lennon");
+        assert_eq!(out[2].artist, "The Rolling Stones");
+    }
+
+    #[test]
+    fn dedup_artists_normalizes_case_and_whitespace() {
+        let input = vec![
+            artist("  Daft   Punk ", "UCSOY26gznfJIbK2T7LXujpQ"),
+            artist("daft punk", "UC1t2y3q_wXj4qQXoVrT8ZKw"),
+        ];
+        let out = dedup_artists(input);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].browse_id.get_raw(), "UCSOY26gznfJIbK2T7LXujpQ");
+    }
+
+    #[test]
+    fn fuse_artist_search_uses_filtered_when_nonempty() {
+        let filtered = Ok(vec![artist("Daft Punk", "UCSOY26gznfJIbK2T7LXujpQ")]);
+        let basic = Ok(vec![artist("Daft Punk", "UC1t2y3q_wXj4qQXoVrT8ZKw")]);
+        let out = fuse_artist_search(filtered, basic).expect("should succeed");
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].browse_id.get_raw(), "UCSOY26gznfJIbK2T7LXujpQ");
+    }
+
+    #[test]
+    fn fuse_artist_search_uses_basic_when_filtered_failed() {
+        let filtered: Result<Vec<SearchResultArtist>> = Err(Error::msg("filtered failed"));
+        let basic = Ok(vec![artist("Hikaru Utada", "UCqLmzJZ0T3Vw-xEKXzM1u_Q")]);
+        let out = fuse_artist_search(filtered, basic).expect("should succeed");
+        assert_eq!(out[0].artist, "Hikaru Utada");
+    }
+
+    #[test]
+    fn fuse_artist_search_falls_back_to_basic_when_filtered_empty() {
+        let filtered = Ok(Vec::new());
+        let basic = Ok(vec![artist("Eminem", "UCJcs2rxE0DfJH2PfnO6WPFw")]);
+        let out = fuse_artist_search(filtered, basic).expect("should succeed");
+        assert_eq!(out[0].artist, "Eminem");
+    }
+
+    #[test]
+    fn fuse_artist_search_empty_when_one_query_succeeded_empty() {
+        let filtered = Ok(Vec::new());
+        let basic: Result<Vec<SearchResultArtist>> = Err(Error::msg("basic failed"));
+        let out = fuse_artist_search(filtered, basic).expect("should succeed");
+        assert!(out.is_empty());
+    }
+
+    #[test]
+    fn fuse_artist_search_empty_when_both_succeeded_empty() {
+        let out = fuse_artist_search(Ok(Vec::new()), Ok(Vec::new())).expect("should succeed");
+        assert!(out.is_empty());
+    }
+
+    #[test]
+    fn fuse_artist_search_errors_only_when_both_queries_failed() {
+        let both_failed = fuse_artist_search(
+            Err(Error::msg("filtered failed")),
+            Err(Error::msg("basic failed")),
+        );
+        assert!(both_failed.is_err());
+        let one_failed = fuse_artist_search(Err(Error::msg("filtered failed")), Ok(Vec::new()));
+        assert!(one_failed.is_ok());
     }
 
     #[test]

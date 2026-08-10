@@ -28,6 +28,7 @@ define_search_results_browser!(
 );
 impl ArtistSearchBrowser {
     pub fn execute_search(&mut self, search_query: String) -> Effects<Self> {
+        self.search_panel.status = ListStatus::Loading;
         Effects::new(move |server: &ArcServer| {
             let query = search_query.clone();
             let server = Arc::clone(server);
@@ -39,7 +40,10 @@ impl ArtistSearchBrowser {
                     }) as Box<dyn FnOnce(&mut ArtistSearchBrowser) -> Effects<ArtistSearchBrowser> + Send>,
                     Err(error) => {
                         warn!("Artist search error: {error}");
-                        Box::new(|_: &mut ArtistSearchBrowser| Effects::none())
+                        Box::new(move |this: &mut ArtistSearchBrowser| {
+                            this.search_panel.status = ListStatus::Error;
+                            Effects::none()
+                        })
                             as Box<dyn FnOnce(&mut ArtistSearchBrowser) -> Effects<ArtistSearchBrowser> + Send>
                     }
                 }
@@ -165,6 +169,7 @@ impl ArtistSearchBrowser {
     }
     pub fn replace_artist_list(&mut self, artist_list: Vec<SearchResultArtist>) {
         self.search_panel.list = artist_list;
+        self.search_panel.status = ListStatus::Loaded;
         self.increment_cur_list(0);
     }
     pub fn handle_no_songs_found(&mut self) {
