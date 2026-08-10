@@ -1,10 +1,15 @@
 # Youtui Backlog
 
 **Build:** 0 errors, 0 warnings, 0 clippy
-**Tests:** 320 youtui passed + 2 ignored (live network tests are flaky)
-**Last updated:** 2026-08-07
+**Tests:** 336 youtui passed + 2 ignored (live network tests are flaky)
+**Last updated:** 2026-08-10
 
 ## Completed
+
+### Session 2026-08-10 — Artist/song search status feedback; concurrent fallback fusion
+
+- **Search headers now tell the truth** — the `ListStatus`-driven titles (`... - loading` / `- N results` / `- no songs found` / `- Error received`) were dead plumbing: song search never set any state, and artist search masked genuine failures as `nothing found`. Now `search()` sets `Loading`, the success path `Loaded`, a failed query `Error` — on both `SongSearchBrowser` (songsearch.rs:530/584/547) and `SearchPanel` (already wired for artists). Spinner + title render from the existing `draw_loadable`; zero draw changes.
+- **Artist fallback fusion (latency + truth)** — filtered (artists-only) query runs concurrently with a basic-search fallback; filtered non-empty wins (fallback aborted, common path pays one round trip not two). Fusion is a pure `fuse_artist_search` (api.rs): a success that returned empty still counts as "nothing found"; only when **every** query fails is the panel put in the error state (was: `Ok(empty)` on any failure — misleading). Filtered/basic JoinError + API errors are `warn!`ed with the real cause before flattening (was: swallowed). 8 new tests (6 fusion matrix + 2 song-search state), fail-first.
 
 ### Session 2026-08-07 — Release-bench repair; duration-const naming; env invariant docs
 
