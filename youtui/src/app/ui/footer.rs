@@ -1,6 +1,7 @@
 use crate::app::structures::{ListSongID, PlayState};
 use crate::drawutils::{
     BUTTON_BG_COLOUR, BUTTON_FG_COLOUR, PROGRESS_BG_COLOUR, PROGRESS_FG_COLOUR,
+    resolve_display_duration,
 };
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
@@ -75,11 +76,7 @@ pub fn draw_footer(f: &mut Frame, w: &mut super::YoutuiWindow, chunk: Rect) {
         ) {
         let song = w.playlist.get_song_from_id(id);
         if let Some(song) = song {
-            duration = song
-                .actual_duration
-                .map(|d| d.as_secs() as usize)
-                .filter(|&secs| secs < 7200 || secs <= song.duration_secs * 2)
-                .unwrap_or(song.duration_secs);
+            duration = resolve_display_duration(song.actual_duration, song.duration_secs);
             progress = w.playlist.get_cur_played_dur().unwrap_or_default();
             if duration == 0 { 0.0 } else { (progress.as_secs_f64() / duration as f64).clamp(0.0, 1.0) }
         } else {

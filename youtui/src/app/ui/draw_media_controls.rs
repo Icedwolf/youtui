@@ -1,6 +1,7 @@
 use super::YoutuiWindow;
 use crate::app::media_controls::{MediaControlsStatus, MediaControlsUpdate, MediaControlsVolume};
 use crate::app::structures::PlayState;
+use crate::drawutils::resolve_display_duration;
 use std::time::Duration;
 
 pub fn draw_app_media_controls(w: &YoutuiWindow) -> MediaControlsUpdate<'_> {
@@ -10,11 +11,7 @@ pub fn draw_app_media_controls(w: &YoutuiWindow) -> MediaControlsUpdate<'_> {
         duration = w
             .playlist
             .get_song_from_id(*id)
-            .map(|s| {
-                s.actual_duration
-                    .map(|d| d.as_secs() as usize)
-                    .unwrap_or(s.duration_secs)
-            })
+            .map(|s| resolve_display_duration(s.actual_duration, s.duration_secs))
             .unwrap_or(0);
         progress = w.playlist.get_cur_played_dur().unwrap_or_default();
     }

@@ -18,6 +18,23 @@ pub(crate) const PROGRESS_FG_COLOUR: Color = Color::LightGreen;
 pub(crate) const TABLE_HEADINGS_COLOUR: Color = Color::LightGreen;
 pub(crate) const ROW_HIGHLIGHT_COLOUR: Color = Color::Blue;
 
+/// Resolve the duration to display for a song.
+///
+/// Prefer the decoder-reported `actual` duration, but reject nonsensical values
+/// and fall back to the API metadata (`meta_secs`): a zero duration (streamed
+/// fragmented-MP4 ALAC reports `mdhd.duration = 0`, so symphonia yields
+/// `n_frames = Some(0)`) and a bogus huge value both indicate the true length is
+/// unknown.
+pub(crate) fn resolve_display_duration(
+    actual: Option<std::time::Duration>,
+    meta_secs: usize,
+) -> usize {
+    actual
+        .map(|d| d.as_secs() as usize)
+        .filter(|&secs| secs > 0 && (secs < 7200 || secs <= meta_secs * 2))
+        .unwrap_or(meta_secs)
+}
+
 /// Draw a text input box
 pub(crate) fn draw_text_box(
     f: &mut Frame,
@@ -118,8 +135,30 @@ pub(crate) fn get_offset_after_list_resize(
 #[cfg(test)]
 mod tests {
     use super::{below_left_rect, bottom_of_rect, centered_rect, left_bottom_corner_rect};
-    use crate::drawutils::get_offset_after_list_resize;
+    use crate::drawutils::{get_offset_after_list_resize, resolve_display_duration};
     use ratatui::layout::Rect;
+    use std::time::Duration;
+
+    #[test]
+    fn resolve_display_duration_zero_actual_falls_back_to_metadata() {
+        assert_eq!(resolve_display_duration(Some(Duration::ZERO), 185), 185);
+    }
+    #[test]
+    fn resolve_display_duration_none_falls_back_to_metadata() {
+        assert_eq!(resolve_display_duration(None, 185), 185);
+    }
+    #[test]
+    fn resolve_display_duration_uses_plausible_actual() {
+        assert_eq!(resolve_display_duration(Some(Duration::from_secs(180)), 185), 180);
+    }
+    #[test]
+    fn resolve_display_duration_rejects_bogus_huge_actual() {
+        assert_eq!(resolve_display_duration(Some(Duration::from_secs(100000)), 185), 185);
+    }
+    #[test]
+    fn resolve_display_duration_no_metadata_keeps_zero() {
+        assert_eq!(resolve_display_duration(Some(Duration::ZERO), 0), 0);
+    }
 
     #[test]
     fn test_get_offset_after_list_resize_prev_upper_list() {
