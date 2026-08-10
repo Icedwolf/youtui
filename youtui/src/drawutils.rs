@@ -18,6 +18,11 @@ pub(crate) const PROGRESS_FG_COLOUR: Color = Color::LightGreen;
 pub(crate) const TABLE_HEADINGS_COLOUR: Color = Color::LightGreen;
 pub(crate) const ROW_HIGHLIGHT_COLOUR: Color = Color::Blue;
 
+/// Upper bound (seconds) for a plausible single-song duration. A decoder duration
+/// above this is bogus (e.g. a fractional time_base mis-scaled to hours) and is
+/// rejected in favour of metadata.
+pub(crate) const MAX_PLAUSIBLE_DURATION_S: usize = 7200;
+
 /// Resolve the duration to display for a song.
 ///
 /// Prefer the decoder-reported `actual` duration, but reject nonsensical values
@@ -31,7 +36,7 @@ pub(crate) fn resolve_display_duration(
 ) -> usize {
     actual
         .map(|d| d.as_secs() as usize)
-        .filter(|&secs| secs > 0 && (secs < 7200 || secs <= meta_secs * 2))
+        .filter(|&secs| secs > 0 && (secs < MAX_PLAUSIBLE_DURATION_S || secs <= meta_secs * 2))
         .unwrap_or(meta_secs)
 }
 
@@ -149,11 +154,17 @@ mod tests {
     }
     #[test]
     fn resolve_display_duration_uses_plausible_actual() {
-        assert_eq!(resolve_display_duration(Some(Duration::from_secs(180)), 185), 180);
+        assert_eq!(
+            resolve_display_duration(Some(Duration::from_secs(180)), 185),
+            180
+        );
     }
     #[test]
     fn resolve_display_duration_rejects_bogus_huge_actual() {
-        assert_eq!(resolve_display_duration(Some(Duration::from_secs(100000)), 185), 185);
+        assert_eq!(
+            resolve_display_duration(Some(Duration::from_secs(100000)), 185),
+            185
+        );
     }
     #[test]
     fn resolve_display_duration_no_metadata_keeps_zero() {
