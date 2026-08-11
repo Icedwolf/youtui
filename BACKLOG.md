@@ -1,8 +1,16 @@
 # Youtui Backlog
 
 **Build:** 0 errors, 0 warnings, 0 clippy
-**Tests:** 349 youtui passed + 2 ignored (live network tests are flaky)
+**Tests:** 351 youtui passed + 2 ignored (live network tests are flaky)
 **Last updated:** 2026-08-11
+
+## Completed
+
+### Session 2026-08-11 — Debounce lifecycle completed; P1 log-noise items closed
+
+- **`handle_playing` cancels the pending shuffle regen.** Toggling shuffle then getting a song playing within the ~100ms window left both the immediate regen (`handle_playing`) and the trailing debounce to run `drop_unscoped_from_id` + `download_upcoming_from_id` on the same scope — structurally redundant. `handle_playing` now `take()`s + cancels any pending `shuffle_regen_token` before its own immediate regen, so at most one scope regeneration survives. The idle guard also clears a stale pending token instead of leaving it to fire a dead regen. Tests (fail-first): `handle_playing_cancels_pending_shuffle_regen`, `idle_toggle_clears_pending_token`.
+- **Backlog staleness pruned:** P1.4–P1.7 (log-noise demotions) were already done but still listed as open — verified no `info!` remains in `async_rodio_sink`/`decoder`/`song_downloader`; remaining `info!` sites are the allowed startup/auth/retry/event class. Re-labeled ✅ DONE with rationale.
+- Verified: cargo check 0, clippy 0, 351 youtui tests green, `cargo build --release` clean. Pushed to `origin/main`.
 
 ## Completed
 
@@ -144,10 +152,10 @@ Verified live: export → SID-bearing file → `file_has_auth_cookie` true → f
 
 - **P1.1** — Configurable download cache size (`download_cache_size` in config.toml, `AtomicUsize`).
 - **P1.2** — Status bar streaming indicator (`status_bar_icon()` on Playlist, 9-state exhaustive match).
-- **P1.4** — Hot path log demotion (`info!` → `trace!` on `current_span_len`).
-- **P1.5** — Per-keystroke log demotion (`info!` → `debug!` in async_rodio_sink, 15 sites).
-- **P1.6** — Per-download pipeline noise (`info!` → `debug!`, `info!` → `error!`, `info!` → `warn!` in song_downloader).
-- **P1.7** — Per-event noise (`warn!` → `debug!`, `error!` → `warn!` across appevent, browser, app, api).
+- **P1.4** — Hot path log demotion (`info!` → `trace!` on `current_span_len`). ✅ DONE (currently `debug!` in decoder/mod.rs:185).
+- **P1.5** — Per-keystroke log demotion (`info!` → `debug!` in async_rodio_sink, 15 sites). ✅ DONE.
+- **P1.6** — Per-download pipeline noise (`info!` → `debug!`, `info!` → `error!`, `info!` → `warn!` in song_downloader). ✅ DONE.
+- **P1.7** — Per-event noise (`warn!` → `debug!`, `error!` → `warn!` across appevent, browser, app, api). ✅ DONE (session 2026-07-16 N3–N8 + backlog item). Remaining `info!`/`warn!` are startup/auth/retry/error-event class only.
 
 ### P2 — Code Quality
 
