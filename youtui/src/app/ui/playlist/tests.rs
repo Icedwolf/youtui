@@ -1684,4 +1684,38 @@ mod state_transitions {
             "entry 4 still in play_next_queue"
         );
     }
+
+    #[test]
+    fn held_shuffle_key_burst_keeps_only_latest_regen_token() {
+        let (mut p, _) = Playlist::new(Percentage(50));
+        p.set_notifications_enabled(false);
+
+        let _effect = p.toggle_shuffle();
+        let first = p.shuffle_regen_token.clone();
+        assert!(
+            first.is_some(),
+            "shuffle toggle must schedule a debounced regeneration"
+        );
+
+        let _effect = p.toggle_shuffle();
+        if let Some(first) = first {
+            assert!(
+                first.is_cancelled(),
+                "a superseded shuffle regen must be cancelled, never left running"
+            );
+        }
+
+        let _effect = p.toggle_shuffle();
+        let effect = p.toggle_shuffle();
+        drop(effect);
+
+        let last = p
+            .shuffle_regen_token
+            .as_ref()
+            .expect("latest toggle must still have a pending regen");
+        assert!(
+            !last.is_cancelled(),
+            "the final toggle in the burst must be the surviving (live) regen"
+        );
+    }
 }

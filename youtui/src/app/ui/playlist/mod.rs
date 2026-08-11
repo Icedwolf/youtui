@@ -51,6 +51,13 @@ const SONGS_BEHIND_TO_SAVE: usize = 0;
 const GAPLESS_PLAYBACK_THRESHOLD: Duration = Duration::from_secs(1);
 pub const DEFAULT_UI_VOLUME: Percentage = Percentage(50);
 
+/// Held-key (or repeated-key) shuffle toggles arrive faster than a download
+/// can be cancelled. Every toggle used to call `regenerate_downloads_for_current`
+/// immediately, spawning a fresh resolve + download before the previous one was
+/// cancelled — a burst of key events spawned several yt-dlp processes at once.
+/// Regeneration for shuffle toggles is now debounced to this trailing window.
+const SHUFFLE_REGEN_DEBOUNCE_MS: u64 = 100;
+
 fn is_cancellation_error(msg: &str) -> bool {
     msg.starts_with("download cancelled")
 }
@@ -131,6 +138,7 @@ pub struct Playlist {
     notifications_enabled: bool,
     auth_notif_last: Option<std::time::Instant>,
     consecutive_download_failures: u8,
+    shuffle_regen_token: Option<tokio_util::sync::CancellationToken>,
 }
 
 impl Component for Playlist {}

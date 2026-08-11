@@ -66,6 +66,7 @@ impl Playlist {
             notifications_enabled: true,
             auth_notif_last: None,
             consecutive_download_failures: 0,
+            shuffle_regen_token: None,
         };
 
         (playlist, task)
@@ -1092,7 +1093,7 @@ fn cancel_song_download(&self, id: ListSongID) {
         }
 
         self.cached_title.borrow_mut().take();
-        self.regenerate_downloads_for_current()
+        self.regenerate_downloads_debounced()
     }
 
     pub(super) fn generate_shuffle_indices(&mut self) {
@@ -1336,6 +1337,38 @@ fn cancel_song_download(&self, id: ListSongID) {
         } else {
             Effects::none()
         }
+    }
+
+    /// Regenerate the download scope after a shuffle toggle, coalesced to a
+    /// trailing `SHUFFLE_REGEN_DEBOUNCE_MS` window. Holding (or repeating) the
+    /// shuffle key toggles many times per second; without the debounce each
+    /// toggle spawned a fresh resolve + download before the previous one was
+    /// cancelled, so a held key could run several yt-dlp processes at once
+    /// (resolve runs outside the download semaphore). The final toggle in a
+    /// burst wins: any still-pending effect is cancelled before scheduling the
+    /// next one, so at most one regeneration survives the burst. The shuffle
+    /// *order* is always applied synchronously in `toggle_shuffle`; only the
+    /// network-triggering scope regeneration is delayed.
+    fn regenerate_downloads_debounced(&mut self) -> Effects<Self> {
+        if let Some(token) = self.shuffle_regen_token.take() {
+            token.cancel();
+        }
+        let token = tokio_util::sync::CancellationToken::new();
+        self.shuffle_regen_token = Some(token.clone());
+
+        Effects::new(move |_server: &crate::app::server::ArcServer| async move {
+            tokio::select! {
+                biased;
+                _ = token.cancelled() => {
+                    Box::new(|_: &mut Playlist| Effects::none())
+                        as Box<dyn FnOnce(&mut Playlist) -> Effects<Playlist> + Send>
+                }
+                _ = tokio::time::sleep(std::time::Duration::from_millis(SHUFFLE_REGEN_DEBOUNCE_MS)) => {
+                    Box::new(move |this: &mut Playlist| this.regenerate_downloads_for_current())
+                        as Box<dyn FnOnce(&mut Playlist) -> Effects<Playlist> + Send>
+                }
+            }
+        })
     }
 
     pub fn handle_song_download_progress_update(
