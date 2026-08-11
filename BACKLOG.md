@@ -1,10 +1,15 @@
 # Youtui Backlog
 
 **Build:** 0 errors, 0 warnings, 0 clippy
-**Tests:** 351 youtui passed + 2 ignored (live network tests are flaky)
+**Tests:** 352 youtui passed + 2 ignored (live network tests are flaky)
 **Last updated:** 2026-08-11
 
 ## Completed
+
+### Session 2026-08-11 — Fired-debounce token cleared; strict pending-only invariant
+
+- **A fired debounce no longer leaves a stale `shuffle_regen_token` in the field.** After the sleep branch ran its regen, the recovered token stayed `Some(fired)` until the next toggle/play — the field lied about pending state. New `apply_fired_shuffle_regen` calls the regen then clears the field *only if it still holds the fired token* (`CancellationToken` `PartialEq` = `Arc::ptr_eq`), so a newer toggle scheduled between sleep-win and callback is never stomped. Test (fail-first): `debounce_fire_clears_own_token_not_a_newer_one`. Invariant is now strict: `Some` ⟺ genuinely pending.
+- Verified: cargo check 0, clippy 0, 352 youtui tests green, `cargo build --release` clean. Pushed to `origin/main`.
 
 ### Session 2026-08-11 — Debounce lifecycle completed; P1 log-noise items closed
 
