@@ -1373,11 +1373,28 @@ fn cancel_song_download(&self, id: ListSongID) {
                         as Box<dyn FnOnce(&mut Playlist) -> Effects<Playlist> + Send>
                 }
                 _ = tokio::time::sleep(std::time::Duration::from_millis(SHUFFLE_REGEN_DEBOUNCE_MS)) => {
-                    Box::new(move |this: &mut Playlist| this.regenerate_downloads_for_current())
+                    let fired = token.clone();
+                    Box::new(move |this: &mut Playlist| this.apply_fired_shuffle_regen(&fired))
                         as Box<dyn FnOnce(&mut Playlist) -> Effects<Playlist> + Send>
                 }
             }
         })
+    }
+
+    /// Apply the scope regen for a debounce whose sleep branch won, and clear
+    /// the pending-token field — but only if it still holds *this* token. A
+    /// newer toggle with a freshly scheduled token must not be cleared by a
+    /// late-fired older callback; with the field clobbered the newer debounce
+    /// would lose the ability to cancel itself.
+    pub(crate) fn apply_fired_shuffle_regen(
+        &mut self,
+        fired: &tokio_util::sync::CancellationToken,
+    ) -> Effects<Self> {
+        let effect = self.regenerate_downloads_for_current();
+        if self.shuffle_regen_token.as_ref().is_some_and(|cur| cur == fired) {
+            self.shuffle_regen_token = None;
+        }
+        effect
     }
 
     pub fn handle_song_download_progress_update(

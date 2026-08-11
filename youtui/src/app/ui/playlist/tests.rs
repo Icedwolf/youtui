@@ -1755,6 +1755,36 @@ mod state_transitions {
     }
 
     #[test]
+    fn debounce_fire_clears_own_token_not_a_newer_one() {
+        let mut p = undownloaded_songs(3);
+        p.set_notifications_enabled(false);
+        p.play_status = PlayState::Buffering(ListSongID(0));
+
+        let _effect = p.toggle_shuffle();
+        let older = p.shuffle_regen_token.clone().expect("pending after first toggle");
+
+        // A second toggle supersedes the older regen and schedules a newer one.
+        let _effect = p.toggle_shuffle();
+        let newer = p.shuffle_regen_token.clone().expect("pending after second toggle");
+        assert!(older.is_cancelled(), "first regen must be superseded");
+
+        // The OLD fired callback running late must not clear the newer token:
+        // its own token is gone from the field, so it must leave the field alone.
+        let _effect = p.apply_fired_shuffle_regen(&older);
+        assert!(
+            p.shuffle_regen_token.is_some(),
+            "a stale fired callback must not clear a newer pending token"
+        );
+
+        // When the field still holds the fired token itself, it is cleared.
+        let _effect = p.apply_fired_shuffle_regen(&newer);
+        assert!(
+            p.shuffle_regen_token.is_none(),
+            "a fired callback with its own token still pending must clear it"
+        );
+    }
+
+    #[test]
     fn idle_toggle_clears_pending_token() {
         let mut p = undownloaded_songs(2);
         p.set_notifications_enabled(false);
