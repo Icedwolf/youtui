@@ -1350,6 +1350,12 @@ fn cancel_song_download(&self, id: ListSongID) {
     /// *order* is always applied synchronously in `toggle_shuffle`; only the
     /// network-triggering scope regeneration is delayed.
     fn regenerate_downloads_debounced(&mut self) -> Effects<Self> {
+        if self.get_cur_playing_id().is_none() {
+            // Nothing is playing, so the eventual regen would no-op anyway.
+            // Don't schedule a timer that only wakes to do nothing on every
+            // idle shuffle toggle.
+            return Effects::none();
+        }
         if let Some(token) = self.shuffle_regen_token.take() {
             token.cancel();
         }

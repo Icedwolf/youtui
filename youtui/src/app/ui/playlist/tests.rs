@@ -1687,14 +1687,15 @@ mod state_transitions {
 
     #[test]
     fn held_shuffle_key_burst_keeps_only_latest_regen_token() {
-        let (mut p, _) = Playlist::new(Percentage(50));
+        let mut p = undownloaded_songs(3);
         p.set_notifications_enabled(false);
+        p.play_status = PlayState::Buffering(ListSongID(0));
 
         let _effect = p.toggle_shuffle();
         let first = p.shuffle_regen_token.clone();
         assert!(
             first.is_some(),
-            "shuffle toggle must schedule a debounced regeneration"
+            "shuffle toggle with a playing song must schedule a debounced regeneration"
         );
 
         let _effect = p.toggle_shuffle();
@@ -1716,6 +1717,19 @@ mod state_transitions {
         assert!(
             !last.is_cancelled(),
             "the final toggle in the burst must be the surviving (live) regen"
+        );
+    }
+
+    #[test]
+    fn idle_shuffle_toggle_does_not_schedule_regen() {
+        let mut p = undownloaded_songs(2);
+        p.set_notifications_enabled(false);
+
+        let effect = p.toggle_shuffle();
+        drop(effect);
+        assert!(
+            p.shuffle_regen_token.is_none(),
+            "with nothing playing, a shuffle toggle must not schedule a regen timer"
         );
     }
 }
