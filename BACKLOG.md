@@ -1,7 +1,7 @@
 # Youtui Backlog
 
 **Build:** 0 errors, 0 warnings, 0 clippy
-**Tests:** 348 youtui passed + 2 ignored (live network tests are flaky)
+**Tests:** 349 youtui passed + 2 ignored (live network tests are flaky)
 **Last updated:** 2026-08-11
 
 ## Completed
@@ -10,8 +10,8 @@
 
 - **Strict single-download invariant (permit lives in the bg fill).** `ytdlp_pipeline` dropped `_permit` at all 4 streaming-init sites (ALAC+M4A, success+fail): on streaming success the decoder returned immediately while `spawn_bg_cache_task` kept ffmpeg alive downloading the rest, so `handle_playing`'s next prebuffer found the semaphore free and spawned a **second concurrent ffmpeg** — 2 ffmpegs were the steady state on every song start. `spawn_bg_cache_task` now takes an owned `SemaphorePermit<'static>`; streaming-success sites **move the permit into the bg task** (held until fill completes/cancels/kills), streaming-fail sites hold it to pipeline return. Tradeoff documented in DECISIONS.md:2 (adjacent-song select waits for the current fill; distant skip still cancels instantly). Named tests: `bg_cache_task_holds_permit_until_complete`, `permit_released_after_cancel_not_before`. `SEMAPHORE_TEST_LOCK` serializes semaphore tests against parallel-runtime permit stealing.
 - **Post-acquire cache re-check (replay hardening).** A re-select of the current song during its own fill blocked on `acquire()` then re-downloaded a now-cached song. New `cached_decoder(video_id)` helper; `download_and_decode` re-checks cache after acquiring the permit + cancel check. `cached_decoder` returns `Arc<[u8]>` for zero-copy cache hits.
-- **Held-shuffle-key download churn (P1).** Resolve runs outside the semaphore by design, so every `toggle_shuffle` → `regenerate_downloads_for_current` spawned a fresh yt-dlp before the previous was cancelled — a key repeat burst ran several resolves at once. `toggle_shuffle` now schedules a **trailing-debounced** regeneration (`SHUFFLE_REGEN_DEBOUNCE_MS = 100`): shuffle *order* applies synchronously (UI stays instant); only the network scope-regeneration coalesces to the final toggle of the burst, each previous pending regen cancelled by its own token (`tokio::select!` biased on `token.cancelled()`). `handle_playing` prebuffer stays immediate. Test: `held_shuffle_key_burst_keeps_only_latest_regen_token`.
-- Verified: cargo check 0, clippy 0, 348 youtui tests green, `cargo build --release` clean.
+- **Held-shuffle-key download churn (P1).** Resolve runs outside the semaphore by design, so every `toggle_shuffle` → `regenerate_downloads_for_current` spawned a fresh yt-dlp before the previous was cancelled — a key repeat burst ran several resolves at once. `toggle_shuffle` now schedules a **trailing-debounced** regeneration (`SHUFFLE_REGEN_DEBOUNCE_MS = 100`): shuffle *order* applies synchronously (UI stays instant); only the network scope-regeneration coalesces to the final toggle of the burst, each previous pending regen cancelled by its own token (`tokio::select!` biased on `token.cancelled()`). `handle_playing` prebuffer stays immediate. An **idle guard** skips the debounce timer entirely when nothing is playing (regen would no-op anyway). Tests: `held_shuffle_key_burst_keeps_only_latest_regen_token`, `idle_shuffle_toggle_does_not_schedule_regen`.
+- Verified: cargo check 0, clippy 0, 349 youtui tests green, `cargo build --release` clean. Pushed to `origin/main`.
 
 ### Session 2026-08-11 — Footer duration frozen at 00:00; startup volume never applied
 
