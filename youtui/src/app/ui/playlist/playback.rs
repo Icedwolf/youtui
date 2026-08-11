@@ -1353,7 +1353,10 @@ fn cancel_song_download(&self, id: ListSongID) {
         if self.get_cur_playing_id().is_none() {
             // Nothing is playing, so the eventual regen would no-op anyway.
             // Don't schedule a timer that only wakes to do nothing on every
-            // idle shuffle toggle.
+            // idle shuffle toggle — and clear any stale pending one.
+            if let Some(token) = self.shuffle_regen_token.take() {
+                token.cancel();
+            }
             return Effects::none();
         }
         if let Some(token) = self.shuffle_regen_token.take() {
@@ -1570,6 +1573,13 @@ fn cancel_song_download(&self, id: ListSongID) {
                 self.play_status = PlayState::Playing(id);
             }
             _ => {}
+        }
+        // Calling regenerate_downloads_for_current immediately below applies
+        // the current shuffle order right now. Cancel any still-pending
+        // debounced shuffle regen: running it again ~100ms later would just
+        // re-derive the same scope with no effect.
+        if let Some(token) = self.shuffle_regen_token.take() {
+            token.cancel();
         }
         self.regenerate_downloads_for_current()
     }

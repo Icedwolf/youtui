@@ -1732,4 +1732,47 @@ mod state_transitions {
             "with nothing playing, a shuffle toggle must not schedule a regen timer"
         );
     }
+
+    #[test]
+    fn handle_playing_cancels_pending_shuffle_regen() {
+        let mut p = undownloaded_songs(3);
+        p.set_notifications_enabled(false);
+        p.play_status = PlayState::Buffering(ListSongID(0));
+
+        let _effect = p.toggle_shuffle();
+        assert!(
+            p.shuffle_regen_token.is_some(),
+            "precondition: a shuffle toggle schedules a pending regen"
+        );
+
+        // handle_playing runs its own immediate regen; the still-pending
+        // debounced regen must be cancelled so it cannot re-run the scope.
+        let _effect = p.handle_playing(Some(std::time::Duration::from_secs(180)), ListSongID(0));
+        assert!(
+            p.shuffle_regen_token.is_none(),
+            "handle_playing must clear the pending shuffle regen"
+        );
+    }
+
+    #[test]
+    fn idle_toggle_clears_pending_token() {
+        let mut p = undownloaded_songs(2);
+        p.set_notifications_enabled(false);
+        p.play_status = PlayState::Buffering(ListSongID(0));
+
+        let _effect = p.toggle_shuffle();
+        assert!(
+            p.shuffle_regen_token.is_some(),
+            "precondition: a toggle while playing schedules a pending regen"
+        );
+
+        // Playback stops, then the user toggles shuffle while idle: the stale
+        // pending token must be cancelled, not left to fire a dead regen.
+        p.play_status = PlayState::NotPlaying;
+        let _effect = p.toggle_shuffle();
+        assert!(
+            p.shuffle_regen_token.is_none(),
+            "an idle shuffle toggle must clear a stale pending regen token"
+        );
+    }
 }
