@@ -292,6 +292,7 @@ async fn spawn_bg_cache_task(
     buf: Arc<SharedBuffer>,
     log_prefix: &'static str,
     t0: Option<tokio::time::Instant>,
+    _permit: tokio::sync::SemaphorePermit<'static>,
 ) {
     let stall = std::time::Duration::from_secs(BG_STALL_TIMEOUT_S);
     let mut last_len = buf.len();
@@ -532,6 +533,20 @@ fn decoder_from_buffer(
     SymphoniaDecoder::new(mss).with_context(|| format!("decoder (fallback, {pipeline})"))
 }
 
+/// Build a decoder from the cached in-memory buffer for a video, if present.
+/// Re-checked both before the download begins and again after the semaphore is
+/// acquired: a concurrent bg fill may have completed (populating the cache)
+/// while this task was waiting for it.
+fn cached_decoder(video_id: &str) -> Option<SymphoniaDecoder> {
+    let cached = cache_get(video_id)?;
+    debug!(%video_id, len = cached.len(), "Reusing cached buffer");
+    let len = cached.len() as u64;
+    let cursor = std::io::Cursor::new(cached);
+    let source = ReadSeekSource::new(cursor, Some(len));
+    let mss = MediaSourceStream::new(Box::new(source), Default::default());
+    SymphoniaDecoder::new(mss).ok()
+}
+
 /// Evict a cached stream URL after a download failed on it. The URL may have
 /// died server-side, so the retry must re-resolve instead of reusing it.
 fn evict_cached_url(from_url_cache: bool, video_id: &str) {
@@ -631,7 +646,7 @@ fn spawn_ytdlp(
 async fn ytdlp_pipeline(
     cfg: &DownloadConfig,
     ffmpeg_avail: bool,
-    _permit: tokio::sync::SemaphorePermit<'_>,
+    _permit: tokio::sync::SemaphorePermit<'static>,
     t0: tokio::time::Instant,
     stream_url: Option<String>,
 ) -> anyhow::Result<SymphoniaDecoder> {
@@ -767,12 +782,11 @@ async fn ytdlp_pipeline(
                     buffer.clone(),
                     log_prefix,
                     Some(t0),
+                    _permit,
                 ));
-                drop(_permit);
                 (decoder, false)
             }
             Err(stream_err) => {
-                drop(_permit);
                 debug!(%cfg.video_id, error = %stream_err,
                     "Streaming decoder init failed, waiting for {} stream to complete",
                     if from_url_cache { "ffmpeg" } else { "ffmpeg relay" });
@@ -869,13 +883,12 @@ async fn ytdlp_pipeline(
                     buffer.clone(),
                     pipe_name,
                     None,
+                    _permit,
                 ));
 
-                drop(_permit);
                 (decoder, false)
             }
             Err(stream_err) => {
-                drop(_permit);
                 debug!(%cfg.video_id, error = %stream_err,
                 "Streaming decoder init failed, waiting for yt-dlp stream to complete");
                 let wait_result = tokio::select! {
@@ -934,13 +947,8 @@ pub async fn download_and_decode(cfg: DownloadConfig) -> anyhow::Result<Symphoni
         anyhow::bail!("download cancelled before start");
     }
 
-    if let Some(cached) = cache_get(&cfg.video_id) {
-        debug!(%cfg.video_id, len = cached.len(), "Reusing cached buffer");
-        let len = cached.len() as u64;
-        let cursor = std::io::Cursor::new(cached);
-        let source = ReadSeekSource::new(cursor, Some(len));
-        let mss = MediaSourceStream::new(Box::new(source), Default::default());
-        return SymphoniaDecoder::new(mss).context("decoder (cached)");
+    if let Some(decoder) = cached_decoder(&cfg.video_id) {
+        return Ok(decoder);
     }
 
     let ffmpeg_avail = check_ffmpeg();
@@ -973,6 +981,11 @@ pub async fn download_and_decode(cfg: DownloadConfig) -> anyhow::Result<Symphoni
 
     if cfg.cancel_token.is_cancelled() {
         anyhow::bail!("download cancelled after semaphore");
+    }
+
+    if let Some(decoder) = cached_decoder(&cfg.video_id) {
+        debug!(%cfg.video_id, "Reusing cached buffer (filled while waiting for semaphore)");
+        return Ok(decoder);
     }
 
     let t0 = tokio::time::Instant::now();
@@ -1091,6 +1104,11 @@ mod tests {
     // Tests touching the global BYTE_CACHE must run serially (they share the
     // same cache behind one Mutex, so parallel runs evict each other's entries).
     static CACHE_TEST_LOCK: Mutex<()> = Mutex::new(());
+
+    // Tests acquiring the global DOWNLOAD_SEMAPHORE must run serially: parallel
+    // runtimes would steal each other's permit and defeat the held/released
+    // assertions.
+    static SEMAPHORE_TEST_LOCK: Mutex<()> = Mutex::new(());
 
     fn spawn_slow_write(
         buf: &Arc<SharedBuffer>,
@@ -1821,6 +1839,7 @@ mod tests {
     #[test]
     fn bg_cache_task_cancel_kills_all_children() {
         use std::time::Duration;
+        let _guard = SEMAPHORE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async {
             let ff_child = tokio::process::Command::new("sleep")
@@ -1841,6 +1860,7 @@ mod tests {
             let ct = tokio_util::sync::CancellationToken::new();
             let buf = SharedBuffer::new();
             let done = tokio::task::spawn(std::future::pending::<()>());
+            let permit = DOWNLOAD_SEMAPHORE.acquire().await.expect("test permit");
             let task = tokio::spawn(spawn_bg_cache_task(
                 "test-vid".to_string(),
                 ct.clone(),
@@ -1850,6 +1870,7 @@ mod tests {
                 buf,
                 "test",
                 None,
+                permit,
             ));
 
             tokio::time::sleep(Duration::from_millis(150)).await;
@@ -1867,6 +1888,114 @@ mod tests {
                     .expect("kill -0");
                 assert!(!alive.success(), "{label} child {pid} must be dead after cancel");
             }
+        });
+    }
+
+    #[test]
+    fn bg_cache_task_holds_permit_until_complete() {
+        use std::time::Duration;
+        let _guard = SEMAPHORE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            let ff_child = tokio::process::Command::new("sleep")
+                .arg("30")
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .spawn()
+                .expect("spawn sleep (primary)");
+            let yt_child = tokio::process::Command::new("sleep")
+                .arg("30")
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .spawn()
+                .expect("spawn sleep (extra)");
+
+            let ct = tokio_util::sync::CancellationToken::new();
+            let buf = SharedBuffer::new();
+            let done = tokio::task::spawn(std::future::pending::<()>());
+            let permit = DOWNLOAD_SEMAPHORE.acquire().await.expect("test permit");
+
+            let task = tokio::spawn(spawn_bg_cache_task(
+                "test-vid".to_string(),
+                ct.clone(),
+                ff_child,
+                Some(yt_child),
+                done,
+                buf,
+                "test",
+                None,
+                permit,
+            ));
+
+            assert!(
+                DOWNLOAD_SEMAPHORE.try_acquire().is_err(),
+                "permit must be held by the bg cache task while it runs"
+            );
+
+            ct.cancel();
+            tokio::time::timeout(Duration::from_secs(5), task)
+                .await
+                .expect("bg cache task must finish after cancel")
+                .expect("bg cache task join");
+
+            assert!(
+                DOWNLOAD_SEMAPHORE.try_acquire().is_ok(),
+                "permit must be released once the bg cache task completes"
+            );
+        });
+    }
+
+    #[test]
+    fn permit_released_after_cancel_not_before() {
+        use std::time::Duration;
+        let _guard = SEMAPHORE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            let ff_child = tokio::process::Command::new("sleep")
+                .arg("30")
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .spawn()
+                .expect("spawn sleep (primary)");
+            let yt_child = tokio::process::Command::new("sleep")
+                .arg("30")
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .spawn()
+                .expect("spawn sleep (extra)");
+
+            let ct = tokio_util::sync::CancellationToken::new();
+            let buf = SharedBuffer::new();
+            let done = tokio::task::spawn(std::future::pending::<()>());
+            let permit = DOWNLOAD_SEMAPHORE.acquire().await.expect("test permit");
+
+            let task = tokio::spawn(spawn_bg_cache_task(
+                "test-vid".to_string(),
+                ct.clone(),
+                ff_child,
+                Some(yt_child),
+                done,
+                buf,
+                "test",
+                None,
+                permit,
+            ));
+
+            ct.cancel();
+            assert!(
+                DOWNLOAD_SEMAPHORE.try_acquire().is_err(),
+                "permit must NOT be released while the bg task is still unwinding (kill/reap in flight)"
+            );
+
+            tokio::time::timeout(Duration::from_secs(5), task)
+                .await
+                .expect("bg cache task must finish after cancel")
+                .expect("bg cache task join");
+
+            assert!(
+                DOWNLOAD_SEMAPHORE.try_acquire().is_ok(),
+                "permit released only after the bg task future resolves"
+            );
         });
     }
 }
