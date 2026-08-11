@@ -263,6 +263,7 @@ impl ActionHandler<AppAction> for YoutuiWindow {
 
 impl YoutuiWindow {
     pub fn new(config: Config) -> (YoutuiWindow, Effects<YoutuiWindow>) {
+        let startup_volume = config.volume;
         let (mut playlist, task) = Playlist::new(Percentage(config.volume));
         playlist.set_notifications_enabled(config.notifications_enabled);
         let this = YoutuiWindow {
@@ -275,10 +276,24 @@ impl YoutuiWindow {
             tick: 0,
             footer_cache: FooterCache::new(),
         };
-        (
-            this,
-            task.map(|this: &mut Self| &mut this.playlist),
-        )
+        let mut effects = task.map(|this: &mut Self| &mut this.playlist);
+        // Apply the configured volume to the actual audio device at startup,
+        // so the footer's number and the audible level agree from the first
+        // frame (rodio's Player otherwise defaults to 1.0 regardless of config).
+        effects = effects.push(Effects::new(move |server: &ArcServer| {
+            let server = Arc::clone(server);
+            async move {
+                let update = server.player.set_volume(startup_volume).await;
+                Box::new(move |this: &mut YoutuiWindow| {
+                    if let Some(update) = update {
+                        this.playlist.handle_volume_update(update);
+                    }
+                    Effects::none()
+                })
+                    as Box<dyn FnOnce(&mut YoutuiWindow) -> Effects<YoutuiWindow> + Send>
+            }
+        }));
+        (this, effects)
     }
     pub fn get_help_list_items(&self) -> impl Iterator<Item = DisplayableKeyAction<'_>> {
         let base: Vec<DisplayableKeyAction<'_>> = match self.context {

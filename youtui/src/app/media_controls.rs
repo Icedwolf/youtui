@@ -334,16 +334,30 @@ impl MediaController {
     }
     fn update_progress(
         current: &mut souvlaki::MediaPlayback,
-        new_status: impl FnOnce(Option<MediaPosition>) -> souvlaki::MediaPlayback,
+        playing: bool,
         new_progress: Duration,
+        new_status: impl FnOnce(Option<MediaPosition>) -> souvlaki::MediaPlayback,
     ) -> bool {
-        let needs_update = match current {
+        // A state change (Playing <-> Paused) must always be pushed to the
+        // platform regardless of how small the position delta is — otherwise a
+        // pause a couple of seconds after the last progress update is never
+        // reported (and, while paused, position stops moving so it would stay
+        // stuck on the wrong state forever). Throttling by
+        // `POSITION_DIFFERENCE_REDRAW_THRESHOLD` applies only to *progress*
+        // updates within the same state.
+        let state_changed = match current {
+            souvlaki::MediaPlayback::Playing { .. } => !playing,
+            souvlaki::MediaPlayback::Paused { .. } => playing,
+            _ => true,
+        };
+        let progress_reached = match current {
             souvlaki::MediaPlayback::Paused { progress: Some(p) }
             | souvlaki::MediaPlayback::Playing { progress: Some(p) } => {
                 p.0.abs_diff(new_progress) >= POSITION_DIFFERENCE_REDRAW_THRESHOLD
             }
             _ => true,
         };
+        let needs_update = state_changed || progress_reached;
         if needs_update {
             *current = new_status(Some(MediaPosition(new_progress)));
         }
@@ -360,18 +374,14 @@ impl MediaController {
                 }
             }
             MediaControlsStatus::Paused { progress } => {
-                redraw = Self::update_progress(
-                    &mut self.status,
-                    |p| souvlaki::MediaPlayback::Paused { progress: p },
-                    progress,
-                );
+                redraw = Self::update_progress(&mut self.status, false, progress, |p| {
+                    souvlaki::MediaPlayback::Paused { progress: p }
+                });
             }
             MediaControlsStatus::Playing { progress } => {
-                redraw = Self::update_progress(
-                    &mut self.status,
-                    |p| souvlaki::MediaPlayback::Playing { progress: p },
-                    progress,
-                );
+                redraw = Self::update_progress(&mut self.status, true, progress, |p| {
+                    souvlaki::MediaPlayback::Playing { progress: p }
+                });
             }
         }
         if redraw {
@@ -394,6 +404,94 @@ mod tests {
         let nc = NotificationController::new();
         assert!(nc.last_notification.is_none());
         assert!(nc.cover_url.is_none());
+    }
+
+    /// A Playing->Paused transition within the position-delta throttle window
+    /// must still be pushed to the platform. Regression: the old diffing keyed
+    /// on progress delta alone, so a pause shortly after the last progress
+    /// update left MPRIS stuck on Playing forever (while paused, position never
+    /// moves, so no later frame ever crossed the threshold).
+    #[test]
+    fn pause_state_change_pushes_even_within_progress_throttle() {
+        let mut current = souvlaki::MediaPlayback::Playing {
+            progress: Some(MediaPosition(Duration::from_secs(50))),
+        };
+        let pushed = MediaController::update_progress(
+            &mut current,
+            false,
+            Duration::from_secs(50) + Duration::from_millis(500),
+            |p| souvlaki::MediaPlayback::Paused { progress: p },
+        );
+        assert!(pushed, "pausing must be pushed to the platform");
+        assert_eq!(
+            current,
+            souvlaki::MediaPlayback::Paused {
+                progress: Some(MediaPosition(
+                    Duration::from_secs(50) + Duration::from_millis(500)
+                )),
+            }
+        );
+    }
+
+    /// Resume is symmetric: a Paused->Playing transition within the throttle
+    /// window must also push.
+    #[test]
+    fn resume_state_change_pushes_even_within_progress_throttle() {
+        let mut current = souvlaki::MediaPlayback::Paused {
+            progress: Some(MediaPosition(Duration::from_secs(50))),
+        };
+        let pushed = MediaController::update_progress(
+            &mut current,
+            true,
+            Duration::from_secs(50) + Duration::from_millis(500),
+            |p| souvlaki::MediaPlayback::Playing { progress: p },
+        );
+        assert!(pushed, "resuming must be pushed to the platform");
+        assert!(matches!(current, souvlaki::MediaPlayback::Playing { .. }));
+    }
+
+    /// Progress updates within the same state are still throttled by
+    /// POSITION_DIFFERENCE_REDRAW_THRESHOLD (5s) — the diffing optimisation is
+    /// preserved, only the state-change gate changed.
+    #[test]
+    fn progress_update_still_throttled_within_same_state() {
+        let mut current = souvlaki::MediaPlayback::Playing {
+            progress: Some(MediaPosition(Duration::from_secs(50))),
+        };
+        let pushed =
+            MediaController::update_progress(&mut current, true, Duration::from_secs(51), |p| {
+                souvlaki::MediaPlayback::Playing { progress: p }
+            });
+        assert!(!pushed, "+1s under threshold must be throttled");
+        assert_eq!(
+            current,
+            souvlaki::MediaPlayback::Playing {
+                progress: Some(MediaPosition(Duration::from_secs(50))),
+            }
+        );
+
+        let pushed =
+            MediaController::update_progress(&mut current, true, Duration::from_secs(56), |p| {
+                souvlaki::MediaPlayback::Playing { progress: p }
+            });
+        assert!(pushed, "+6s at/over threshold must be pushed");
+    }
+
+    /// Starting playback from Stopped always pushes.
+    #[test]
+    fn start_playback_from_stopped_pushes() {
+        let mut current = souvlaki::MediaPlayback::Stopped;
+        let pushed =
+            MediaController::update_progress(&mut current, true, Duration::ZERO, |p| {
+                souvlaki::MediaPlayback::Playing { progress: p }
+            });
+        assert!(pushed);
+        assert_eq!(
+            current,
+            souvlaki::MediaPlayback::Playing {
+                progress: Some(MediaPosition(Duration::ZERO)),
+            }
+        );
     }
 
     /// Type-level test: NotificationController has Default impl.

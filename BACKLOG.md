@@ -1,10 +1,18 @@
 # Youtui Backlog
 
 **Build:** 0 errors, 0 warnings, 0 clippy
-**Tests:** 336 youtui passed + 2 ignored (live network tests are flaky)
-**Last updated:** 2026-08-10
+**Tests:** 345 youtui passed + 2 ignored (live network tests are flaky)
+**Last updated:** 2026-08-11
 
 ## Completed
+
+### Session 2026-08-11 — Footer duration frozen at 00:00; startup volume never applied
+
+- **Footer duration stuck at `00:00` / gauge frozen (P1).** `draw_footer` resolved a non-zero `duration` only inside the `Playing|Paused` branch, but cached `duration_str` keyed on **song-id change** alone. The id first transitioned during `Buffering` — when duration was still literally `0` — so `00:00` was committed to the cache; when `handle_playing` later flipped to `Playing` (setting `actual_duration`), the id was unchanged and the cache never refreshed → `00:00` + ratio `progress/0` = frozen gauge for the whole song. Fix: extracted pure `refresh_footer_cache` (footer.rs) — duration string keyed on its own resolved value (`last_duration`), song/album strings still keyed on id (no per-frame alloc). `draw_footer` now resolves duration for any active id (Buffering included) and renders the metadata total the moment playback starts. 5 new tests, including `duration_string_refreshes_when_playing_starts_same_song_id` (the exact Buffering→Playing transition that regressed). (`draw_media_controls.rs` was already per-frame; the MPRIS pause state-change bug is fixed below.)
+- **Configured volume never reached the audio device (P2).** At startup `rodio::Player` defaults to `1.0` regardless of `config.volume`, so the footer number and the audible level disagreed until the first `+`/`-` press (footer 50 / audio 100% when no `volume` key → `default_volume()` 50). `YoutuiWindow::new` now pushes a one-shot startup effect: `server.player.set_volume(config.volume)` and applies the returned `VolumeUpdate` to the playlist. Footer and device agree from the first frame; adding `volume = 100` to config.toml now actually takes effect.
+- **MPRIS stuck on Playing after pause (P1).** `update_progress` diffed on position delta alone, so a pause a few seconds after the last progress update never pushed to the platform — and since position stops moving while paused, it stayed stuck on Playing forever. `update_progress` now takes an explicit `playing` gate: a Playing↔Paused state change always pushes; `POSITION_DIFFERENCE_REDRAW_THRESHOLD` throttling applies only to progress updates within the same state. 4 tests (`pause_state_change_pushes_even_within_progress_throttle`, `resume_state_change_pushes_even_within_progress_throttle`, `progress_update_still_throttled_within_same_state`, `start_playback_from_stopped_pushes`).
+- Note: tree-wide `cargo fmt -- --check` fails under every installed rustfmt (1.90/1.91/1.94/nightly/stable) — 272 hunks across ~25 files predate this work (older-rustfmt formatting). fmt is not a required gate; migration deferred.
+- Verified: cargo check 0, full test suite 345 passed (+2 ignored), clippy 0, `cargo build --release` clean.
 
 ### Session 2026-08-10 — Artist/song search status feedback; concurrent fallback fusion
 
