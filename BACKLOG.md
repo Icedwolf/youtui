@@ -1,10 +1,17 @@
 # Youtui Backlog
 
 **Build:** 0 errors, 0 warnings, 0 clippy
-**Tests:** 345 youtui passed + 2 ignored (live network tests are flaky)
+**Tests:** 348 youtui passed + 2 ignored (live network tests are flaky)
 **Last updated:** 2026-08-11
 
 ## Completed
+
+### Session 2026-08-11 — Strict single-download invariant; shuffle-regen debounce
+
+- **Strict single-download invariant (permit lives in the bg fill).** `ytdlp_pipeline` dropped `_permit` at all 4 streaming-init sites (ALAC+M4A, success+fail): on streaming success the decoder returned immediately while `spawn_bg_cache_task` kept ffmpeg alive downloading the rest, so `handle_playing`'s next prebuffer found the semaphore free and spawned a **second concurrent ffmpeg** — 2 ffmpegs were the steady state on every song start. `spawn_bg_cache_task` now takes an owned `SemaphorePermit<'static>`; streaming-success sites **move the permit into the bg task** (held until fill completes/cancels/kills), streaming-fail sites hold it to pipeline return. Tradeoff documented in DECISIONS.md:2 (adjacent-song select waits for the current fill; distant skip still cancels instantly). Named tests: `bg_cache_task_holds_permit_until_complete`, `permit_released_after_cancel_not_before`. `SEMAPHORE_TEST_LOCK` serializes semaphore tests against parallel-runtime permit stealing.
+- **Post-acquire cache re-check (replay hardening).** A re-select of the current song during its own fill blocked on `acquire()` then re-downloaded a now-cached song. New `cached_decoder(video_id)` helper; `download_and_decode` re-checks cache after acquiring the permit + cancel check. `cached_decoder` returns `Arc<[u8]>` for zero-copy cache hits.
+- **Held-shuffle-key download churn (P1).** Resolve runs outside the semaphore by design, so every `toggle_shuffle` → `regenerate_downloads_for_current` spawned a fresh yt-dlp before the previous was cancelled — a key repeat burst ran several resolves at once. `toggle_shuffle` now schedules a **trailing-debounced** regeneration (`SHUFFLE_REGEN_DEBOUNCE_MS = 100`): shuffle *order* applies synchronously (UI stays instant); only the network scope-regeneration coalesces to the final toggle of the burst, each previous pending regen cancelled by its own token (`tokio::select!` biased on `token.cancelled()`). `handle_playing` prebuffer stays immediate. Test: `held_shuffle_key_burst_keeps_only_latest_regen_token`.
+- Verified: cargo check 0, clippy 0, 348 youtui tests green, `cargo build --release` clean.
 
 ### Session 2026-08-11 — Footer duration frozen at 00:00; startup volume never applied
 
@@ -340,7 +347,17 @@ Net: 19 `info!` → `debug!` demotions, 3 `info` imports removed. Remaining 10 `
 |---|------|----------|-------------|
 | B1 | Gapless re-downloads downloaded songs | **WASTE** | ✅ FIXED |
 | B2 | `Downloading` status sets `Queued`, not `Downloading` | **WASTE** | ✅ FIXED |
-| B3 | `_permit` dropped while background cache still streaming → parallel download | **WASTE** | ✅ FALSE ALARM — early release is intentional. Old bg task reads pipe (already-downloaded data), no new HTTP request. Next download starts immediately. |
+| B3 | `_permit` dropped while background cache still streaming → parallel download | **WASTE** | ✅ FIXED — the original "false alarm" rationale was wrong: the old bg task's ffmpeg *does* keep a live network/transcode stream until the fill completes, so dropping the permit re-enabled parallel downloads. The `DOWNLOAD_SEMAPHORE` permit now lives in the bg cache task and is held until the fill completes/cancels/kills — one download truly at a time. |
+
+## Completed
+
+### Session 2026-08-11 — Strict single-download invariant (permit lives in the bg fill)
+
+- **Early permit release was wrong; now structurally impossible (P1).** `ytdlp_pipeline` dropped `_permit` at all 4 streaming-init sites (`mod.rs`, ALAC+M4A, success+fail). On streaming success the decoder was returned immediately and the permit freed, while `spawn_bg_cache_task` kept ffmpeg/yt-dlp alive downloading the *rest* of the song — so the next prebuffer download (started by `handle_playing` → `download_upcoming_from_id`) found the semaphore free and spawned a **second concurrent ffmpeg** on top of the still-still streaming one. 2 ffmpegs were the steady state on every song start. B3's "old bg reads already-downloaded data, no new HTTP request" was wrong: ffmpeg (URL path) / yt-dlp (relay path) keeps downloading for the whole fill.
+- **Fix:** `spawn_bg_cache_task` gained an owned `SemaphorePermit<'static>` param; the two streaming-success sites (`mod.rs:762` ALAC, `:863` M4A) **move the permit into the bg task** instead of dropping it — the permit is now held until the fill completes, the task is cancelled, or the child is killed. The two streaming-fail → inline-full-wait sites no longer drop it either; it's held until `ytdlp_pipeline` returns. `ytdlp_pipeline`'s param is now explicitly `SemaphorePermit<'static>` (the semaphore is a `'static` static, so this is sound).
+- **Tradeoff (documented in DECISIONS.md:2):** selecting the *next* adjacent song waits for the current song's fill to finish (transcode/network seconds, not playback time). Skipping to a distant song still cancels the old fill instantly (`drop_unscoped_from_id`). No deadlock: the permit is only released on fill-complete/cancel/kill.
+- **Tests (fail-first):** `bg_cache_task_holds_permit_until_complete` (permit held while running, released after join), `permit_released_after_cancel_not_before` (freed only after the bg task future resolves), both red until the signature change. Existing `bg_cache_task_cancel_kills_all_children` updated to the 9-arg signature. Added `SEMAPHORE_TEST_LOCK` — parallel runtimes racing the global `DOWNLOAD_SEMAPHORE` would steal each other's permit (3 passed; the old 2 were silently serialized by luck).
+- Verified: `cargo check` 0, 347 youtui tests green, clippy 0, `cargo build --release` clean.
 | B4 | Stale `URL_CACHE` on pipeline failure wastes 2-4s retry | **WASTE** | ✅ FALSE ALARM — URL cache already invalidated on fast-path fallback (song_downloader.rs:287,291,299). Warming re-resolves if removed. |
 | B5 | 6× `Client::new().expect()` in ytmapi-rs | **CRASH** | ✅ FIXED |
 | B6 | `play_song` silent no-op on missing ID | **INCORRECT** | ✅ FIXED |

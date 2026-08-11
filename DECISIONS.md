@@ -6,7 +6,7 @@ Critical invariants and rationale. **Read before changing playback/download code
 
 1. **Single-song hot path is priority.** User searches → selects → plays. No playlist walking optimization. The download pipeline must optimize for this case.
 
-2. **No parallel downloads.** Semaphore=1, one download at a time. Multiple yt-dlp processes compete for bandwidth and slow down the song the user actually selected.
+2. **No parallel downloads.** Semaphore=1, one download at a time. Multiple yt-dlp processes compete for bandwidth and slow down the song the user actually selected. The semaphore permit moves into `spawn_bg_cache_task` at streaming-init success (and is otherwise held through `ytdlp_pipeline`), so it is released only when the fill completes, its token is cancelled (a distant song skip), or the children are killed — a second ffmpeg cannot spawn while the current song's fill is still streaming. Tradeoff: selecting the *next* adjacent song waits for the current fill (transcode/network seconds — ffmpeg transcodes at 20-50× realtime, not playback-time).
 
 3. **No prefetch before playback.** `prepare_playback_id` must NOT call `download_upcoming_from_id`. Prebuffer only fires AFTER `handle_playing` — the selected song gets 100% download bandwidth first.
 
