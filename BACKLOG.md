@@ -1,10 +1,15 @@
 # Youtui Backlog
 
 **Build:** 0 errors, 0 warnings, 0 clippy
-**Tests:** 352 youtui passed + 2 ignored (live network tests are flaky)
+**Tests:** 353 youtui passed + 2 ignored (live network tests are flaky)
 **Last updated:** 2026-08-11
 
 ## Completed
+
+### Session 2026-08-11 — Superseded fired regen skips scope rebuild; strict pending-only
+
+- **A fired debounce whose token was superseded no longer rebuilds the download scope.** `apply_fired_shuffle_regen` previously ran the regen unconditionally and cleared the field conditionally — so an *older* callback finding a newer token in the field still rebuilt the scope, then the newer debounce rebuilt it again ~100ms later (two regens per burst). Now the guard gates the regen itself: only the field's live token regenerates; a superseded callback returns `Effects::none()` and leaves the newer token untouched. "Finally toggle wins" is now true of the *regeneration*, not just the token. Also `pub(crate)` → `pub(super)` (method is only used by the sibling test module). Tests (fail-first): `superseded_fired_callback_skips_scope_regen` red before the guard (returned a non-empty effect), green after. No regen/shuffle/debounce test regressed.
+- Verified: cargo check 0, clippy 0, 353 youtui tests green, `cargo build --release` clean. Pushed to `origin/main`.
 
 ### Session 2026-08-11 — Fired-debounce token cleared; strict pending-only invariant
 
