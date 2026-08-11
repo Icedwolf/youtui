@@ -1785,6 +1785,45 @@ mod state_transitions {
     }
 
     #[test]
+    fn superseded_fired_callback_skips_scope_regen() {
+        let mut p = undownloaded_songs(3);
+        p.set_notifications_enabled(false);
+        p.play_status = PlayState::Buffering(ListSongID(0));
+
+        let _effect = p.toggle_shuffle();
+        let older = p.shuffle_regen_token.clone().expect("pending after first toggle");
+
+        let _effect = p.toggle_shuffle();
+        let newer = p.shuffle_regen_token.clone().expect("pending after second toggle");
+        assert!(older.is_cancelled(), "first regen must be superseded");
+
+        // A stale fired callback whose token is no longer pending must not
+        // rebuild the download scope — the newer debounce owns that now.
+        let effect = p.apply_fired_shuffle_regen(&older);
+        assert!(
+            effect.is_empty(),
+            "a superseded fired callback must not rebuild the download scope"
+        );
+        assert!(
+            p.shuffle_regen_token.is_some() && p.shuffle_regen_token.as_ref().unwrap() == &newer,
+            "the newer pending token must be left untouched"
+        );
+
+        // The live pending token's callback still regenerates (spawns
+        // downloads), clearing its own token afterwards.
+        let effect = p.apply_fired_shuffle_regen(&newer);
+        assert!(
+            !effect.is_empty(),
+            "the live pending callback must regenerate the download scope"
+        );
+        drop(effect);
+        assert!(
+            p.shuffle_regen_token.is_none(),
+            "the live fired callback must clear itself"
+        );
+    }
+
+    #[test]
     fn idle_toggle_clears_pending_token() {
         let mut p = undownloaded_songs(2);
         p.set_notifications_enabled(false);

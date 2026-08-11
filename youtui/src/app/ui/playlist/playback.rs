@@ -1383,18 +1383,20 @@ fn cancel_song_download(&self, id: ListSongID) {
 
     /// Apply the scope regen for a debounce whose sleep branch won, and clear
     /// the pending-token field — but only if it still holds *this* token. A
-    /// newer toggle with a freshly scheduled token must not be cleared by a
-    /// late-fired older callback; with the field clobbered the newer debounce
-    /// would lose the ability to cancel itself.
-    pub(crate) fn apply_fired_shuffle_regen(
+    /// newer toggle with a freshly scheduled token (arriving between the sleep
+    /// win and this callback) supersedes us: its own debounce owns the regen,
+    /// so this callback must neither rebuild the scope nor clear the newer
+    /// token — with the field clobbered the newer debounce would lose the
+    /// ability to cancel itself. Only the field's live token regenerates.
+    pub(super) fn apply_fired_shuffle_regen(
         &mut self,
         fired: &tokio_util::sync::CancellationToken,
     ) -> Effects<Self> {
-        let effect = self.regenerate_downloads_for_current();
-        if self.shuffle_regen_token.as_ref().is_some_and(|cur| cur == fired) {
-            self.shuffle_regen_token = None;
+        if self.shuffle_regen_token.as_ref() != Some(fired) {
+            return Effects::none();
         }
-        effect
+        self.shuffle_regen_token = None;
+        self.regenerate_downloads_for_current()
     }
 
     pub fn handle_song_download_progress_update(
