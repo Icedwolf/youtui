@@ -4,7 +4,7 @@ use std::sync::{LazyLock, Mutex};
 use std::time::Instant;
 
 use crate::core::PoisonRecovery;
-use tracing::warn;
+use tracing::{debug, warn};
 
 const URL_CACHE_TTL: std::time::Duration = std::time::Duration::from_secs(6 * 3600);
 
@@ -155,6 +155,11 @@ pub async fn resolve_url(
         }
     };
 
+    // Concurrent resolves are the churn class this session eliminated (held-key
+    // shuffle toggles, rapid next-press). Log the spawn so a recurrence is
+    // countable from logs (see the "yt-dlp spawned" line in the relay path).
+    debug!(%video_id, "resolve: spawned {cmd_name}");
+
     let resolve = async {
         let output = child.wait_with_output().await.ok()?;
         if !output.status.success() {
@@ -175,7 +180,13 @@ pub async fn resolve_url(
     let outcome = if let Some(ct) = cancel_token {
         tokio::select! {
             biased;
-            _ = ct.cancelled() => ResolveOutcome::Failed,
+            _ = ct.cancelled() => {
+                // Cancellation aborts the resolve (and kill_on_drop reaps the
+                // child). Log it so a burst-orphan or scope-change storm is
+                // distinguishable from a genuine failure.
+                debug!(%video_id, "resolve: cancelled");
+                ResolveOutcome::Failed
+            }
             outcome = resolve => outcome.unwrap_or(ResolveOutcome::Failed),
         }
     } else {
