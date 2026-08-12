@@ -177,9 +177,10 @@ impl ChildCommand for tokio::process::Command {
 }
 
 /// Try to init a symphonia decoder from the buffer while it's still being
-/// written.  For WAV: the header is at the start, so probing with the first
-/// few KB works.  For M4A (isomp4): the moov atom may be at the end, so
-/// `byte_len` must be the total file size (from yt-dlp progress line).
+/// written.  For the streamed ALAC-in-fragmented-MP4 path: `empty_moov` puts
+/// the moov (with the ALAC sample entry) in the first ~700 bytes, so probing
+/// with the first few KB works.  For M4A (isomp4): the moov atom may be at the
+/// end, so `byte_len` must be the total file size (from yt-dlp progress line).
 /// Spawns on a blocking thread for isomp4 seeking (could block Condvar).
 async fn init_decoder_from(mss: MediaSourceStream) -> Result<SymphoniaDecoder, String> {
     let deadline = std::time::Duration::from_secs(DECODER_INIT_DEADLINE_S);
@@ -651,7 +652,7 @@ async fn ytdlp_pipeline(
     stream_url: Option<String>,
 ) -> anyhow::Result<SymphoniaDecoder> {
     let from_url_cache = stream_url.is_some();
-    // WAV transcoding requires ffmpeg; without it the pipeline must use the
+    // ALAC transcoding requires ffmpeg; without it the pipeline must use the
     // direct M4A path even when a (webm) URL resolved, since symphonia cannot
     // decode Opus in a webm container.
 
@@ -1522,7 +1523,7 @@ mod tests {
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::null());
-        let mut child = ffmpeg.spawn().context("spawn ffmpeg for WAV transcode")?;
+        let mut child = ffmpeg.spawn().context("spawn ffmpeg for mp3 relay")?;
         let ffmpeg_stdout = child.stdout.take().context("ffmpeg stdout not captured")?;
         let writer = std::thread::spawn(move || {
             use std::io::Read;
