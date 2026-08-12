@@ -11,7 +11,7 @@ use symphonia::core::io::MediaSourceStream;
 use tokio::sync::Semaphore;
 use tracing::{debug, error, warn};
 
-pub(crate) use cache::{cache_get, cache_put};
+pub(crate) use cache::cache_put;
 use crate::app::server::streaming_buffer::{SharedBuffer, SharedBufferWriter};
 use crate::decoder::SymphoniaDecoder;
 use crate::decoder::read_seek_source::{NonSeekableReadSource, ReadSeekSource};
@@ -534,18 +534,6 @@ fn decoder_from_buffer(
     SymphoniaDecoder::new(mss).with_context(|| format!("decoder (fallback, {pipeline})"))
 }
 
-/// Build a decoder from the cached in-memory buffer for a video, if present.
-/// Re-checked both before the download begins and again after the semaphore is
-/// acquired: a concurrent bg fill may have completed (populating the cache)
-/// while this task was waiting for it.
-fn cached_decoder(video_id: &str) -> Option<SymphoniaDecoder> {
-    let decoder = create_decoder_from_cache(video_id)?;
-    if let Some(cached) = cache_get(video_id) {
-        debug!(%video_id, len = cached.len(), "Reusing cached buffer");
-    }
-    Some(decoder)
-}
-
 /// Evict a cached stream URL after a download failed on it. The URL may have
 /// died server-side, so the retry must re-resolve instead of reusing it.
 fn evict_cached_url(from_url_cache: bool, video_id: &str) {
@@ -946,7 +934,7 @@ pub async fn download_and_decode(cfg: DownloadConfig) -> anyhow::Result<Symphoni
         anyhow::bail!("download cancelled before start");
     }
 
-    if let Some(decoder) = cached_decoder(&cfg.video_id) {
+    if let Some(decoder) = create_decoder_from_cache(&cfg.video_id) {
         return Ok(decoder);
     }
 
@@ -982,7 +970,7 @@ pub async fn download_and_decode(cfg: DownloadConfig) -> anyhow::Result<Symphoni
         anyhow::bail!("download cancelled after semaphore");
     }
 
-    if let Some(decoder) = cached_decoder(&cfg.video_id) {
+    if let Some(decoder) = create_decoder_from_cache(&cfg.video_id) {
         debug!(%cfg.video_id, "Reusing cached buffer (filled while waiting for semaphore)");
         return Ok(decoder);
     }
@@ -996,6 +984,7 @@ pub async fn download_and_decode(cfg: DownloadConfig) -> anyhow::Result<Symphoni
 mod tests {
     use super::*;
     use crate::app::server::song_downloader::cache::CACHE_MAX_ENTRIES;
+    use crate::app::server::song_downloader::cache::cache_get;
     use crate::app::server::streaming_buffer::SharedBuffer;
     use crate::decoder::SymphoniaDecoder;
     use std::sync::Arc;

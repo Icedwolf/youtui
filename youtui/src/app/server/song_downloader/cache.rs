@@ -3,6 +3,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, LazyLock, Mutex};
 
 use symphonia::core::io::MediaSourceStream;
+use tracing::debug;
 
 use crate::core::PoisonRecovery;
 use crate::decoder::SymphoniaDecoder;
@@ -69,6 +70,7 @@ pub fn cache_clear() {
 
 pub fn create_decoder_from_cache(video_id: &str) -> Option<SymphoniaDecoder> {
     let cached = cache_get(video_id)?;
+    debug!(%video_id, len = cached.len(), "Reusing cached buffer");
     let len = cached.len() as u64;
     let cursor = std::io::Cursor::new(cached);
     let source = ReadSeekSource::new(cursor, Some(len));
