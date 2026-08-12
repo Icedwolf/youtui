@@ -539,13 +539,11 @@ fn decoder_from_buffer(
 /// acquired: a concurrent bg fill may have completed (populating the cache)
 /// while this task was waiting for it.
 fn cached_decoder(video_id: &str) -> Option<SymphoniaDecoder> {
-    let cached = cache_get(video_id)?;
-    debug!(%video_id, len = cached.len(), "Reusing cached buffer");
-    let len = cached.len() as u64;
-    let cursor = std::io::Cursor::new(cached);
-    let source = ReadSeekSource::new(cursor, Some(len));
-    let mss = MediaSourceStream::new(Box::new(source), Default::default());
-    SymphoniaDecoder::new(mss).ok()
+    let decoder = create_decoder_from_cache(video_id)?;
+    if let Some(cached) = cache_get(video_id) {
+        debug!(%video_id, len = cached.len(), "Reusing cached buffer");
+    }
+    Some(decoder)
 }
 
 /// Evict a cached stream URL after a download failed on it. The URL may have
