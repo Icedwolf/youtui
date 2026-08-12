@@ -6,6 +6,10 @@
 
 ## Completed
 
+### Session 2026-08-11 — Dedup cached_decoder on single cache impl
+
+- **`cached_decoder` (mod.rs) now delegates to `create_decoder_from_cache` (cache.rs) instead of duplicating the cursor/ReadSeekSource/MediaStreamSource/SymphoniaDecoder construction.** Two byte-identical 5-line copies (the `download_and_decode` re-check pair and the `play_song` hot path) collapsed to one; `cached_decoder` keeps its `"Reusing cached buffer"` debug log on top of the shared impl. Zero behavior change, −7 net lines. Verified: 353 youtui tests green, clippy 0, `cargo build` clean. Pushed to `origin/main`.
+
 ### Session 2026-08-11 — Resolve diagnosability; stale ALAC docs; held-next audit closed
 
 - **Resolve spawn/cancel now logged (`4047657`).** `resolve_url` emits `debug!("resolve: spawned")` on success and `debug!("resolve: cancelled")` when cancellation wins the biased `select!` — matching the relay path's existing `"yt-dlp spawned"` line. The resolve spawn was the silent gap: concurrent-resolve churn (the held-key/rapid-next class this session eliminated) is now countable from logs, so a recurrence is self-diagnosing rather than an invisible cascade.
