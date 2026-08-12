@@ -6,6 +6,13 @@
 
 ## Completed
 
+### Session 2026-08-11 — Resolve diagnosability; stale ALAC docs; held-next audit closed
+
+- **Resolve spawn/cancel now logged (`4047657`).** `resolve_url` emits `debug!("resolve: spawned")` on success and `debug!("resolve: cancelled")` when cancellation wins the biased `select!` — matching the relay path's existing `"yt-dlp spawned"` line. The resolve spawn was the silent gap: concurrent-resolve churn (the held-key/rapid-next class this session eliminated) is now countable from logs, so a recurrence is self-diagnosing rather than an invisible cascade.
+- **Held next/prev resolve-stacking audited → closed, no change.** Rapid next-presses cancel the prior resolve before/alongside a new one: `download_and_decode` re-checks cancellation at three points (pre-start, pre-semaphore, post-semaphore) and `resolve_url` is cancellation-aware (`select!` biased + `kill_on_drop`); the `DOWNLOAD_SEMAPHORE` serializes the actual downloads. Contained by design — no speculative hot-path change.
+- **Stale WAV→ALAC doc labels corrected (`369530b`).** Two production comments (`init_decoder_from`, pipeline ffmpeg gate) still described the pre-2026-08-06 WAV pipeline; now describe ALAC-in-fragmented-MP4 (`empty_moov` → moov in first ~700B) with M4A as the no-ffmpeg fallback. A test-only mp3 relay label ("WAV transcode") also realigned. Docs only, zero behavior change.
+- Verified: 353 youtui tests green, clippy 0, `cargo build --release` clean. Pushed to `origin/main`.
+
 ### Session 2026-08-11 — Superseded fired regen skips scope rebuild; strict pending-only
 
 - **A fired debounce whose token was superseded no longer rebuilds the download scope.** `apply_fired_shuffle_regen` previously ran the regen unconditionally and cleared the field conditionally — so an *older* callback finding a newer token in the field still rebuilt the scope, then the newer debounce rebuilt it again ~100ms later (two regens per burst). Now the guard gates the regen itself: only the field's live token regenerates; a superseded callback returns `Effects::none()` and leaves the newer token untouched. "Finally toggle wins" is now true of the *regeneration*, not just the token. Also `pub(crate)` → `pub(super)` (method is only used by the sibling test module). Tests (fail-first): `superseded_fired_callback_skips_scope_regen` red before the guard (returned a non-empty effect), green after. No regen/shuffle/debounce test regressed.
