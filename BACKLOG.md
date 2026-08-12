@@ -6,6 +6,10 @@
 
 ## Completed
 
+### Session 2026-08-11 — Cache decoder single-fetch; log moved into cache impl
+
+- **The dedup (`741a2d1`) introduced a double `cache_get`** — `cached_decoder` delegated to `create_decoder_from_cache` (one fetch) then fetched again to harvest `len` for its debug log, so every cache re-check grabbed the Mutex-locked `Arc<[u8]>` twice. Fixed (`f00c86c`): the `"Reusing cached buffer"` log now lives inside `create_decoder_from_cache` (cache.rs), where the `Arc<[u8]>` is already in hand; the `cached_decoder` wrapper is deleted and `download_and_decode`'s two re-checks call `create_decoder_from_cache` directly. Single fetch, single impl. Also pruned the now-unused `cache_get` re-export (test module imports it explicitly). Verified: 353 youtui tests green, clippy 0, `cargo build --release` clean. Pushed to `origin/main`.
+
 ### Session 2026-08-11 — Dedup cached_decoder on single cache impl
 
 - **`cached_decoder` (mod.rs) now delegates to `create_decoder_from_cache` (cache.rs) instead of duplicating the cursor/ReadSeekSource/MediaStreamSource/SymphoniaDecoder construction.** Two byte-identical 5-line copies (the `download_and_decode` re-check pair and the `play_song` hot path) collapsed to one; `cached_decoder` keeps its `"Reusing cached buffer"` debug log on top of the shared impl. Zero behavior change, −7 net lines. Verified: 353 youtui tests green, clippy 0, `cargo build` clean. Pushed to `origin/main`.
