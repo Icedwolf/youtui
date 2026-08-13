@@ -12,7 +12,7 @@ Critical invariants and rationale. **Read before changing playback/download code
 
 4. **Start playing ASAP.** Every millisecond between select and first audio frame is valuable. Decoder init latency, ffmpeg latency, buffer thresholds — all fair targets.
 
-5. **Prefetch scope starts AFTER song plays.** When `handle_playing` fires, `regenerate_downloads_for_current` queues next ±1 songs for download. This is the only prebuffer trigger.
+5. **Prefetch scope starts AFTER song plays.** When `handle_playing` fires, `regenerate_downloads_for_current` queues only the next song (`SONGS_AHEAD_TO_BUFFER = 1`, no previous-song seek-back — that was removed to save cache RAM). This is the only prebuffer trigger.
 
 ## State Machine Invariants
 

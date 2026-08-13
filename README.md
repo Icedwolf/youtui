@@ -14,8 +14,10 @@ This project is not supported or endorsed by Google.
 - Search songs, artists, and playlists (songs only)
 - Queue management, shuffle, filter, sort
 - **Lossless streaming playback** — `bestaudio[ext=webm]` piped through ffmpeg to ALAC in a
-  fragmented MP4, decoded incrementally as it arrives. ~16 MB/song in RAM, no disk cache,
-  first audio frame well under a second after selecting a song.
+  fragmented MP4, decoded incrementally as it arrives. ~16 MB/song in RAM, no disk cache.
+  No pre-download buffering: the first frames stream in as soon as the URL resolves and the
+  first chunk arrives (resolve + first-byte latency are the dominant cost, typically 2-5s on
+  a cold start).
 - M4A/AAC full-download fallback when ffmpeg is unavailable.
 - In-memory audio cache (1 entry ≈ 32 MB total, configurable via `download_cache_size`).
 - One download at a time — no parallel yt-dlp/ffmpeg processes competing for bandwidth.
@@ -75,12 +77,12 @@ Unknown config keys are rejected. The format is stable for the current version.
 
 ### Browser Auth Setup Steps
 
-`auth_type = "Browser"` authenticates API requests (search, artist pages, lyrics-free
-song fetch) using your YouTube cookies. Two ways to provide them:
+`auth_type = "Browser"` authenticates API requests (search, song/artist pages, playback)
+using your YouTube cookies. Two ways to provide them:
 
-1. **Automatic** *(preferred)*: on startup youtui detects a Chrome-family browser with
-   YouTube cookies and exports them to `cookies_netscape.txt` via `--cookies-from-browser`,
-   which also authenticates yt-dlp downloads.
+1. **Automatic** *(preferred)*: on startup youtui detects a Floorp/Firefox profile (falling
+   back to Chromium) with YouTube cookies and exports them to `cookies_netscape.txt` via
+   `--cookies-from-browser`, which also authenticates yt-dlp downloads.
 2. **Manual `cookie.txt`**: copy the `Cookie` request header (from a `music.youtube.com`
    network request) into `~/.config/youtui/cookie.txt`.
 
@@ -101,8 +103,9 @@ to obtain them, see [the yt-dlp PO Token guide](https://github.com/yt-dlp/yt-dlp
   in the first ~700 bytes, so decoding starts from a few KB.
 - **No parallel downloads**: a semaphore (1 permit) is held from pipeline start until the
   background cache fill finishes, so a second ffmpeg can't spawn mid-song.
-- **No prefetch**: only the selected song downloads; the cache (default 1 entry) keeps a
-  playing buffer available for seek-back.
+- **No prefetch before playback**: nothing downloads until the selected song is actually
+  playing; then the next song is queued for download (1 ahead). The cache (default 1 entry)
+  keeps the current song's buffer so a re-select/replay is instant.
 - Subprocesses run with a bounded environment (`env_clear()` + allowlist) — children never
   inherit the parent's oversized `envp` (E2BIG-safe by construction).
 
