@@ -4,19 +4,14 @@
 version: 2
 updates:
   - package-ecosystem: "cargo"
-    directory: "/"
+    directory: "/youtui"
     schedule:
       interval: "weekly"
-      
-updates:
   - package-ecosystem: "cargo"
     directory: "/ytmapi-rs"
     schedule:
       interval: "weekly"
-      
-updates:
-  - package-ecosystem: "github-actions"
-    directory: "/"
-    # Check for updates every Monday
+  - package-ecosystem: "cargo"
+    directory: "/json-crawler"
     schedule:
       interval: "weekly"

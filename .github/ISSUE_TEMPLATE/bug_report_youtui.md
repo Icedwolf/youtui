@@ -3,7 +3,6 @@ name: Bug report - youtui
 about: Create a report to help us improve youtui
 title: '[Bug report]: '
 labels: ['triage', 'binary']
-assignees: 'nick42d'
 
 ---
 

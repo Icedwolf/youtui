@@ -3,7 +3,6 @@ name: Bug report - crates
 about: Create a report to help us improve the crates
 title: '[Bug report]: '
 labels: ['triage', 'api']
-assignees: 'nick42d'
 
 ---
 
