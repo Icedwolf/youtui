@@ -1,10 +1,16 @@
 # Youtui Backlog
 
 **Build:** 0 errors, 0 warnings, 0 clippy
-**Tests:** 353 youtui passed + 2 ignored (live network tests are flaky)
-**Last updated:** 2026-08-11
+**Tests:** 354 youtui passed + 2 ignored (live network tests are flaky)
+**Last updated:** 2026-08-13
 
 ## Completed
+
+### Session 2026-08-13 — MediaSource dedup; cache default 3→1 (config audit)
+
+- **`NonSeekableReadSource` merged into `ReadSeekSource` (`bf17112`).** The two byte-identical `Read`/`Seek` impls (only `is_seekable()`/`byte_len()` differed) collapsed into one struct with a `seekable: bool` + `length: Option<u64>`; `new(inner, length)` (seekable) and `nonseekable(inner)` constructors. −25 net lines. Streaming-init sites in `song_downloader/mod.rs` (`try_streaming_init_nonseekable` + 2 relay/streaming tests) switched to `ReadSeekSource::nonseekable`. Also **audited the decoder/streaming-init path (Option B) — no further change warranted**: all `SymphoniaDecoder` fields used; `current_span_len` eos debug fires ~1-2×/song-end (rodio calls it once per `bootstrap`, uniform.rs:55, then drops the source — not per-frame); seekable-M4A / nonseekable-ALAC split verified correct.
+- **Cache default `download_cache_size` 3→1 (`58e035d`).** Config audit (P1.1 verification) found the documented "cache default 3→1" (BACKLOG memory 2026-07-08, AGENTS.md "cache max=1", DECISIONS.md:13/16) had never reached the code: `default_cache_size()` still returned 3 → a fresh install (no config.toml) defaulted to 3 ALAC entries ≈ 48MB instead of the product's ~32MB. One-line revert to 1; affects only fresh installs (live config already pins 1). Fail-first test `default_cache_size_is_one` (red before, green after). Rest of config surface verified live: `download_cache_size`, `auth_type`, `notifications_enabled`, `volume`, `yt_dlp_command`, `keybinds` all wired — no dead options.
+- Verified: 354 youtui tests green (+1), clippy 0, `cargo build --release` clean. Pushed to `origin/main`.
 
 ### Session 2026-08-11 — Cache decoder single-fetch; log moved into cache impl
 
