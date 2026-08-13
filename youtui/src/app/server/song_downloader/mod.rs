@@ -14,7 +14,7 @@ use tracing::{debug, error, warn};
 pub(crate) use cache::cache_put;
 use crate::app::server::streaming_buffer::{SharedBuffer, SharedBufferWriter};
 use crate::decoder::SymphoniaDecoder;
-use crate::decoder::read_seek_source::{NonSeekableReadSource, ReadSeekSource};
+use crate::decoder::read_seek_source::ReadSeekSource;
 
 const MAX_CONCURRENT_DOWNLOADS: usize = 1;
 const READ_BUF_SIZE: usize = 64 * 1024;
@@ -210,7 +210,7 @@ async fn try_streaming_init_nonseekable(
     buffer: &Arc<SharedBuffer>,
 ) -> Result<SymphoniaDecoder, String> {
     let reader = buffer.reader();
-    let source = NonSeekableReadSource::new(reader);
+    let source = ReadSeekSource::nonseekable(reader);
     let mss = MediaSourceStream::new(Box::new(source), Default::default());
     init_decoder_from(mss).await
 }
@@ -1389,7 +1389,7 @@ mod tests {
         }
         assert!(buf.len() >= STREAM_INIT_THRESHOLD, "buffer must reach init threshold");
         let reader = buf.reader();
-        let source = crate::decoder::read_seek_source::NonSeekableReadSource::new(reader);
+        let source = crate::decoder::read_seek_source::ReadSeekSource::nonseekable(reader);
         let mss = MediaSourceStream::new(Box::new(source), Default::default());
         let mut dec = SymphoniaDecoder::new(mss)
             .expect("ALAC decoder created from streaming buffer (may block briefly)");
@@ -1683,7 +1683,7 @@ mod tests {
         let relay_data_arrival = t0.elapsed();
         let t_dec = Instant::now();
         let relay_reader = relay_buf.reader();
-        let relay_source = NonSeekableReadSource::new(relay_reader);
+        let relay_source = ReadSeekSource::nonseekable(relay_reader);
         let relay_mss = MediaSourceStream::new(Box::new(relay_source), Default::default());
         let mut dec_relay = SymphoniaDecoder::new(relay_mss).expect("decoder from relay stream");
         let _relay_decoder_dur = t_dec.elapsed();
