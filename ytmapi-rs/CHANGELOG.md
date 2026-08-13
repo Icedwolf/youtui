@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+> **Fork note:** this crate ships as part of the `Icedwolf/youtui` fork; historical entries
+> describe the upstream lineage it was pulled from. Fork-local changes are in
+> [BACKLOG.md](../BACKLOG.md).
+
 ## [Unreleased]
 
 

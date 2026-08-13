@@ -42,7 +42,8 @@ Song representation used throughout the app. Stored in `BrowserSongsList`:
 - `album_art`: Thumbnail state
 
 #### Playlist
-Main playback queue at `youtui/src/app/ui/playlist.rs`:
+Main playback queue at `youtui/src/app/ui/playlist/` (`mod.rs` for state, `playback.rs`
+for playback/effects, `draw.rs` for rendering):
 - Manages song list, playback state, volume
 - Handles shuffle, search within playlist
 - Key entry point for playback control
@@ -102,19 +103,17 @@ Queue saving in `youtui/src/app/queue_persistence.rs`:
 ### Saving New Data
 
 1. Add struct with `#[derive(Serialize, Deserialize)]`
-2. Use `serde_skip` for non-serializable fields
-3. Follow existing patterns in `queue_persistence.rs`
+2. Store only the minimal fields needed (e.g. `video_id`) for compact persistence
+3. Follow the compat-migration pattern in `queue_persistence.rs` (versioned structs)
 
 ## Testing
 
 ```bash
-just test          # Run all tests
-cargo build       # Build debug
+just test          # Run all tests (bins + lib + docs)
+cargo test --release -p youtui bench_   # Criterion benchmarks (release profile)
 cargo build --release  # Build release
-cargo clippy      # Lint checks
+cargo clippy      # Lint checks (0 warnings is the bar)
 ```
-
-Note: Some test infrastructure issues exist in the current codebase.
 
 ## Useful Commands
 
@@ -135,5 +134,6 @@ Key external dependencies:
 - `rat_text`: Text input widget
 - `ratatui`: Terminal UI framework
 - `ytmapi_rs`: YouTube Music API
-- `rusty_ytdl`: Video downloading
-- `rodio`: Audio playback
+- `rodio` + `symphonia`: Audio playback (ALAC/WAV/AAC/M4A decoding)
+- `ybuilder`-driven external tools: `yt-dlp` (stream URL resolution + download) and `ffmpeg`
+  (WebM/Opus → fragmented-MP4 ALAC transcoding, see `song_downloader/`)

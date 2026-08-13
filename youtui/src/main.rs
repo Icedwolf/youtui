@@ -52,11 +52,11 @@ pub(crate) fn detect_browser_source() -> Option<String> {
 }
 
 const BROWSER_AUTH_SETUP_STEPS_URL: &str =
-    "https://github.com/nick42d/youtui?tab=readme-ov-file#browser-auth-setup-steps";
+    "https://github.com/Icedwolf/youtui?tab=readme-ov-file#browser-auth-setup-steps";
 const POTOKEN_INFORMATION_URL: &str =
-    "https://github.com/nick42d/youtui?tab=readme-ov-file#po-token-information";
+    "https://github.com/Icedwolf/youtui?tab=readme-ov-file#po-token-information";
 const RUNNING_YOUTUI_GUIDE_URL: &str =
-    "https://github.com/nick42d/youtui?tab=readme-ov-file#running-youtui";
+    "https://github.com/Icedwolf/youtui?tab=readme-ov-file#running-youtui";
 const DIRECTORY_NAME_ERROR_MESSAGE: &str = "Error generating application directory for your host system. See README.md for more information about application directories.";
 
 #[derive(Parser, Debug)]

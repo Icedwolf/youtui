@@ -5,8 +5,8 @@ edition = "2024"
 authors = ["nick42d"]
 license = "MIT"
 description = "An asynchronous (tokio) pure Rust API for Youtube Music using Google's internal API"
-homepage = "https://github.com/nick42d/youtui"
-repository = "https://github.com/nick42d/youtui"
+homepage = "https://github.com/Icedwolf/youtui"
+repository = "https://github.com/Icedwolf/youtui"
 readme = "README.md"
 exclude = ["test_json/*"]
 

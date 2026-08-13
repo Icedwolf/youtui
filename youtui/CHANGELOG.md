@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+> **Fork note:** this is the `Icedwolf/youtui` fork of nick42d/youtui. Entries at and below
+> `0.0.37` describe the upstream project the fork diverged from; the fork's own changes are
+> tracked in [BACKLOG.md](../BACKLOG.md).
+
 ## [Unreleased]
 
 

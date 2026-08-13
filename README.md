@@ -1,174 +1,129 @@
-[![dependency status](https://deps.rs/repo/github/nick42d/youtui/status.svg)](https://deps.rs/repo/github/nick42d/youtui)
-![build](https://github.com/nick42d/youtui/actions/workflows/release-plz.yml/badge.svg)
+# youtui
 
-## About
-Youtui - a simple TUI YouTube Music player written in Rust aiming to implement an Artist->Albums workflow for searching for music, and using discoverability principles for navigation. Inspired by https://github.com/ccgauche/ytermusic/ and cmus.
+A suckless music TUI player for Linux. Search → queue → play. DBus notifications. That's it.
 
-Ytmapi-rs - an asynchronous API for YouTube Music using Google's internal API, Tokio and Reqwest. Inspired by https://github.com/sigma67/ytmusicapi/.
+A heavily diverged fork of [nick42d/youtui](https://github.com/nick42d/youtui). The
+playback/download pipeline was rebuilt around lossless streaming (yt-dlp → ffmpeg →
+fragmented-MP4 ALAC), the OAuth/native-downloader paths were removed, and the feature
+surface was narrowed to the minimum. If a feature isn't in this README, it's not coming.
 
 This project is not supported or endorsed by Google.
 
 ## Features
-- Quickly and easily display entire artist's discography
-- Buffer upcoming songs
-- Search suggestions
-- Sorting and filtering
 
-## Demo
-[![asciicast](https://asciinema.org/a/k6oz2Tx2NXVdaYWSsnHFi0Dwg.svg)](https://asciinema.org/a/k6oz2Tx2NXVdaYWSsnHFi0Dwg)
+- Search songs, artists, and playlists (songs only)
+- Queue management, shuffle, filter, sort
+- **Lossless streaming playback** — `bestaudio[ext=webm]` piped through ffmpeg to ALAC in a
+  fragmented MP4, decoded incrementally as it arrives. ~16 MB/song in RAM, no disk cache,
+  first audio frame well under a second after selecting a song.
+- M4A/AAC full-download fallback when ffmpeg is unavailable.
+- In-memory audio cache (1 entry ≈ 32 MB total, configurable via `download_cache_size`).
+- One download at a time — no parallel yt-dlp/ffmpeg processes competing for bandwidth.
+- DBus MPRIS media keys, desktop notifications, configurable keybinds.
 
-## Installing youtui
-[![Packaging status](https://repology.org/badge/vertical-allrepos/youtui.svg)](https://repology.org/project/youtui/versions)
+## Installing
 
-### Arch Linux
-`paru -S youtui`
+### Build from source
 
-### FreeBSD
-`pkg install youtui`
+Requires Rust (edition 2024, MSRV 1.91+) and ALSA development headers
+(`libasound2-dev` Debian/Ubuntu, `alsa-lib-devel` Fedora, `alsa-lib` Arch).
 
-### Cargo
-`cargo install youtui --locked`
+```sh
+cargo build --release
+./target/release/youtui
+```
+
+### Dependencies (runtime)
+
+- [yt-dlp](https://github.com/yt-dlp/yt-dlp) — resolves stream URLs and drives downloads.
+- [ffmpeg](https://ffmpeg.org/) — **recommended**: transcodes WebM/Opus to lossless ALAC for
+  true streaming. Without it, playback falls back to full-download M4A (slower start, needs
+  the complete file before audio begins).
+- A font that can render FontAwesome symbols for the UI icons.
 
 ## Running youtui
-### Commands
-1. To run the TUI application, execute `youtui` with no arguments.
-1. To use the API in command-line mode, execute `youtui --help` to see available commands.
+
+```sh
+youtui
+```
+
+Options:
+
+| Flag | Meaning |
+|------|---------|
+| `-d, --debug` | extra logging to the debug log file |
+| `--disable-media-controls` | disable DBus MPRIS media keys |
+| `-a, --auth-type <auth-type>` | override `auth_type` from the config (`Browser`, `Unauthenticated`) |
+| `-g, --generate-completions <shell>` | print shell completions and exit |
+| `search <query>`, `get-artist <id>`, `get-album <browse-id>`, … | headless API queries (see `youtui --help`) |
+
+### Running youtui — config
+
+Configuration lives in `~/.config/youtui/config.toml` (or `$XDG_CONFIG_HOME/youtui/config.toml`).
+An example with all defaults is shipped in [`youtui/config/config.toml`](youtui/config/config.toml).
+
+| Key | Default | Meaning |
+|-----|---------|---------|
+| `auth_type` | `"Browser"` | `"Browser"` (use your YouTube cookies) or `"Unauthenticated"` |
+| `yt_dlp_command` | `"yt-dlp"` | the `yt-dlp` executable to invoke |
+| `volume` | `50` | initial volume, applied at startup |
+| `notifications_enabled` | `true` | desktop notifications for song changes and errors |
+| `download_cache_size` | `1` | in-memory cached songs (1 ≈ 32 MB: one playing + one cached) |
+| `keybinds` | see example | keybind overrides per context; also `mode_names` |
+
+Unknown config keys are rejected. The format is stable for the current version.
+
 ### Browser Auth Setup Steps
-1. Open YouTube Music in your browser - ensure you are logged in.
-1. Open web developer tools (F12).
-1. Open Network tab and locate a POST request to `music.youtube.com`.
-1. Copy the `Cookie` into a text file named `cookie.txt` into your local youtui config directory. Note you will need to create the directory if it does not exist.
-Firefox example (Right click and Copy Value):
-![image](https://github.com/nick42d/youtui/assets/133559267/c7fda32c-10bc-4ebe-b18e-ee17c13f6bd0)
-Chrome example (Select manually and paste):
-![image](https://github.com/nick42d/youtui/assets/133559267/bd2ec37b-1a78-490f-b313-694145bb4854)
-### Configuration
-- Configuration is set in the `config.toml` file in the local youtui config directory (e.g `~/.config/youtui/` on Linux).
-- **Please note**, `config.toml` format is unstable and may change in future.
-- Example `config.toml`s have been provided in the `youtui/config/` directory in the project.
-- The default option for searching music is to use browser authentication, To change this to oauth authentication, add `auth_type = "OAuth"`.
-- The default option for downloading music is to use the inbuilt native downloader. This can be changed to [yt-dlp](https://github.com/yt-dlp/yt-dlp) by adding `downloader_type = "YtDlp"`.
-- The command used to run `yt-dlp` can be supplied as `yt_dlp_command = "`_command_`"`.
-- Configurable keybinds can be supplied as part of your `config.toml` (see examples for the syntax).
+
+`auth_type = "Browser"` authenticates API requests (search, artist pages, lyrics-free
+song fetch) using your YouTube cookies. Two ways to provide them:
+
+1. **Automatic** *(preferred)*: on startup youtui detects a Chrome-family browser with
+   YouTube cookies and exports them to `cookies_netscape.txt` via `--cookies-from-browser`,
+   which also authenticates yt-dlp downloads.
+2. **Manual `cookie.txt`**: copy the `Cookie` request header (from a `music.youtube.com`
+   network request) into `~/.config/youtui/cookie.txt`.
+
+If cookies are stale, refresh them (re-export or re-copy) and restart. Signed-in access is
+required for age-restricted (`18+`) content, which yt-dlp would otherwise refuse.
+
 ### PO token information
-1. If music downloads always return an error with native downloader, you are able to supply a PO Token by saving it to the file `po_token.txt` into your local youtui config directory. For more information on PO Tokens and how to obtain them, see [here](https://github.com/yt-dlp/yt-dlp/wiki/Po-Token-Guide).
-### OAuth Setup Steps (optional)
-1. Prerequisite: A Google Cloud Console account and project are required.
-1. Following the [YouTube Data API docs](https://developers.google.com/youtube/registering_an_application), create a new `OAuth client ID` for the application type `TVs and Limited Input devices`. 
-1. Run `youtui setup-oauth` with your Client ID and Client Secret and following the instructions. This will create a new `oauth.json` file in the default configuration directory.
 
-## Dependencies note
-### General
-- A font that can render FontAwesome symbols is required.
-- [yt-dlp](https://github.com/yt-dlp/yt-dlp) is an optional dependancy (see [Other Setup & Configuration])
-### Linux specific
-- Youtui uses the Rodio library for playback which relies on Cpal https://github.com/rustaudio/cpal for ALSA support. The cpal readme mentions the that the ALSA development files are required which can be found in the following packages:
-  - `libasound2-dev` (Debian / Ubuntu)
-  - `alsa-lib-devel` (Fedora)
-  - `alsa-lib` (Arch)
+If yt-dlp downloads always fail with a sign-in/`po_token` error, you can supply a PO Token by
+saving it to `po_token.txt` in the config directory. For more information on PO Tokens and how
+to obtain them, see [the yt-dlp PO Token guide](https://github.com/yt-dlp/yt-dlp/wiki/Po-Token-Guide).
 
-## Limitations
-- This project is under heavy development, and interfaces could change at any time. The project will use semantic versioning to indicate when interfaces have stabilised.
+## Architecture notes
 
-## Roadmap
-### Application
-- [x] Windows support (target for 0.0.1)
-- [x] Configuration folder support (target for 0.0.1)
-- [x] Implement improved download speed
-- [x] Filtering (target for 0.0.3)
-- [x] Release to AUR (target for 0.0.4)
-- [x] Remove reliance on rust nightly (target for 0.0.4)
-- [x] OAuth authentication including automatic refresh of tokens
-- [x] Seeking
-- [x] Configurable key bindings
-- [x] Logging to a file
-- [x] Dbus support for media keys
-- [x] Display album cover
-- [ ] Gapless playback (blocked - requires symphonia AAC gapless support)
-- [ ] Mouse support
-- [ ] Offline cache
-- [ ] Streaming of buffered tracks
-- [ ] Display lyrics
-- [ ] Theming
-### API
-- [x] Document public API
-- [x] OAuth authentication
-- [x] Implement endpoint continuations
-- [ ] Implement all endpoints
-- [ ] Automatically update User Agent using a library
-- [ ] i18n
+- **Streaming path**: `resolve_url` (yt-dlp) → ffmpeg (`-f mp4 -movflags
+  empty_moov+default_base_moof+frag_every_frame -c:a alac`) → non-seekable buffer →
+  symphonia isomp4 incremental decode. `empty_moov` puts the moov atom (ALAC sample entry)
+  in the first ~700 bytes, so decoding starts from a few KB.
+- **No parallel downloads**: a semaphore (1 permit) is held from pipeline start until the
+  background cache fill finishes, so a second ffmpeg can't spawn mid-song.
+- **No prefetch**: only the selected song downloads; the cache (default 1 entry) keeps a
+  playing buffer available for seek-back.
+- Subprocesses run with a bounded environment (`env_clear()` + allowlist) — children never
+  inherit the parent's oversized `envp` (E2BIG-safe by construction).
 
-Feature parity with `ytmusicapi`
-|Endpoint | Implemented: Query | Implemented: Continuations |
-|--- | --- | --- |
-|GetArtist|[x]*||
-|GetAlbum|[x]||
-|GetArtistAlbums|[x]||
-|Search|[x]|[x]|
-|GetSearchSuggestions|[x]||
-|GetHome|Not Planned*||
-|GetAlbumBrowseId|[ ]||
-|GetUser|[x]||
-|GetUserPlaylists|[x]||
-|GetUserVideos|[x]||
-|GetSong|[ ]*||
-|GetSongRelated|Not Planned*||
-|GetLyrics|[x]||
-|GetTasteProfile|[x]||
-|SetTasteProfile|[x]||
-|GetMoodCategories|[x]||
-|GetMoodPlaylists|[x]||
-|GetCharts|Not Planned*||
-|GetWatchPlaylist (tracks): GetWatchPlaylist|[x]|[x]|
-|GetWatchPlaylist (lyrics_id): GetLyricsID|[x]||
-|GetLibraryPlaylists|[x]|[x]|
-|GetLibrarySongs|[x]|[x]|
-|GetLibraryAlbums|[x]|[x]|
-|GetLibraryArtists|[x]|[x]|
-|GetLibraryArtistSubscriptions|[x]|[x]|
-|GetLibraryPodcasts|[x]|[x]|
-|GetLibraryChannels|[x]|[x]|
-|GetLikedSongs|[ ]|[ ]|
-|GetSavedEpisodes|[ ]|[ ]|
-|GetAccountInfo|[ ]||
-|GetHistory|[x]||
-|AddHistoryItem|[x]||
-|RemoveHistoryItem|[x]||
-|RateSong|[x]||
-|EditSongLibraryStatus|[x]||
-|RatePlaylist|[x]||
-|SubscribeArtist|[x]||
-|UnsubscribeArtists|[x]||
-|GetPlaylistTracks|[x]|[x]|
-|GetPlaylistDetails|[x]||
-|CreatePlaylist|[x]||
-|EditPlaylist|[x]||
-|DeletePlaylist|[x]||
-|AddPlaylistItems|[x]||
-|RemovePlaylistItems|[x]||
-|GetChannel|[*]||
-|GetChannelEpisodes|[*]||
-|GetPodcast|[*]|[ ]|
-|GetEpisode|[*]||
-|GetEpisodesPlaylist|Not Planned*||
-|Original: GetNewEpisodes|[*]||
-|GetLibraryUploadSongs|[x]|[x]|
-|GetLibraryUploadArtists|[x]|[x]|
-|GetLibraryUploadAlbums|[x]|[x]|
-|GetLibraryUploadArtist|[x]|[x]|
-|GetLibraryUploadAlbum|[x]||
-|UploadSong|[x]||
-|DeleteUploadEntity|[x]||
+See [`DECISIONS.md`](DECISIONS.md) for the full design rationale and [`BACKLOG.md`](BACKLOG.md)
+for the changelog of this fork.
 
-\* GetArtist is partially implemented only
-- only returns albums and songs
+## Scope
 
-\* Only the tracking url from GetSong is implemented - as GetSongTrackingUrl. Any additional features for GetSong are not currently planned - recommend taking a look at `rusty_ytdl` library for these features.
+In: music search (songs/artists/playlists), queue management, shuffle/filter, MPRIS, audio
+cache. Out: podcasts, video clips, live concerts, OAuth/account management, audio quality
+toggles, disk cache, gapless playback, lyrics, theming, mouse support, stats, offline mode,
+Windows/macOS support. None of these will be added.
 
-\* Note, significantly dynamic pages, such as GetHome and GetSongRelated are not currently planned.
+## Components
 
-\* GetEpisodesPlaylist is not implemented - it seems the only use case is to get the New Episodes playlist, which has been implemented instead as GetNewEpisodes.
+- **youtui/** — the TUI application itself.
+- **ytmapi-rs/** — asynchronous YouTube Music API client (Tokio + Reqwest, rustls) used by the
+  app and the CLI queries.
+- **json-crawler/** — serde_json wrapper with better errors for large JSON crawling.
 
-## Developer notes
-See the wiki for additional information
-https://github.com/nick42d/youtui/wiki
+## Acknowledgements
+
+Inspired by [ytermusic](https://github.com/ccgauche/ytermusic/) and cmus; the API client is
+inspired by [ytmusicapi](https://github.com/sigma67/ytmusicapi/).

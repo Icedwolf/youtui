@@ -48,8 +48,9 @@ impl Api {
         });
         Api { api }
     }
-    // NOTE: Situation where user has tried to create API from an expired OAuth
-    // token is not currently handled.
+    // NOTE: Situation where user has tried to create API from a stale browser
+    // cookie is not currently handled here (it surfaces as an auth error at
+    // the resolve/download layer instead).
     pub async fn get_api(&self) -> Result<ConcurrentApi, DynamicApiError> {
         // Note that the error, if it exists, is cloned here.
         self.api.get().await
