@@ -47,7 +47,7 @@ fn default_notifications_enabled() -> bool {
 }
 
 fn default_cache_size() -> usize {
-    3
+    1
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -174,6 +174,12 @@ mod tests {
         let config_toml: toml::Value = toml::from_str(config_file).unwrap();
         let ir: Result<ConfigIR, _> = config_toml.try_into();
         assert!(ir.is_err());
+    }
+    #[test]
+    fn default_cache_size_is_one() {
+        // Product decision (DECISIONS.md:13/16, AGENTS.md): cache max=1 — one
+        // ALAC buffer playing + one cached ≈ 32MB. 3 would be ~48MB.
+        assert_eq!(Config::default().download_cache_size, 1);
     }
     #[tokio::test]
     async fn test_unknown_keybind_parameters() {
