@@ -42,7 +42,7 @@ Critical invariants and rationale. **Read before changing playback/download code
 
 13. **`Arc<[u8]>` for BYTE_CACHE.** Cache hits avoid cloning large buffers — refcount bump ~8 bytes vs full Vec clone. `cache_get()` returns `Arc<[u8]>`.
 
-14. **LRU eviction with 3 entries.** `AudioCache` struct with `HashMap<String, Arc<[u8]>>` + `VecDeque<String>` order behind single `Mutex`. Oldest entry evicted when full.
+14. **LRU eviction, size configurable, default 1.** `AudioCache` struct with `HashMap<String, Arc<[u8]>>` + `VecDeque<String>` order behind single `Mutex`. Oldest entry evicted when full. Capacity from `config.download_cache_size` (`CACHE_MAX_ENTRIES`), default **1** — one ALAC buffer playing + one cached ≈ 32MB. Do not raise the default; multi-entry caches are a user opt-in.
 
 15. **Single Mutex for cache.** `BYTE_CACHE` and `CACHE_ORDER` are merged into `AudioCache` behind one `Mutex` — no deadlock risk from nested lock acquisition.
 

@@ -1093,6 +1093,15 @@ mod tests {
     // same cache behind one Mutex, so parallel runs evict each other's entries).
     static CACHE_TEST_LOCK: Mutex<()> = Mutex::new(());
 
+    // Restores CACHE_MAX_ENTRIES on drop so a test that raises the cache size
+    // can't leak the larger value into a later test that assumes the default.
+    struct RestoreCacheMax(u64);
+    impl Drop for RestoreCacheMax {
+        fn drop(&mut self) {
+            CACHE_MAX_ENTRIES.store(self.0 as usize, Ordering::Release);
+        }
+    }
+
     // Tests acquiring the global DOWNLOAD_SEMAPHORE must run serially: parallel
     // runtimes would steal each other's permit and defeat the held/released
     // assertions.
@@ -1470,6 +1479,7 @@ mod tests {
     #[test]
     fn streaming_cache_eviction_works() {
         let _guard = CACHE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _restore = RestoreCacheMax(CACHE_MAX_ENTRIES.load(Ordering::Acquire) as u64);
         CACHE_MAX_ENTRIES.store(3, Ordering::Release);
         for i in 0..5 {
             cache_put(format!("evict_test_{}", i), Arc::from(vec![0u8; 1024]));
@@ -1484,6 +1494,7 @@ mod tests {
     #[test]
     fn streaming_cache_lru_hit_updates_order() {
         let _guard = CACHE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _restore = RestoreCacheMax(CACHE_MAX_ENTRIES.load(Ordering::Acquire) as u64);
         CACHE_MAX_ENTRIES.store(3, Ordering::Release);
         for i in 0..3 {
             cache_put(format!("lru_test_{}", i), Arc::from(vec![0u8; 1024]));
