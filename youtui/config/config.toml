@@ -3,6 +3,8 @@ auth_type = "Browser"
 # downloader_type removed — streaming-only via yt-dlp
 yt_dlp_command = "yt-dlp"
 notifications_enabled = true
+# In-memory audio cache size in songs (ALAC ~16MB each). Default 1 ≈ 32MB.
+download_cache_size = 1
 
 # Global keybinds
 [keybinds.global]
