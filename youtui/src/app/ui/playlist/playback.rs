@@ -640,7 +640,10 @@ Re-log into your browser, or refresh your cookie file / po_token, then restart."
                 debug!("download_song: {} queued — proceeding with download", video_id);
             }
             DownloadStatus::Downloaded => {
-                warn!("download_song: {} already downloaded — re-downloading", video_id);
+                // A replay after the 1-entry cache evicted this song: play_song
+                // only reaches download_song on a cache miss, so a Downloaded
+                // song here is the designed re-select → re-download path.
+                debug!("download_song: {} already downloaded — re-downloading", video_id);
             }
         };
 
