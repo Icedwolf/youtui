@@ -1,10 +1,21 @@
 # Youtui Backlog
 
 **Build:** 0 errors, 0 warnings, 0 clippy
-**Tests:** 354 youtui passed + 2 ignored (live network tests are flaky)
+**Tests:** 361 youtui + 72 ytmapi-rs lib + doctests, +2 ignored (live network tests are flaky)
 **Last updated:** 2026-08-13
 
 ## Completed
+
+### Session 2026-08-13 — CDN 403 throttle: browser-shaped ffmpeg fetch + relay retry
+
+- **ffmpeg's direct-URL fetch is now shaped like yt-dlp's** — the resolved googlevideo URL is fetched with a browser `-user_agent`, a `https://music.youtube.com/` `-referer`, and `-headers "Cookie: <header>"` when the app has one (the same header yt-dlp gets via `--add-header`). A bare `Lavf/…` anonymous fetch is a bot signal, intermittently refused with `403 Forbidden (access denied)` even on a fresh URL. `build_ffmpeg_command` (song_downloader/mod.rs) builds the argv; tests assert the exact args for URL/pipe inputs with and without cookies. DECISIONS.md:28.
+- **A CDN 403 on the direct-URL path is a throttle, never a skip.** The ffmpeg stderr handler (`spawn_ffmpeg_stderr_handler`) classifies 403 lines (`is_throttle_line`) and `mark_throttled`s the buffer (also failed); the new `'attempt` loop in `ytdlp_pipeline` then evicts the cached URL, sets `stream_url = None`, and retries the song once through the credential-carrying yt-dlp relay. The relay attempt is exempt from retry (`from_url_cache` false), so a throttle wave halts via the transient-failure counter instead of silently draining the queue. `HTTP Error 403` is no longer an auth-error line (`is_auth_error_line`), so a resolve-phase 403 falls through to the relay download instead of failing fast. DECISIONS.md:29-30.
+- Verified: 361 youtui + 72 ytmapi-rs + doctests green, clippy 0, `cargo build --release` clean.
+
+### Session 2026-08-13 — Filtered search survives the YTM junk-leak wave
+
+- **Artist and song search aborted on a single junk entry — fixed (`ytmapi-rs`).** YouTube began flooding the filtered Artists/Songs shelves with unrelated content (videos, playlists, non-matching songs); entries with no `navigationEndpoint/browseEndpoint/browseId` (artists) or no album browseEndpoint in the subtitle (songs) killed the whole query via the strict `TryFrom<FilteredSearchMusicShelfContents> for Vec<SearchResultArtist>/Vec<SearchResultSong>`. `"american football"` — a famous band — returned "nothing found": the filtered query errored, and the basic fallback's new layout (top-result card + itemSections, no Artists `musicShelfRenderer`) gave empty artists. Root-caused from `debug331.log` + live dumps of the exact queries the app runs; both impls now skip unparseable entries (`.filter_map(...ok())`), matching the basic-search artists path. Structurally-valid entries from other artists are kept. Fail-first tests on live-response fixtures: `test_search_artists_drops_junk_entries` (2 artists kept, 9 junk dropped), `test_search_songs_drops_junk_entries` (21 kept incl. one well-formed unrelated entry, 3 malformed dropped) — both red before the fix (reproducing the production `…/contents/20/…browseId not found` error verbatim), green after. DECISIONS.md:31.
+- Verified: 72 ytmapi-rs lib + doctests green (+2), 361 youtui green, clippy 0 across the workspace.
 
 ### Session 2026-08-13 — Upstream-release and issue-routing declutter
 
