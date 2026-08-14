@@ -463,7 +463,7 @@ Net: 19 `info!` → `debug!` demotions, 3 `info` imports removed. Remaining 10 `
 | L2 | `resolve_url()` return discarded | Warming call is best-effort |
 | L3 | ProgressSource on audio thread blocks | 50-slot buffer gives 5s slack |
 | L4 | Audio device disconnect no recovery | Requires jack/pipewire supervision |
-| L5 | Misleading comment in streaming_buffer | Cosmetic |
+| L5 | Misleading comment in streaming_buffer | ✅ DONE — no misleading comment remains; file reworked since (WAV→ALAC, single-Mutex, MediaSource dedup) and audited 2026-08-14 |
 | L6 | `SystemTime::now().duration_since(UNIX_EPOCH)` expect in ytmapi-rs | Pre-1970 clock, not realistic |
 
 ### P5 — Far Future (Not Ready)
