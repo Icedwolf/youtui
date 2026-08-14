@@ -913,6 +913,13 @@ async fn ytdlp_pipeline(
                     let status = child.wait().await.with_context(|| format!("wait {pipe_label}"))?;
                     if !status.success() {
                         let code = exit_code_string(&status);
+                        // The 403 throttle mark can still be in flight when the
+                        // writer task resolves on stdout EOF (see the empty-pipe
+                        // Site-2 handling for the same race). Yield once so the
+                        // stderr handler's mark lands before classifying the exit
+                        // — otherwise a throttled URL is misread as a generic
+                        // failure and the song skips instead of relay-retrying.
+                        tokio::task::yield_now().await;
                         if throttled_url_retry(&buffer, from_url_cache, &cfg.video_id, t0) {
                             stream_url = None;
                             continue 'attempt;
