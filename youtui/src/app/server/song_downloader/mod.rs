@@ -1418,6 +1418,176 @@ mod tests {
         assert!(!throttled_url_retry(&plain, true, "v1", t0));
     }
 
+    // The E2E throttle tests below put fake `ffmpeg`/`yt-dlp` binaries on PATH
+    // and run the full `download_and_decode` pipeline. They must run serially:
+    // PATH is process-global, the global DOWNLOAD_SEMAPHORE permit is consumed,
+    // and the relay's background cache task touches BYTE_CACHE.
+    static PIPELINE_TEST_LOCK: Mutex<()> = Mutex::new(());
+
+    // Fake ffmpeg: `-version` must succeed so check_ffmpeg() sees ffmpeg as
+    // available; a URL input (`-i <url>`) is a CDN-throttled direct fetch
+    // (403 on stderr + non-zero exit); a pipe input (`-i pipe:0`) is the relay
+    // path, where the fake just copies stdin to stdout untouched so the ALAC
+    // bytes pass through as-is.
+    const FAKE_FFMPEG: &str = r#"#!/bin/sh
+case " $* " in
+  *" -version "*) exit 0 ;;
+esac
+if printf '%s\n' "$@" | grep -q 'pipe:0'; then
+  cat
+else
+  echo 'Server returned 403 Forbidden (access denied)' >&2
+  exit 1
+fi
+"#;
+
+    // Fake yt-dlp resolve branch: `--print url` prints a resolvable URL.
+    const YTDLP_FAKE_HEAD: &str = r#"#!/bin/sh
+if printf '%s\n' "$@" | grep -q -- '--print'; then
+  echo 'https://fake.example.com/stream'
+  exit 0
+fi
+"#;
+
+    struct FakePath {
+        dir: std::path::PathBuf,
+    }
+
+    impl FakePath {
+        fn new() -> Self {
+            let nanos = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("system clock")
+                .as_nanos();
+            let dir = std::env::temp_dir().join(format!(
+                "youtui_fakebin_{}_{}",
+                std::process::id(),
+                nanos
+            ));
+            std::fs::create_dir_all(&dir).expect("create fake binary dir");
+            let old_path = std::env::var("PATH").unwrap_or_default();
+            let new_path = format!("{}:{}", dir.display(), old_path);
+            // tokio tests run on a current-thread runtime; only the E2E tests
+            // mutate PATH, serialized by PIPELINE_TEST_LOCK.
+            unsafe { std::env::set_var("PATH", new_path) };
+            FakePath { dir }
+        }
+    }
+
+    impl Drop for FakePath {
+        fn drop(&mut self) {
+            let prefix = format!("{}:", self.dir.display());
+            let cur = std::env::var("PATH").unwrap_or_default();
+            let restored = cur.strip_prefix(&prefix).unwrap_or(&cur).to_string();
+            unsafe { std::env::set_var("PATH", restored) };
+            let _ = std::fs::remove_dir_all(&self.dir);
+        }
+    }
+
+    fn write_fake_bin(dir: &std::path::Path, name: &str, body: &str) {
+        use std::os::unix::fs::PermissionsExt;
+        let path = dir.join(name);
+        std::fs::write(&path, body).expect("write fake binary");
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755))
+            .expect("chmod fake binary");
+    }
+
+    fn alac_fixture_path() -> std::path::PathBuf {
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../ytmapi-rs/test_json/test_alac_fragmented.mp4")
+            .canonicalize()
+            .expect("resolve ALAC fixture path")
+    }
+
+    #[test]
+    fn throttled_url_retries_via_relay_end_to_end() {
+        let _pipe = PIPELINE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _sem = SEMAPHORE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _cache = CACHE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+
+        let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
+        rt.block_on(async {
+            let fakebin = FakePath::new();
+            write_fake_bin(&fakebin.dir, "ffmpeg", FAKE_FFMPEG);
+            let fixture = alac_fixture_path();
+            write_fake_bin(
+                &fakebin.dir,
+                "yt-dlp",
+                &format!("{}cat '{}'\n", YTDLP_FAKE_HEAD, fixture.display()),
+            );
+
+            let video_id = format!("throttle-e2e-{}", std::process::id());
+            let cfg = DownloadConfig {
+                yt_dlp_command: "yt-dlp".to_string(),
+                video_id: video_id.clone(),
+                po_token: None,
+                cookie_path: None,
+                cookie_header: None,
+                js_runtime: None,
+                cancel_token: tokio_util::sync::CancellationToken::new(),
+            };
+
+            let mut decoder = download_and_decode(cfg)
+                .await
+                .expect("a throttled direct-URL attempt must recover via the relay and decode");
+            assert!(
+                time_to_first_frame(&mut decoder, 1024).is_some(),
+                "the relay-recovered download must produce audio frames"
+            );
+            assert_eq!(
+                resolve::url_cache_get(&video_id),
+                None,
+                "the throttled stream URL must be evicted from the URL cache"
+            );
+        });
+    }
+
+    #[test]
+    fn throttled_relay_failure_bails_without_retry() {
+        let _pipe = PIPELINE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _sem = SEMAPHORE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _cache = CACHE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+
+        let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
+        rt.block_on(async {
+            let fakebin = FakePath::new();
+            write_fake_bin(&fakebin.dir, "ffmpeg", FAKE_FFMPEG);
+            write_fake_bin(
+                &fakebin.dir,
+                "yt-dlp",
+                &format!(
+                    "{}echo 'ERROR: [youtube] xyz: HTTP Error 403: Forbidden' >&2\nexit 1\n",
+                    YTDLP_FAKE_HEAD
+                ),
+            );
+
+            let video_id = format!("throttle-e2e-relay-{}", std::process::id());
+            let cfg = DownloadConfig {
+                yt_dlp_command: "yt-dlp".to_string(),
+                video_id: video_id.clone(),
+                po_token: None,
+                cookie_path: None,
+                cookie_header: None,
+                js_runtime: None,
+                cancel_token: tokio_util::sync::CancellationToken::new(),
+            };
+
+            let err = match download_and_decode(cfg).await {
+                Ok(_) => panic!("a throttled relay attempt (already one retry deep) must not be retried"),
+                Err(e) => e,
+            };
+            assert!(
+                err.to_string().starts_with("format not available"),
+                "a throttled relay must bail as a generic transient failure, got: {err}"
+            );
+            assert_eq!(
+                resolve::url_cache_get(&video_id),
+                None,
+                "the throttled stream URL must be evicted from the URL cache"
+            );
+        });
+    }
+
     #[test]
     fn url_input_includes_auth_passthrough_args() {
         let cmd = build_ffmpeg_command(

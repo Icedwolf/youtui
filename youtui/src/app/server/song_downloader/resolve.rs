@@ -11,7 +11,7 @@ const URL_CACHE_TTL: std::time::Duration = std::time::Duration::from_secs(6 * 36
 pub(crate) static URL_CACHE: LazyLock<Mutex<HashMap<String, (String, Instant)>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
-fn url_cache_get(video_id: &str) -> Option<String> {
+pub(crate) fn url_cache_get(video_id: &str) -> Option<String> {
     let mut cache = URL_CACHE.lock().unwrap_or_warn();
     if let Some((url, ts)) = cache.get(video_id) {
         if ts.elapsed() < URL_CACHE_TTL {
