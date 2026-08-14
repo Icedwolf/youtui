@@ -32,6 +32,17 @@ fn available_len(state: &BufferState) -> usize {
     }
 }
 
+/// Record the current partial length as the total when unknown, so a reader
+/// blocking on `SeekFrom::End` / `total_len` breaks out once the source is
+/// finished or failed instead of waiting forever.
+fn record_len_if_unknown(inner: &mut SharedBufferInner) {
+    if let BufferState::Partial(ref v) = inner.state
+        && inner.total_len.is_none()
+    {
+        inner.total_len = Some(v.len() as u64);
+    }
+}
+
 impl SharedBuffer {
     #[must_use]
     pub fn new() -> Arc<Self> {
@@ -148,11 +159,7 @@ impl SharedBuffer {
         guard.throttled = true;
         guard.failed = true;
         guard.finished = true;
-        if let BufferState::Partial(ref v) = guard.state
-            && guard.total_len.is_none()
-        {
-            guard.total_len = Some(v.len() as u64);
-        }
+        record_len_if_unknown(&mut guard);
         self.cvar.notify_all();
     }
 
@@ -160,11 +167,7 @@ impl SharedBuffer {
         let mut guard = self.inner.lock().unwrap_or_warn();
         guard.failed = true;
         guard.finished = true;
-        if let BufferState::Partial(ref v) = guard.state
-            && guard.total_len.is_none()
-        {
-            guard.total_len = Some(v.len() as u64);
-        }
+        record_len_if_unknown(&mut guard);
         self.cvar.notify_all();
     }
 
@@ -194,11 +197,7 @@ impl SharedBufferWriter {
     pub fn finish(&mut self) {
         let mut guard = self.buffer.inner.lock().unwrap_or_warn();
         guard.finished = true;
-        if let BufferState::Partial(ref v) = guard.state
-            && guard.total_len.is_none()
-        {
-            guard.total_len = Some(v.len() as u64);
-        }
+        record_len_if_unknown(&mut guard);
         if let BufferState::Partial(ref mut v) = guard.state {
             v.shrink_to_fit();
         }
@@ -210,11 +209,7 @@ impl SharedBufferWriter {
         let mut guard = self.buffer.inner.lock().unwrap_or_warn();
         guard.failed = true;
         guard.finished = true;
-        if let BufferState::Partial(ref v) = guard.state
-            && guard.total_len.is_none()
-        {
-            guard.total_len = Some(v.len() as u64);
-        }
+        record_len_if_unknown(&mut guard);
         if let BufferState::Partial(ref mut v) = guard.state {
             v.shrink_to_fit();
         }
@@ -321,6 +316,38 @@ mod tests {
         // is playable, just refused once at fetch time.
         assert!(!buf.is_auth_error());
         assert!(!buf.is_dead_video());
+    }
+
+    #[test]
+    fn failed_or_finished_buffer_records_partial_len_as_total() {
+        let fail_buf = SharedBuffer::new();
+        fail_buf.writer().write(b"partial data");
+        fail_buf.fail();
+        assert_eq!(
+            fail_buf.total_len(),
+            Some(12),
+            "fail() must record the partial length as total so End-seeks break out"
+        );
+
+        let throttle_buf = SharedBuffer::new();
+        throttle_buf.writer().write(b"throttled");
+        throttle_buf.mark_throttled();
+        assert_eq!(
+            throttle_buf.total_len(),
+            Some(9),
+            "mark_throttled() must record the partial length as total"
+        );
+
+        let finish_buf = SharedBuffer::new();
+        finish_buf.set_total_len(1_000_000);
+        let mut w = finish_buf.writer();
+        w.write(b"short");
+        w.finish();
+        assert_eq!(
+            finish_buf.total_len(),
+            Some(1_000_000),
+            "a known total_len must never be overwritten by the partial length"
+        );
     }
 
     #[test]
