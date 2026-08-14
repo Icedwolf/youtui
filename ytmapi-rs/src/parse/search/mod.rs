@@ -708,11 +708,15 @@ impl TryFrom<FilteredSearchMusicShelfContents> for Vec<SearchResultArtist> {
         mut value: FilteredSearchMusicShelfContents,
     ) -> std::prelude::v1::Result<Self, Self::Error> {
         // TODO: Make this a From method.
-        value
+        // Skip junk entries that leak into the Artists shelf without a
+        // browseEndpoint (videos/playlists/unrelated songs), matching the
+        // lenient basic-search artists path: one junk item must never abort
+        // the whole artist search.
+        Ok(value
             .0
             .try_iter_mut()?
-            .map(|a| parse_artist_search_result_from_music_shelf_contents(a))
-            .collect()
+            .filter_map(|a| parse_artist_search_result_from_music_shelf_contents(a).ok())
+            .collect())
     }
 }
 impl TryFrom<FilteredSearchMusicShelfContents> for Vec<SearchResultSong> {
@@ -721,11 +725,14 @@ impl TryFrom<FilteredSearchMusicShelfContents> for Vec<SearchResultSong> {
         mut value: FilteredSearchMusicShelfContents,
     ) -> std::prelude::v1::Result<Self, Self::Error> {
         // TODO: Make this a From method.
-        value
+        // Skip junk entries that leak into the Songs shelf with no album
+        // browseEndpoint in the subtitle: keep the playable songs, never abort
+        // the whole song search.
+        Ok(value
             .0
             .try_iter_mut()?
-            .map(|a| parse_song_search_result_from_music_shelf_contents(a))
-            .collect()
+            .filter_map(|a| parse_song_search_result_from_music_shelf_contents(a).ok())
+            .collect())
     }
 }
 impl TryFrom<FilteredSearchMusicShelfContents> for Vec<SearchResultVideo> {

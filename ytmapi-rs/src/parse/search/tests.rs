@@ -185,6 +185,43 @@ async fn test_search_artists_with_about_message() {
     );
 }
 #[tokio::test]
+async fn test_search_artists_drops_junk_entries() {
+    // YouTube Music has begun leaking non-artist entries (videos, playlists,
+    // unrelated songs) into the Artists-filtered shelf — items with no
+    // navigationEndpoint/browseEndpoint/browseId. The parse must keep the real
+    // artists and skip the junk instead of failing the whole query: a single
+    // junk entry currently aborts the artist search.
+    // (Fixture: live "american football" Artists-filter response, 2026-08-13.)
+    let source_path = Path::new("./test_json/search_artists_with_junk_20260813.json");
+    let source = tokio::fs::read_to_string(source_path).await.unwrap();
+    let parsed: Vec<crate::parse::SearchResultArtist> =
+        process_json::<_, BrowserToken>(source, SearchQuery::new_filtered("", ArtistsFilter)).unwrap();
+    let names: Vec<&str> = parsed.iter().map(|a| a.artist.as_str()).collect();
+    assert_eq!(names, ["American Football", "Mike Kinsella"]);
+}
+#[tokio::test]
+async fn test_search_songs_drops_junk_entries() {
+    // Same leak into the Songs-filtered shelf: entries that look like songs
+    // (they carry a videoId) but have no album browseEndpoint in the subtitle.
+    // Keep the playable songs, skip the junk, never fail the whole query.
+    // (Fixture: live "american football" Songs-filter response, 2026-08-13.)
+    let source_path = Path::new("./test_json/search_songs_with_junk_20260813.json");
+    let source = tokio::fs::read_to_string(source_path).await.unwrap();
+    let parsed: Vec<crate::parse::SearchResultSong> =
+        process_json::<_, BrowserToken>(source, SearchQuery::new_filtered("", SongsFilter)).unwrap();
+    // 24 shelf entries = 20 real songs + 3 malformed leaks (no album browse)
+    // + 1 well-formed unrelated entry (kept, structurally valid). The 3
+    // malformed leaks drop; every retained song has an album.
+    assert_eq!(parsed.len(), 21);
+    assert!(parsed.iter().any(|s| s.title == "Never Meant"));
+    assert!(parsed.iter().all(|s| s.album.is_some()));
+    assert!(
+        parsed
+            .iter()
+            .all(|s| !s.title.contains("This Is America") && s.title != "Dai Dai")
+    );
+}
+#[tokio::test]
 async fn test_search_albums() {
     parse_with_matching_continuation_test!(
         "./test_json/search_albums_20231226.json",
