@@ -35,6 +35,11 @@ const BG_PROGRESS_POLL_MS: u64 = 1000;
 /// after playback starts, and a hard cap truncates the buffer mid-song.
 const BG_STALL_TIMEOUT_S: u64 = 60;
 const M4A_TOTAL_LEN_TIMEOUT_S: u64 = 15;
+/// Browser-like User-Agent for ffmpeg's direct-URL HTTP fetch. A bare `Lavf/…`
+/// UA is a bot signal to the googlevideo CDN and is refused with 403 far more
+/// often than a browser UA, so we mirror the header set yt-dlp itself sends
+/// when it fetches the same URL (see `build_ffmpeg_command`).
+const FFMPEG_USER_AGENT: &str = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 /// Shared tail of the ffmpeg invocation for ALAC-in-fragmented-mp4 streaming.
 /// Only the `-i` input differs between the direct-URL and relay paths, so the
 /// mux flags live in one place (see DECISIONS.md:10).
@@ -379,12 +384,30 @@ fn is_permanently_unavailable(line: &str) -> bool {
 /// Classify a yt-dlp stderr line as an authentication/cookie problem: sign-in
 /// required, bot check, invalid cookies. These are a login/config issue, not a
 /// dead video — the song must be skipped and the user notified, never removed.
+/// A bare `HTTP Error 403` is deliberately NOT here: on a signed-in session
+/// that is the nsig/po_token CDN throttle (see `is_throttle_line`), and for a
+/// guest there are no cookies to be stale — either way it is a transient
+/// download failure that feeds the halt counter, never the stale-cookie class.
 pub(crate) fn is_auth_error_line(line: &str) -> bool {
     let line = line.to_ascii_lowercase();
-    ["sign in", "not a bot", "authentication", "requires login", "signed-in", "http error 403"]
+    ["sign in", "not a bot", "authentication", "requires login", "signed-in"]
         .iter()
         .any(|needle| line.contains(needle))
         || (line.contains("cookie") && line.contains("does not look like"))
+}
+
+/// Classify an ffmpeg stderr line as a CDN-throttled URL refuse. ffmpeg prints
+/// `Server returned 403 Forbidden (access denied)` (or `HTTP error 403`) when
+/// googlevideo rejects the resolved URL at fetch time — the nsig/po_token
+/// throttling wave, NOT a dead video or stale cookies. The buffer is marked
+/// so the pipeline evicts the URL and retries via the credential-carrying
+/// relay instead of skipping the song.
+fn is_throttle_line(line: &str) -> bool {
+    let line = line.to_ascii_lowercase();
+    line.contains("forbidden")
+        || line.contains("access denied")
+        || (line.contains("403")
+            && (line.contains("http") || line.contains("server") || line.contains("error")))
 }
 
 fn spawn_stderr_handler(
@@ -432,18 +455,30 @@ fn spawn_stderr_handler(
     })
 }
 
-/// Logs every ffmpeg stderr line. ffmpeg runs with `-loglevel error`, so it
-/// prints nothing on success and only real diagnostics on failure — the line
-/// logged just before an empty-pipe bail names the actual cause (bad/cached
-/// URL, codec, auth block). Read-only: never touches the buffer, so it cannot
-/// change stream behaviour — it only makes failures self-diagnosing.
-fn spawn_ffmpeg_stderr_handler(stderr: tokio::process::ChildStderr) -> tokio::task::JoinHandle<()> {
+/// Logs every ffmpeg stderr line and classifies the one failure that would
+/// otherwise be invisible: ffmpeg runs with `-loglevel error`, so it prints
+/// nothing on success and only real diagnostics on failure. The line logged
+/// just before an empty-pipe bail names the actual cause (bad/cached URL,
+/// codec, auth block). A CDN 403 (`Server returned 403 Forbidden`) marks the
+/// buffer as throttled + failed so the pipeline retries via the relay instead
+/// of skipping the song; any other line is only logged. Failure classification
+/// is the only buffer interaction — a healthy stream's stderr stays silent, so
+/// playback behaviour is unchanged.
+fn spawn_ffmpeg_stderr_handler(
+    stderr: tokio::process::ChildStderr,
+    buffer: Arc<SharedBuffer>,
+) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         use tokio::io::AsyncBufReadExt;
         let reader = tokio::io::BufReader::new(stderr);
         let mut lines = reader.lines();
         while let Ok(Some(line)) = lines.next_line().await {
-            warn!(stderr_line = %line.trim(), "ffmpeg stderr (error)");
+            if is_throttle_line(&line) {
+                debug!(stderr_line = %line.trim(), "ffmpeg stream URL throttled (403), failing buffer for relay retry");
+                buffer.mark_throttled();
+            } else {
+                warn!(stderr_line = %line.trim(), "ffmpeg stderr (error)");
+            }
         }
     })
 }
@@ -489,6 +524,35 @@ enum FfmpegInput {
     Pipe,
 }
 
+/// Build the ffmpeg invocation for a given input source. A direct-URL fetch
+/// (`FfmpegInput::Url`) is an anonymous `Lavf/…` request by default, which the
+/// googlevideo CDN intermittently refuses with 403 — so it is shaped to mirror
+/// yt-dlp's own fetch of the same URL: a browser User-Agent, the
+/// `music.youtube.com` referer, and the same `Cookie:` header the app already
+/// passes to yt-dlp. Kept separate from `spawn_ffmpeg` so tests can assert the
+/// exact argv.
+fn build_ffmpeg_command(
+    input: &FfmpegInput,
+    cookie_header: Option<&str>,
+) -> tokio::process::Command {
+    let mut ffmpeg = tokio::process::Command::new("ffmpeg");
+    apply_child_env(&mut ffmpeg);
+    match input {
+        FfmpegInput::Url(url) => {
+            ffmpeg.args(["-i", url.as_str()]);
+            ffmpeg.args(["-user_agent", FFMPEG_USER_AGENT]);
+            ffmpeg.args(["-referer", "https://music.youtube.com/"]);
+            if let Some(ch) = cookie_header {
+                ffmpeg.args(["-headers", &format!("Cookie: {ch}")]);
+            }
+        }
+        FfmpegInput::Pipe => {
+            ffmpeg.args(["-i", "pipe:0"]).stdin(std::process::Stdio::piped());
+        }
+    }
+    ffmpeg
+}
+
 /// Spawn ffmpeg as an ALAC-in-fragmented-mp4 muxer and wire its stdout into
 /// the shared buffer. Both ALAC pipelines (resolved-URL and yt-dlp relay) use
 /// the exact same ffmpeg invocation, differing only in input source. Returns
@@ -498,17 +562,10 @@ fn spawn_ffmpeg(
     input: FfmpegInput,
     writer: SharedBufferWriter,
     label: &'static str,
+    cookie_header: Option<&str>,
+    buffer: Arc<SharedBuffer>,
 ) -> anyhow::Result<FfmpegSpawn> {
-    let mut ffmpeg = tokio::process::Command::new("ffmpeg");
-    apply_child_env(&mut ffmpeg);
-    match &input {
-        FfmpegInput::Url(url) => {
-            ffmpeg.args(["-i", url.as_str()]);
-        }
-        FfmpegInput::Pipe => {
-            ffmpeg.args(["-i", "pipe:0"]).stdin(std::process::Stdio::piped());
-        }
-    }
+    let mut ffmpeg = build_ffmpeg_command(&input, cookie_header);
     ffmpeg
         .args(ALAC_FFMPEG_ARGS)
         .stdout(std::process::Stdio::piped())
@@ -518,7 +575,7 @@ fn spawn_ffmpeg(
     let stdin = child.stdin.take();
     let stdout = child.stdout.take().context("no ffmpeg stdout")?;
     let stderr = child.stderr.take().context("no ffmpeg stderr")?;
-    let stderr_handle = spawn_ffmpeg_stderr_handler(stderr);
+    let stderr_handle = spawn_ffmpeg_stderr_handler(stderr, buffer);
     let write_handle = spawn_stdout_writer(stdout, writer, label);
     Ok((stderr_handle, write_handle, child, stdin))
 }
@@ -568,6 +625,27 @@ fn bail_failed_buffer(
     let reason = if from_url_cache { "ffmpeg" } else { "yt-dlp" };
     debug!(%video_id, elapsed = ?t0.elapsed(), "{reason} failed {context} — bailing early");
     anyhow::bail!("format not available ({reason} error)")
+}
+
+/// Decides whether a throttled direct-URL attempt should be retried as a relay.
+/// A CDN 403 on a freshly resolved URL is the nsig/po_token throttling wave,
+/// not a dead video and not stale cookies: the same song fetched through the
+/// credential-carrying yt-dlp relay usually plays. When true, the helper has
+/// already evicted the cached URL; the caller sets `stream_url = None` and
+/// `continue 'attempt` so the relay (which carries the auth context) runs once.
+fn throttled_url_retry(
+    buffer: &SharedBuffer,
+    from_url_cache: bool,
+    video_id: &str,
+    t0: tokio::time::Instant,
+) -> bool {
+    if buffer.is_throttled() && from_url_cache {
+        evict_cached_url(from_url_cache, video_id);
+        debug!(%video_id, elapsed = ?t0.elapsed(), "Stream URL throttled (403) — retrying via relay");
+        true
+    } else {
+        false
+    }
 }
 
 /// Build the yt-dlp command for streaming a song to stdout, with the auth
@@ -635,297 +713,332 @@ async fn ytdlp_pipeline(
     ffmpeg_avail: bool,
     _permit: tokio::sync::SemaphorePermit<'static>,
     t0: tokio::time::Instant,
-    stream_url: Option<String>,
+    mut stream_url: Option<String>,
 ) -> anyhow::Result<SymphoniaDecoder> {
-    let from_url_cache = stream_url.is_some();
     // ALAC transcoding requires ffmpeg; without it the pipeline must use the
     // direct M4A path even when a (webm) URL resolved, since symphonia cannot
     // decode Opus in a webm container.
+    //
+    // `'attempt` runs the direct-URL pipeline first and, on a CDN-throttled
+    // (403) URL refuse, retries the same song once through the
+    // credential-carrying yt-dlp relay (`stream_url = None`). The permit stays
+    // owned by this function across attempts — it is only moved into the
+    // background cache task on a successful streaming init, which returns.
+    'attempt: loop {
+        let from_url_cache = stream_url.is_some();
 
-    let buffer = SharedBuffer::new();
-    let writer = buffer.writer();
+        let buffer = SharedBuffer::new();
+        let writer = buffer.writer();
 
-    let (_stderr_handle, stdout_handle, mut child, _relay_handle, mut yt_child) =
-        if ffmpeg_avail && let Some(url) = &stream_url {
-            let (stderr_handle, write_handle, ffmpeg_child, _stdin) =
-                spawn_ffmpeg(FfmpegInput::Url(url.clone()), writer, "ffmpeg (stream_url)")?;
-            (stderr_handle, write_handle, ffmpeg_child, None, None)
-        } else if ffmpeg_avail {
-            let YtDlpSpawn { stderr_handle, stdout: yt_stdout, child: yt_dlp_child } =
-                spawn_ytdlp(cfg, "ba/bestaudio", buffer.clone(), t0, true)?;
+        let (_stderr_handle, stdout_handle, mut child, _relay_handle, mut yt_child) =
+            if ffmpeg_avail && let Some(url) = &stream_url {
+                let (stderr_handle, write_handle, ffmpeg_child, _stdin) = spawn_ffmpeg(
+                    FfmpegInput::Url(url.clone()),
+                    writer,
+                    "ffmpeg (stream_url)",
+                    cfg.cookie_header.as_deref(),
+                    buffer.clone(),
+                )?;
+                (stderr_handle, write_handle, ffmpeg_child, None, None)
+            } else if ffmpeg_avail {
+                let YtDlpSpawn { stderr_handle, stdout: yt_stdout, child: yt_dlp_child } =
+                    spawn_ytdlp(cfg, "ba/bestaudio", buffer.clone(), t0, true)?;
 
-            let (_ffmpeg_stderr_handle, write_handle, ffmpeg_child, ffmpeg_stdin) =
-                spawn_ffmpeg(FfmpegInput::Pipe, writer, "ffmpeg")?;
-            let mut ffmpeg_stdin = ffmpeg_stdin.context("no ffmpeg stdin")?;
+                let (_ffmpeg_stderr_handle, write_handle, ffmpeg_child, ffmpeg_stdin) =
+                    spawn_ffmpeg(FfmpegInput::Pipe, writer, "ffmpeg", None, buffer.clone())?;
+                let mut ffmpeg_stdin = ffmpeg_stdin.context("no ffmpeg stdin")?;
 
-            let relay = tokio::spawn(async move {
-                use tokio::io::{AsyncReadExt, AsyncWriteExt};
-                let mut rdr = tokio::io::BufReader::new(yt_stdout);
-                let mut buf = vec![0u8; READ_BUF_SIZE];
+                let relay = tokio::spawn(async move {
+                    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+                    let mut rdr = tokio::io::BufReader::new(yt_stdout);
+                    let mut buf = vec![0u8; READ_BUF_SIZE];
+                    loop {
+                        match rdr.read(&mut buf).await {
+                            Ok(0) => break,
+                            Ok(n) => {
+                                if ffmpeg_stdin.write_all(&buf[..n]).await.is_err() {
+                                    break;
+                                }
+                            }
+                            Err(_) => break,
+                        }
+                    }
+                    let _ = ffmpeg_stdin.shutdown().await;
+                });
+
+                (stderr_handle, write_handle, ffmpeg_child, Some(relay), Some(yt_dlp_child))
+            } else {
+                let YtDlpSpawn { stderr_handle, stdout: yt_stdout, child: yt_dlp_child } =
+                    spawn_ytdlp(cfg, "bestaudio[ext=m4a]/bestaudio/bestaudio*", buffer.clone(), t0, false)?;
+
+                let write_handle = spawn_stdout_writer(yt_stdout, writer, "yt-dlp");
+
+                (stderr_handle, write_handle, yt_dlp_child, None, None)
+            };
+
+        let (decoder, needs_cache) = if ffmpeg_avail {
+            let deadline =
+                tokio::time::Instant::now() + std::time::Duration::from_secs(DECODER_INIT_DEADLINE_S);
+            while buffer.len() < STREAM_INIT_THRESHOLD
+                && tokio::time::Instant::now() < deadline
+                && !buffer.is_failed()
+                && !cfg.cancel_token.is_cancelled()
+            {
+                tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+            }
+            if cfg.cancel_token.is_cancelled() {
+                bail!("download cancelled during buffering");
+            }
+            if throttled_url_retry(&buffer, from_url_cache, &cfg.video_id, t0) {
+                stream_url = None;
+                continue 'attempt;
+            }
+            bail_failed_buffer(&buffer, from_url_cache, &cfg.video_id, t0, "before data arrived")?;
+            let current = buffer.len();
+            if current == 0 {
+                // A source that has already exited without emitting a byte is dead
+                // or unavailable (dead cached URL, format gone). Evict a cached URL
+                // so the retry re-resolves. But a source that is still running may
+                // simply be slow to produce its first byte; skipping a playable
+                // song because it warmed up slowly is worse than waiting, so keep
+                // polling until it exits, produces data, fails, is cancelled, or
+                // the patience window elapses.
+                let empty_pipe_deadline =
+                    tokio::time::Instant::now() + std::time::Duration::from_secs(EMPTY_PIPE_PATIENCE_S);
                 loop {
-                    match rdr.read(&mut buf).await {
-                        Ok(0) => break,
-                        Ok(n) => {
-                            if ffmpeg_stdin.write_all(&buf[..n]).await.is_err() {
+                    let verdict = empty_pipe_verdict(
+                        buffer.len() > 0,
+                        stdout_handle.is_finished(),
+                        buffer.is_failed(),
+                        cfg.cancel_token.is_cancelled(),
+                        tokio::time::Instant::now() >= empty_pipe_deadline,
+                    );
+                    match verdict {
+                        EmptyPipeVerdict::Break => break,
+                        EmptyPipeVerdict::SourceExited => {
+                            // A throttle mark from the stderr handler may still be
+                            // in flight when the source-exit is observed first
+                            // (stdout EOF wins the race). Yield once and re-check
+                            // so a 403-refused URL breaks into the throttle-retry
+                            // guard after the empty-pipe loop instead of being
+                            // misread as a dead pipe.
+                            tokio::task::yield_now().await;
+                            if buffer.is_failed() {
                                 break;
                             }
+                            evict_cached_url(from_url_cache, &cfg.video_id);
+                            debug!(%cfg.video_id, elapsed = ?t0.elapsed(),
+                                "Source exited with an empty pipe");
+                            bail!("format not available (source exited, empty pipe)");
                         }
-                        Err(_) => break,
+                        EmptyPipeVerdict::Cancelled => {
+                            bail!("download cancelled during empty-pipe wait");
+                        }
+                        EmptyPipeVerdict::PatienceElapsed => {
+                            evict_cached_url(from_url_cache, &cfg.video_id);
+                            debug!(%cfg.video_id, elapsed = ?t0.elapsed(),
+                                "Empty pipe persisted {}s — treating as unavailable",
+                                EMPTY_PIPE_PATIENCE_S);
+                            bail!(
+                                "format not available (empty pipe after {}s)",
+                                EMPTY_PIPE_PATIENCE_S
+                            );
+                        }
+                        EmptyPipeVerdict::Wait => {
+                            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                        }
                     }
                 }
-                let _ = ffmpeg_stdin.shutdown().await;
-            });
-
-            (stderr_handle, write_handle, ffmpeg_child, Some(relay), Some(yt_dlp_child))
-        } else {
-            let YtDlpSpawn { stderr_handle, stdout: yt_stdout, child: yt_dlp_child } =
-                spawn_ytdlp(cfg, "bestaudio[ext=m4a]/bestaudio/bestaudio*", buffer.clone(), t0, false)?;
-
-            let write_handle = spawn_stdout_writer(yt_stdout, writer, "yt-dlp");
-
-            (stderr_handle, write_handle, yt_dlp_child, None, None)
-        };
-
-    let (decoder, needs_cache) = if ffmpeg_avail {
-        let deadline =
-            tokio::time::Instant::now() + std::time::Duration::from_secs(DECODER_INIT_DEADLINE_S);
-        while buffer.len() < STREAM_INIT_THRESHOLD
-            && tokio::time::Instant::now() < deadline
-            && !buffer.is_failed()
-            && !cfg.cancel_token.is_cancelled()
-        {
-            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
-        }
-        if cfg.cancel_token.is_cancelled() {
-            bail!("download cancelled during buffering");
-        }
-        bail_failed_buffer(&buffer, from_url_cache, &cfg.video_id, t0, "before data arrived")?;
-        let current = buffer.len();
-        if current == 0 {
-            // A source that has already exited without emitting a byte is dead
-            // or unavailable (dead cached URL, format gone). Evict a cached URL
-            // so the retry re-resolves. But a source that is still running may
-            // simply be slow to produce its first byte; skipping a playable
-            // song because it warmed up slowly is worse than waiting, so keep
-            // polling until it exits, produces data, fails, is cancelled, or
-            // the patience window elapses.
-            let empty_pipe_deadline =
-                tokio::time::Instant::now() + std::time::Duration::from_secs(EMPTY_PIPE_PATIENCE_S);
-            loop {
-                let verdict = empty_pipe_verdict(
-                    buffer.len() > 0,
-                    stdout_handle.is_finished(),
-                    buffer.is_failed(),
-                    cfg.cancel_token.is_cancelled(),
-                    tokio::time::Instant::now() >= empty_pipe_deadline,
-                );
-                match verdict {
-                    EmptyPipeVerdict::Break => break,
-                    EmptyPipeVerdict::SourceExited => {
-                        evict_cached_url(from_url_cache, &cfg.video_id);
-                        debug!(%cfg.video_id, elapsed = ?t0.elapsed(),
-                            "Source exited with an empty pipe");
-                        bail!("format not available (source exited, empty pipe)");
-                    }
-                    EmptyPipeVerdict::Cancelled => {
-                        bail!("download cancelled during empty-pipe wait");
-                    }
-                    EmptyPipeVerdict::PatienceElapsed => {
-                        evict_cached_url(from_url_cache, &cfg.video_id);
-                        debug!(%cfg.video_id, elapsed = ?t0.elapsed(),
-                            "Empty pipe persisted {}s — treating as unavailable",
-                            EMPTY_PIPE_PATIENCE_S);
-                        bail!(
-                            "format not available (empty pipe after {}s)",
-                            EMPTY_PIPE_PATIENCE_S
-                        );
-                    }
-                    EmptyPipeVerdict::Wait => {
-                        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-                    }
+                if throttled_url_retry(&buffer, from_url_cache, &cfg.video_id, t0) {
+                    stream_url = None;
+                    continue 'attempt;
                 }
+                bail_failed_buffer(&buffer, from_url_cache, &cfg.video_id, t0, "during empty-pipe wait")?;
             }
-            bail_failed_buffer(&buffer, from_url_cache, &cfg.video_id, t0, "during empty-pipe wait")?;
-        }
-        let stream_type = if from_url_cache {
-            "url-cache→ffmpeg→alac-mp4"
-        } else {
-            "ffmpeg→alac-mp4"
-        };
-        debug!(%cfg.video_id, stream_type, buf_len = buffer.len(), elapsed = ?t0.elapsed(),
-            "Trying early decoder init");
+            let stream_type = if from_url_cache {
+                "url-cache→ffmpeg→alac-mp4"
+            } else {
+                "ffmpeg→alac-mp4"
+            };
+            debug!(%cfg.video_id, stream_type, buf_len = buffer.len(), elapsed = ?t0.elapsed(),
+                "Trying early decoder init");
 
-        match try_streaming_init_nonseekable(&buffer).await {
-            Ok(decoder) => {
-                debug!(%cfg.video_id, buf_len = buffer.len(), elapsed = ?t0.elapsed(),
-                    "Streaming decoder init succeeded");
-                let log_prefix = if from_url_cache { "ffmpeg (stream_url)" } else { "ffmpeg" };
-                let _cache_task = tokio::spawn(spawn_bg_cache_task(
-                    cfg.video_id.clone(),
-                    cfg.cancel_token.clone(),
-                    child,
-                    yt_child,
-                    stdout_handle,
-                    buffer.clone(),
-                    log_prefix,
-                    Some(t0),
-                    _permit,
-                ));
-                (decoder, false)
-            }
-            Err(stream_err) => {
-                debug!(%cfg.video_id, error = %stream_err,
-                    "Streaming decoder init failed, waiting for {} stream to complete",
-                    if from_url_cache { "ffmpeg" } else { "ffmpeg relay" });
-                let pipe_label = if from_url_cache { "ffmpeg (stream_url)" } else { "ffmpeg" };
-                let wait_result = tokio::select! {
-                    biased;
-                    _ = cfg.cancel_token.cancelled() => {
-                        kill_and_reap(&mut child, &mut yt_child).await;
-                        bail!("{pipe_label} download cancelled during fallback wait");
-                    }
-                    res = tokio::time::timeout(
-                        std::time::Duration::from_secs(DOWNLOAD_TIMEOUT_S),
+            match try_streaming_init_nonseekable(&buffer).await {
+                Ok(decoder) => {
+                    debug!(%cfg.video_id, buf_len = buffer.len(), elapsed = ?t0.elapsed(),
+                        "Streaming decoder init succeeded");
+                    let log_prefix = if from_url_cache { "ffmpeg (stream_url)" } else { "ffmpeg" };
+                    let _cache_task = tokio::spawn(spawn_bg_cache_task(
+                        cfg.video_id.clone(),
+                        cfg.cancel_token.clone(),
+                        child,
+                        yt_child,
                         stdout_handle,
-                    ) => res,
-                };
-                match wait_result {
-                    Ok(Ok(())) => {}
-                    Ok(Err(join_err)) => {
-                        evict_cached_url(from_url_cache, &cfg.video_id);
-                        bail!("{pipe_label} writer task panicked: {join_err}");
-                    }
-                    Err(_elapsed) => {
-                        kill_and_reap(&mut child, &mut yt_child).await;
-                        evict_cached_url(from_url_cache, &cfg.video_id);
-                        bail!("{pipe_label} download timed out ({}s)", DOWNLOAD_TIMEOUT_S);
-                    }
+                        buffer.clone(),
+                        log_prefix,
+                        Some(t0),
+                        _permit,
+                    ));
+                    (decoder, false)
                 }
+                Err(stream_err) => {
+                    debug!(%cfg.video_id, error = %stream_err,
+                        "Streaming decoder init failed, waiting for {} stream to complete",
+                        if from_url_cache { "ffmpeg" } else { "ffmpeg relay" });
+                    let pipe_label = if from_url_cache { "ffmpeg (stream_url)" } else { "ffmpeg" };
+                    let wait_result = tokio::select! {
+                        biased;
+                        _ = cfg.cancel_token.cancelled() => {
+                            kill_and_reap(&mut child, &mut yt_child).await;
+                            bail!("{pipe_label} download cancelled during fallback wait");
+                        }
+                        res = tokio::time::timeout(
+                            std::time::Duration::from_secs(DOWNLOAD_TIMEOUT_S),
+                            stdout_handle,
+                        ) => res,
+                    };
+                    match wait_result {
+                        Ok(Ok(())) => {}
+                        Ok(Err(join_err)) => {
+                            evict_cached_url(from_url_cache, &cfg.video_id);
+                            bail!("{pipe_label} writer task panicked: {join_err}");
+                        }
+                        Err(_elapsed) => {
+                            kill_and_reap(&mut child, &mut yt_child).await;
+                            evict_cached_url(from_url_cache, &cfg.video_id);
+                            bail!("{pipe_label} download timed out ({}s)", DOWNLOAD_TIMEOUT_S);
+                        }
+                    }
 
-                let status = child.wait().await.with_context(|| format!("wait {pipe_label}"))?;
-                if !status.success() {
-                    let code = exit_code_string(&status);
-                    evict_cached_url(from_url_cache, &cfg.video_id);
-                    bail!("{pipe_label} exited with code {code}");
+                    let status = child.wait().await.with_context(|| format!("wait {pipe_label}"))?;
+                    if !status.success() {
+                        let code = exit_code_string(&status);
+                        if throttled_url_retry(&buffer, from_url_cache, &cfg.video_id, t0) {
+                            stream_url = None;
+                            continue 'attempt;
+                        }
+                        evict_cached_url(from_url_cache, &cfg.video_id);
+                        bail!("{pipe_label} exited with code {code}");
+                    }
+                    debug!(%cfg.video_id, "{pipe_label} completed successfully");
+
+                    debug!(%cfg.video_id, buf_len = buffer.len(),
+                        "Creating decoder from completed download (fallback)");
+                    let d = decoder_from_buffer(&buffer, None, "mp4-fallback")?;
+                    (d, !from_url_cache)
                 }
-                debug!(%cfg.video_id, "{pipe_label} completed successfully");
+            }
+        } else {
+            let total_len = {
+                let deadline = tokio::time::Instant::now()
+                    + std::time::Duration::from_secs(M4A_TOTAL_LEN_TIMEOUT_S);
+                loop {
+                    if buffer.is_failed() {
+                        if buffer.is_dead_video() {
+                            bail!("{}", DEAD_VIDEO_ERR);
+                        }
+                        if buffer.is_auth_error() {
+                            bail!("{}", AUTH_ERR);
+                        }
+                        break None;
+                    }
+                    if cfg.cancel_token.is_cancelled() {
+                        break None;
+                    }
+                    if let Some(tl) = buffer.total_len() {
+                        break Some(tl);
+                    }
+                    if tokio::time::Instant::now() >= deadline {
+                        break None;
+                    }
+                    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                }
+            }
+            .unwrap_or(buffer.len() as u64);
 
-                debug!(%cfg.video_id, buf_len = buffer.len(),
+            if cfg.cancel_token.is_cancelled() {
+                bail!("download cancelled during M4A total_len wait");
+            }
+
+            debug!(
+                %cfg.video_id,
+                stream_type = "direct m4a",
+                buf_len = buffer.len(),
+                elapsed = ?t0.elapsed(),
+                "Trying early decoder init (spawn_blocking + {}s timeout)", DECODER_INIT_DEADLINE_S
+            );
+            match try_streaming_init(&buffer, Some(total_len)).await {
+                Ok(decoder) => {
+                    debug!(%cfg.video_id, buf_len = buffer.len(), elapsed = ?t0.elapsed(),
+                    "Streaming decoder init succeeded (M4A)");
+
+                    let pipe_name: &str = "yt-dlp";
+                    let _handle = tokio::spawn(spawn_bg_cache_task(
+                        cfg.video_id.clone(),
+                        cfg.cancel_token.clone(),
+                        child,
+                        None,
+                        stdout_handle,
+                        buffer.clone(),
+                        pipe_name,
+                        None,
+                        _permit,
+                    ));
+
+                    (decoder, false)
+                }
+                Err(stream_err) => {
+                    debug!(%cfg.video_id, error = %stream_err,
+                    "Streaming decoder init failed, waiting for yt-dlp stream to complete");
+                    let wait_result = tokio::select! {
+                        biased;
+                        _ = cfg.cancel_token.cancelled() => {
+                            kill_and_reap(&mut child, &mut yt_child).await;
+                            bail!("yt-dlp download cancelled during fallback wait");
+                        }
+                        res = tokio::time::timeout(
+                            std::time::Duration::from_secs(DOWNLOAD_TIMEOUT_S),
+                            stdout_handle,
+                        ) => res,
+                    };
+                    match wait_result {
+                        Ok(Ok(())) => {}
+                        Ok(Err(join_err)) => {
+                            bail!("yt-dlp writer task panicked: {join_err}");
+                        }
+                        Err(_elapsed) => {
+                            kill_and_reap(&mut child, &mut yt_child).await;
+                            bail!("yt-dlp download timed out ({}s)", DOWNLOAD_TIMEOUT_S);
+                        }
+                    }
+
+                    let status = child
+                        .wait()
+                        .await
+                        .with_context(|| "wait yt-dlp".to_string())?;
+                    if !status.success() {
+                        let code = exit_code_string(&status);
+                        bail!("yt-dlp exited with code {code}");
+                    }
+                    debug!(%cfg.video_id, "yt-dlp completed successfully");
+
+                    debug!(%cfg.video_id, buf_len = buffer.len(),
                     "Creating decoder from completed download (fallback)");
-                let d = decoder_from_buffer(&buffer, None, "mp4-fallback")?;
-                (d, !from_url_cache)
+                    let d = decoder_from_buffer(&buffer, Some(total_len), "m4a-fallback")?;
+                    (d, true)
+                }
             }
-        }
-    } else {
-        let total_len = {
-            let deadline = tokio::time::Instant::now()
-                + std::time::Duration::from_secs(M4A_TOTAL_LEN_TIMEOUT_S);
-            loop {
-                if buffer.is_failed() {
-                    if buffer.is_dead_video() {
-                        bail!("{}", DEAD_VIDEO_ERR);
-                    }
-                    if buffer.is_auth_error() {
-                        bail!("{}", AUTH_ERR);
-                    }
-                    break None;
-                }
-                if cfg.cancel_token.is_cancelled() {
-                    break None;
-                }
-                if let Some(tl) = buffer.total_len() {
-                    break Some(tl);
-                }
-                if tokio::time::Instant::now() >= deadline {
-                    break None;
-                }
-                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-            }
-        }
-        .unwrap_or(buffer.len() as u64);
+        };
 
-        if cfg.cancel_token.is_cancelled() {
-            bail!("download cancelled during M4A total_len wait");
+        if needs_cache {
+            let data = buffer.finalize();
+            debug!(%cfg.video_id, len = data.len(), "Caching completed download (fallback)");
+            cache_put(cfg.video_id.clone(), data);
         }
 
-        debug!(
-            %cfg.video_id,
-            stream_type = "direct m4a",
-            buf_len = buffer.len(),
-            elapsed = ?t0.elapsed(),
-            "Trying early decoder init (spawn_blocking + {}s timeout)", DECODER_INIT_DEADLINE_S
-        );
-        match try_streaming_init(&buffer, Some(total_len)).await {
-            Ok(decoder) => {
-                debug!(%cfg.video_id, buf_len = buffer.len(), elapsed = ?t0.elapsed(),
-                "Streaming decoder init succeeded (M4A)");
-
-                let pipe_name: &str = "yt-dlp";
-                let _handle = tokio::spawn(spawn_bg_cache_task(
-                    cfg.video_id.clone(),
-                    cfg.cancel_token.clone(),
-                    child,
-                    None,
-                    stdout_handle,
-                    buffer.clone(),
-                    pipe_name,
-                    None,
-                    _permit,
-                ));
-
-                (decoder, false)
-            }
-            Err(stream_err) => {
-                debug!(%cfg.video_id, error = %stream_err,
-                "Streaming decoder init failed, waiting for yt-dlp stream to complete");
-                let wait_result = tokio::select! {
-                    biased;
-                    _ = cfg.cancel_token.cancelled() => {
-                        kill_and_reap(&mut child, &mut yt_child).await;
-                        bail!("yt-dlp download cancelled during fallback wait");
-                    }
-                    res = tokio::time::timeout(
-                        std::time::Duration::from_secs(DOWNLOAD_TIMEOUT_S),
-                        stdout_handle,
-                    ) => res,
-                };
-                match wait_result {
-                    Ok(Ok(())) => {}
-                    Ok(Err(join_err)) => {
-                        bail!("yt-dlp writer task panicked: {join_err}");
-                    }
-                    Err(_elapsed) => {
-                        kill_and_reap(&mut child, &mut yt_child).await;
-                        bail!("yt-dlp download timed out ({}s)", DOWNLOAD_TIMEOUT_S);
-                    }
-                }
-
-                let status = child
-                    .wait()
-                    .await
-                    .with_context(|| "wait yt-dlp".to_string())?;
-                if !status.success() {
-                    let code = exit_code_string(&status);
-                    bail!("yt-dlp exited with code {code}");
-                }
-                debug!(%cfg.video_id, "yt-dlp completed successfully");
-
-                debug!(%cfg.video_id, buf_len = buffer.len(),
-                "Creating decoder from completed download (fallback)");
-                let d = decoder_from_buffer(&buffer, Some(total_len), "m4a-fallback")?;
-                (d, true)
-            }
-        }
-    };
-
-    if needs_cache {
-        let data = buffer.finalize();
-        debug!(%cfg.video_id, len = data.len(), "Caching completed download (fallback)");
-        cache_put(cfg.video_id.clone(), data);
+        debug!(%cfg.video_id, elapsed = ?t0.elapsed(), "download_and_decode returning decoder");
+        return Ok(decoder);
     }
-
-    debug!(%cfg.video_id, elapsed = ?t0.elapsed(), "download_and_decode returning decoder");
-    Ok(decoder)
 }
 
 pub async fn download_and_decode(cfg: DownloadConfig) -> anyhow::Result<SymphoniaDecoder> {
@@ -1215,7 +1328,7 @@ mod tests {
             "ERROR: [youtube] X: Sign in to confirm you're not a bot",
             "ERROR: [youtube] X: Please sign in to view this content",
             "ERROR: [youtube] X: This video is only available to signed-in users",
-            "ERROR: [youtube] X: HTTP Error 403: Forbidden",
+            "ERROR: [youtube] X: Sign in to confirm your age",
             "ERROR: '/home/.config/youtui/cookies_netscape.txt' does not look like a Netscape format cookies file",
         ];
         for line in auth {
@@ -1223,14 +1336,148 @@ mod tests {
         }
 
         let not_auth = [
+            "ERROR: [youtube] X: HTTP Error 403: Forbidden",
             "ERROR: [youtube] NLkDhrzgrI8: Video unavailable. This video is not available",
             "ERROR: [youtube] X: HTTP Error 429: Too Many Requests",
-            "ERROR: Requested format is not available",
             "ERROR: [youtube] X: The uploader has not made this video available in your country",
+            "ERROR: Requested format is not available",
         ];
         for line in not_auth {
             assert!(!is_auth_error_line(line), "expected non-auth: {line}");
         }
+    }
+
+    #[test]
+    fn ffmpeg_403_line_classifies_throttle() {
+        let throttled = [
+            "Server returned 403 Forbidden (access denied)",
+            "[in#0 @ 0x559032e24a00] Error opening input: Server returned 403 Forbidden (access denied)",
+            "Error opening input files: Server returned 403 Forbidden (access denied)",
+            "Server returned HTTP error 403, aborting",
+        ];
+        for line in throttled {
+            assert!(is_throttle_line(line), "expected throttled: {line}");
+        }
+
+        let not_throttled = [
+            "ERROR: [youtube] X: HTTP Error 429: Too Many Requests",
+            "ERROR: Requested format is not available",
+            "[in#0 @ 0x559032e24a00] Error opening input: Input/output error",
+            "[in#0 @ 0x559032e24a00] Error opening input: Connection timed out",
+            "ERROR: [youtube] X: Sign in to confirm you're not a bot",
+            "ERROR: [youtube] X: HTTP Error 416: Requested Range Not Satisfiable",
+        ];
+        for line in not_throttled {
+            assert!(!is_throttle_line(line), "expected not throttled: {line}");
+        }
+    }
+
+    #[tokio::test]
+    async fn ffmpeg_stderr_403_marks_throttled() {
+        let buf = SharedBuffer::new();
+        let mut child = tokio::process::Command::new("sh")
+            .arg("-c")
+            .arg("printf '%s\\n' 'Server returned 403 Forbidden (access denied)' >&2; exit 1")
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .expect("spawn sh for ffmpeg-stderr wiring test");
+        let stderr = child.stderr.take().expect("sh stderr");
+        let handle = spawn_ffmpeg_stderr_handler(stderr, buf.clone());
+        child.wait().await.expect("wait sh");
+        let _ = handle.await;
+        assert!(buf.is_throttled(), "a 403 line must mark the buffer throttled");
+        assert!(
+            buf.is_failed(),
+            "the throttled buffer must be failed so the pipeline breaks out of its loops"
+        );
+    }
+
+    #[test]
+    fn throttled_url_retry_decision() {
+        let t0 = tokio::time::Instant::from_std(std::time::Instant::now());
+        let throttled = SharedBuffer::new();
+        throttled.mark_throttled();
+        let failed = SharedBuffer::new();
+        failed.fail();
+        let plain = SharedBuffer::new();
+
+        // A throttled refused URL must retry via the relay.
+        assert!(throttled_url_retry(&throttled, true, "v1", t0));
+        // A throttled RELAY attempt (no URL involved) must NOT loop again — the
+        // retry already happened; another loop would retry forever.
+        assert!(!throttled_url_retry(&throttled, false, "v1", t0));
+        // Any other failure (even a failed buffer) is not a throttle → no retry.
+        assert!(!throttled_url_retry(&failed, true, "v1", t0));
+        assert!(!throttled_url_retry(&plain, true, "v1", t0));
+    }
+
+    #[test]
+    fn url_input_includes_auth_passthrough_args() {
+        let cmd = build_ffmpeg_command(
+            &FfmpegInput::Url("https://example.com/stream".into()),
+            Some("SID=abc; z=1"),
+        );
+        let args: Vec<String> = cmd
+            .as_std()
+            .get_args()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect();
+        assert!(
+            args.windows(2).any(|w| w[0] == "-i" && w[1] == "https://example.com/stream"),
+            "missing -i: {args:?}"
+        );
+        assert!(
+            args.windows(2)
+                .any(|w| w[0] == "-user_agent" && w[1] == FFMPEG_USER_AGENT),
+            "missing browser -user_agent: {args:?}"
+        );
+        assert!(
+            args.windows(2)
+                .any(|w| w[0] == "-referer" && w[1] == "https://music.youtube.com/"),
+            "missing -referer: {args:?}"
+        );
+        assert!(
+            args.windows(2)
+                .any(|w| w[0] == "-headers" && w[1] == "Cookie: SID=abc; z=1"),
+            "missing cookie -headers (the CDN refuses anonymous fetches): {args:?}"
+        );
+    }
+
+    #[test]
+    fn url_input_omits_headers_without_cookie() {
+        let cmd = build_ffmpeg_command(&FfmpegInput::Url("https://example.com/stream".into()), None);
+        let args: Vec<String> = cmd
+            .as_std()
+            .get_args()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect();
+        assert!(
+            !args.iter().any(|a| a == "-headers"),
+            "no cookie header means no -headers: {args:?}"
+        );
+        assert!(
+            args.windows(2)
+                .any(|w| w[0] == "-user_agent" && w[1] == FFMPEG_USER_AGENT),
+            "UA/referer still applied without cookies: {args:?}"
+        );
+    }
+
+    #[test]
+    fn pipe_input_has_no_http_passthrough() {
+        let cmd = build_ffmpeg_command(&FfmpegInput::Pipe, Some("SID=abc"));
+        let args: Vec<String> = cmd
+            .as_std()
+            .get_args()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect();
+        assert!(
+            !args.iter().any(|a| a == "-headers" || a == "-referer" || a == "-user_agent"),
+            "relay input reads stdin; no HTTP passthrough should be added: {args:?}"
+        );
+        assert!(
+            args.windows(2).any(|w| w[0] == "-i" && w[1] == "pipe:0"),
+            "relay ffmpeg must read pipe:0: {args:?}"
+        );
     }
 
     #[test]

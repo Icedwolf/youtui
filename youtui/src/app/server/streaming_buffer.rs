@@ -7,6 +7,7 @@ struct SharedBufferInner {
     failed: bool,
     dead_video: bool,
     auth_error: bool,
+    throttled: bool,
     total_len: Option<u64>,
     state: BufferState,
 }
@@ -45,6 +46,7 @@ impl SharedBuffer {
                 failed: false,
                 dead_video: false,
                 auth_error: false,
+                throttled: false,
                 total_len: None,
                 state: BufferState::Partial(Vec::with_capacity(cap)),
             }),
@@ -126,6 +128,32 @@ impl SharedBuffer {
     pub fn mark_auth_error(&self) {
         let mut guard = self.inner.lock().unwrap_or_warn();
         guard.auth_error = true;
+    }
+
+    /// True when ffmpeg's direct HTTP fetch of the resolved stream URL was
+    /// refused by the CDN (403 Forbidden). The video is not dead and the
+    /// session cookies are fine — this is the nsig/po_token throttling wave:
+    /// the same song re-fetched through the credential-carrying yt-dlp relay
+    /// (or a freshly re-resolved URL) usually plays. Distinct from
+    /// `is_auth_error`: a throttle must trigger a relay retry, never surface
+    /// as stale cookies. `mark_throttled` also fails the buffer so the
+    /// init-wait/empty-pipe loops break into classification immediately.
+    #[must_use]
+    pub fn is_throttled(&self) -> bool {
+        self.inner.lock().unwrap_or_warn().throttled
+    }
+
+    pub fn mark_throttled(&self) {
+        let mut guard = self.inner.lock().unwrap_or_warn();
+        guard.throttled = true;
+        guard.failed = true;
+        guard.finished = true;
+        if let BufferState::Partial(ref v) = guard.state
+            && guard.total_len.is_none()
+        {
+            guard.total_len = Some(v.len() as u64);
+        }
+        self.cvar.notify_all();
     }
 
     pub fn fail(&self) {
@@ -277,6 +305,23 @@ mod tests {
     use super::*;
     use std::thread;
     use std::time::Duration;
+
+    #[test]
+    fn throttled_marker_sets_failed() {
+        let buf = SharedBuffer::new();
+        assert!(!buf.is_throttled(), "fresh buffer must not be throttled");
+        assert!(!buf.is_failed(), "precondition: fresh buffer is not failed");
+        buf.mark_throttled();
+        assert!(buf.is_throttled(), "mark_throttled must set the throttled flag");
+        assert!(
+            buf.is_failed(),
+            "mark_throttled must fail the buffer so the pipeline loops break immediately"
+        );
+        // A throttled buffer is NOT an auth error or a dead video — the song
+        // is playable, just refused once at fetch time.
+        assert!(!buf.is_auth_error());
+        assert!(!buf.is_dead_video());
+    }
 
     #[test]
     fn seek_from_end_returns_total_len_not_clamped_to_available() {
