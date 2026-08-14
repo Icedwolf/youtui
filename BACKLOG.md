@@ -6,6 +6,14 @@
 
 ## Completed
 
+### Session 2026-08-14 — Throttle-relay race hardening; streaming_buffer dedup
+
+- **Site-3 throttle-mark race closed (`c9b706c`).** In the streaming-init-fail → full-download fallback, `stdout_handle` resolves on the writer task's stdout-EOF, which can beat the async ffmpeg stderr handler's 403 mark — so a mid-fallback CDN refusal could be misclassified as a generic exit failure (song skipped) instead of relay-retrying. The fallback-exit path now yields once before `throttled_url_retry`, matching the existing Site-2 (empty-pipe) yield-once + re-check pattern. All three throttle-retry sites now drain the mark race; Site-1 is race-free by construction (the mark is what breaks the wait loop).
+- **`total_len`-record guard deduplicated (`b8f06c4`).** The `if Partial && total_len.is_none() { total_len = Some(v.len()) }` block was copy-pasted 4× (`mark_throttled`/`fail`/writer `finish`/`fail`). Extracted `record_len_if_unknown`; fail-first test `failed_or_finished_buffer_records_partial_len_as_total` covers fail/throttle/finish-with-known-total.
+- **Stale L5 backlog item closed (`d7d6b84`).** The "misleading comment in streaming_buffer" was from the pre-single-Mutex/MediaSource era; the current file's comments are accurate (full-file audit).
+- **Audits (no change needed):** both children (`ffmpeg` + `yt-dlp`) are `kill_on_drop`, so the throttle `continue 'attempt` drop cannot orphan a process; no stray 403-as-auth classification remains outside the committed files (UI `is_auth_error` is message-based and consistent); `empty_pipe_verdict` prioritizes `buffer_failed` so a throttle mark breaks out before the empty-pipe classification.
+- Verified: cargo check 0, clippy `--workspace --all-targets` 0, 362 youtui tests green.
+
 ### Session 2026-08-13 — CDN 403 throttle: browser-shaped ffmpeg fetch + relay retry
 
 - **ffmpeg's direct-URL fetch is now shaped like yt-dlp's** — the resolved googlevideo URL is fetched with a browser `-user_agent`, a `https://music.youtube.com/` `-referer`, and `-headers "Cookie: <header>"` when the app has one (the same header yt-dlp gets via `--add-header`). A bare `Lavf/…` anonymous fetch is a bot signal, intermittently refused with `403 Forbidden (access denied)` even on a fresh URL. `build_ffmpeg_command` (song_downloader/mod.rs) builds the argv; tests assert the exact args for URL/pipe inputs with and without cookies. DECISIONS.md:28.
