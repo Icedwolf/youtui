@@ -1428,18 +1428,24 @@ mod tests {
     // available; a URL input (`-i <url>`) is a CDN-throttled direct fetch
     // (403 on stderr + non-zero exit); a pipe input (`-i pipe:0`) is the relay
     // path, where the fake just copies stdin to stdout untouched so the ALAC
-    // bytes pass through as-is.
-    const FAKE_FFMPEG: &str = r#"#!/bin/sh
-case " $* " in
-  *" -version "*) exit 0 ;;
-esac
-if printf '%s\n' "$@" | grep -q 'pipe:0'; then
-  cat
-else
-  echo 'Server returned 403 Forbidden (access denied)' >&2
-  exit 1
-fi
-"#;
+    // bytes pass through as-is. Every invocation logs its argv to `log`, so
+    // the E2E tests can assert exactly which ffmpeg path ran (see
+    // `throttled_url_retries_via_relay_end_to_end`/`_bails_without_retry`).
+    fn fake_ffmpeg_body(log: &std::path::Path) -> String {
+        format!(
+            "#!/bin/sh\nprintf '%s\\n' \"$@\" >> '{}'\n\
+case \" $* \" in\n\
+  *\" -version \"*) exit 0 ;;\n\
+esac\n\
+if printf '%s\\n' \"$@\" | grep -q 'pipe:0'; then\n\
+  cat\n\
+else\n\
+  echo 'Server returned 403 Forbidden (access denied)' >&2\n\
+  exit 1\n\
+fi\n",
+            log.display()
+        )
+    }
 
     // Fake yt-dlp resolve branch: `--print url` prints a resolvable URL.
     const YTDLP_FAKE_HEAD: &str = r#"#!/bin/sh
@@ -1467,8 +1473,13 @@ fi
             std::fs::create_dir_all(&dir).expect("create fake binary dir");
             let old_path = std::env::var("PATH").unwrap_or_default();
             let new_path = format!("{}:{}", dir.display(), old_path);
-            // tokio tests run on a current-thread runtime; only the E2E tests
-            // mutate PATH, serialized by PIPELINE_TEST_LOCK.
+            // PATH is process-global; only these two E2E tests mutate it
+            // (serialized by PIPELINE_TEST_LOCK). The sibling by-name spawns
+            // (ffmpeg_relay_ttf_from_webm_file, m4a_decoder_ttf_from_full_download,
+            // download_pipeline_comparison) are skip-tolerant bench tests, so a
+            // stray overlap degrades to a skip or garbage bench, never a wrong
+            // failure. glibc setenv/getenv are mutex-protected, so concurrent
+            // reads by other test threads are benign.
             unsafe { std::env::set_var("PATH", new_path) };
             FakePath { dir }
         }
@@ -1492,6 +1503,13 @@ fi
             .expect("chmod fake binary");
     }
 
+    fn ffmpeg_relay_invocations(log: &std::path::Path) -> usize {
+        std::fs::read_to_string(log)
+            .unwrap_or_else(|e| panic!("read fake ffmpeg invocation log {}: {e}", log.display()))
+            .matches("pipe:0")
+            .count()
+    }
+
     fn alac_fixture_path() -> std::path::PathBuf {
         std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../ytmapi-rs/test_json/test_alac_fragmented.mp4")
@@ -1508,7 +1526,8 @@ fi
         let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
         rt.block_on(async {
             let fakebin = FakePath::new();
-            write_fake_bin(&fakebin.dir, "ffmpeg", FAKE_FFMPEG);
+            let ffmpeg_log = fakebin.dir.join("ffmpeg.log");
+            write_fake_bin(&fakebin.dir, "ffmpeg", &fake_ffmpeg_body(&ffmpeg_log));
             let fixture = alac_fixture_path();
             write_fake_bin(
                 &fakebin.dir,
@@ -1539,6 +1558,12 @@ fi
                 None,
                 "the throttled stream URL must be evicted from the URL cache"
             );
+            assert_eq!(
+                ffmpeg_relay_invocations(&ffmpeg_log),
+                1,
+                "the ALAC relay (ffmpeg pipe:0) must run exactly once; \
+                 a no-ffmpeg host silently taking the M4A path would log nothing"
+            );
         });
     }
 
@@ -1551,7 +1576,8 @@ fi
         let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
         rt.block_on(async {
             let fakebin = FakePath::new();
-            write_fake_bin(&fakebin.dir, "ffmpeg", FAKE_FFMPEG);
+            let ffmpeg_log = fakebin.dir.join("ffmpeg.log");
+            write_fake_bin(&fakebin.dir, "ffmpeg", &fake_ffmpeg_body(&ffmpeg_log));
             write_fake_bin(
                 &fakebin.dir,
                 "yt-dlp",
@@ -1584,6 +1610,12 @@ fi
                 resolve::url_cache_get(&video_id),
                 None,
                 "the throttled stream URL must be evicted from the URL cache"
+            );
+            assert_eq!(
+                ffmpeg_relay_invocations(&ffmpeg_log),
+                1,
+                "a throttled relay must spawn ffmpeg pipe:0 exactly once; \
+                 re-retrying the relay would spawn it a second time"
             );
         });
     }
