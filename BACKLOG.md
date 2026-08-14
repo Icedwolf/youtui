@@ -1,10 +1,17 @@
 # Youtui Backlog
 
 **Build:** 0 errors, 0 warnings, 0 clippy
-**Tests:** 361 youtui + 72 ytmapi-rs lib + doctests, +2 ignored (live network tests are flaky)
-**Last updated:** 2026-08-13
+**Tests:** 364 youtui + 268 ytmapi-rs lib + doctests, +2 ignored (live network tests are flaky)
+**Last updated:** 2026-08-14
 
 ## Completed
+
+### Session 2026-08-14 — DECISIONS:31 sweep to all 14 list-parse abort sites; relay spawn-order flake fixed
+
+- **Junk-tolerance sweep extended to every abort site (ytmapi-rs).** The DECISIONS:31 tolerance (skip unparseable entries instead of failing the whole query) was applied only to the filtered Artists/Songs `TryFrom`s; the same one-junk-item-aborts-query bug existed at 12 more sites: basic search Albums/FeaturedPlaylists/Songs (match arms), filtered search Albums/Profiles/Episodes/Podcasts/Playlists/CommunityPlaylists/FeaturedPlaylists (strict `TryFrom`s), and the artist page — top-songs shelf, Singles carousel, Albums carousel, and the albums grid (`musicTwoRowItemRenderer` items under `gridRenderer`, not `musicGridRenderer`). All 14 now `.filter_map(...ok())` (`.filter_map(...and_then(...ok()))` on the `navigate_pointer` carousel/grid paths, with the `collapsible_if` collapsed into the chain). Verified already-tolerant and left unchanged: basic TopResult/Artists, the top-results card and album tracks (drop `Err`s via `transpose`), filtered Artists/Songs/Videos.
+- **Fail-first tests on live-response fixtures (11 new).** `search/tests.rs`: `inject_junk_into_lists` helper + `test_search_basic_shelves_drop_junk_entries` (`search_basic_no_top_result_20231228.json`) + a 7-test macro over the filtered fixtures (albums/profiles/episodes/podcasts/playlists/community playlists→`Vec<SearchResultPlaylist>`/featured playlists, each on its dedicated `search_*_2023*.json`). `artist.rs`: `test_get_artist_drops_junk_entries` (GetArtistQuery + `get_artist_20240705.json`, junk into the shelf + both carousels) and `test_get_artist_albums_drop_junk_entries` (GetArtistAlbumsQuery + `browse_artist_albums.json`, junk into the grid). Junk payloads are `{"musicResponsiveListItemRenderer": {}}` for MRLIR lists and `{"musicResponsiveListItemRenderer": {}, "musicTwoRowItemRenderer": {}}` for the artist carousels/grid. All 11 were red on the strict parses and green after.
+- **E2E relay-spawn-order race closed (youtui).** `throttled_relay_failure_bails_without_retry` flaked ~50% under the parallel bin suite (passing in isolation): the relay branch spawned yt-dlp first, and its instant 403 `ERROR` failed the buffer before `spawn_ffmpeg(Pipe)` returned — so the init-wait loop bailed on the first `is_failed()` check and `kill_on_drop` SIGKILLed the fake pipe:0 ffmpeg before its argv log write (`pipe:0` count 0, error still `format not available (yt-dlp error)`). The relay branch now spawns ffmpeg before yt-dlp, so the relay's ffmpeg is running and reading `pipe:0` before the relay's output can fail the buffer — the argv log write is structurally guaranteed and the "exactly one pipe:0 / no re-retry" tripwire is deterministic again (also overlaps ffmpeg startup with the yt-dlp spawn). Verified with 3 consecutive clean full parallel `cargo test -p youtui --bins` runs.
+- Verified: ytmapi-rs 268 passed/18 ignored, youtui 364 passed/2 ignored, workspace 639 passed/20 ignored, clippy 0.
 
 ### Session 2026-08-14 — Throttle-relay race hardening; streaming_buffer dedup
 
