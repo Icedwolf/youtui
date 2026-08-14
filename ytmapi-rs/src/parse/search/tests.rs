@@ -321,3 +321,90 @@ async fn test_search_profiles() {
         BrowserToken
     );
 }
+
+// Push a junk entry (a partial musicResponsiveListItemRenderer, like the
+// videos/playlists YouTube Music leaks into search shelves) into every
+// `renderer_key.<array_key>` list in the response. `serde_json` re-serializes
+// the Value, which JsonCrawler re-parses on the other side.
+fn inject_junk_into_lists(source: &str, targets: &[(&str, &str)]) -> String {
+    fn walk(value: &mut serde_json::Value, targets: &[(&str, &str)]) {
+        match value {
+            serde_json::Value::Object(map) => {
+                for (key, child) in map.iter_mut() {
+                    if let Some(list) = targets
+                        .iter()
+                        .find(|(rk, _)| *rk == key)
+                        .and_then(|(_, array_key)| {
+                            child
+                                .get_mut(*array_key)
+                                .and_then(serde_json::Value::as_array_mut)
+                        })
+                    {
+                        list.push(serde_json::json!({
+                            "musicResponsiveListItemRenderer": {}
+                        }));
+                    }
+                    walk(child, targets);
+                }
+            }
+            serde_json::Value::Array(items) => {
+                for item in items {
+                    walk(item, targets);
+                }
+            }
+            _ => {}
+        }
+    }
+    let mut json: serde_json::Value = serde_json::from_str(source).unwrap();
+    walk(&mut json, targets);
+    json.to_string()
+}
+
+#[tokio::test]
+async fn test_search_basic_shelves_drop_junk_entries() {
+    // The 2026-08-13 junk leak hits every basic-search shelf, not just the
+    // filtered Artists/Songs ones: Albums, Featured playlists and Songs each
+    // aborted the whole query on one leaked entry. A junk entry in any shelf
+    // must drop; the valid entries survive.
+    let source = tokio::fs::read_to_string(Path::new(
+        "./test_json/search_basic_no_top_result_20231228.json",
+    ))
+    .await
+    .unwrap();
+    let source = inject_junk_into_lists(&source, &[("musicShelfRenderer", "contents")]);
+    let parsed: SearchResults = process_json::<_, BrowserToken>(source, SearchQuery::new("")).unwrap();
+    assert!(!parsed.albums.is_empty());
+    assert!(!parsed.featured_playlists.is_empty());
+    assert!(!parsed.songs.is_empty());
+}
+
+macro_rules! filtered_junk_tolerance_tests {
+    ($( $name:ident: $fixture:literal => $filter:expr, $out:ty; )*) => {
+        $(
+            #[tokio::test]
+            async fn $name() {
+                // Same leak into the other filtered shelves: one junk entry
+                // (partial musicResponsiveListItemRenderer) aborted the whole
+                // query. It must drop and leave the real results intact.
+                let source = tokio::fs::read_to_string(Path::new($fixture)).await.unwrap();
+                let source = inject_junk_into_lists(&source, &[("musicShelfRenderer", "contents")]);
+                let parsed: $out = process_json::<_, BrowserToken>(
+                    source,
+                    SearchQuery::new_filtered("", $filter),
+                )
+                .unwrap();
+                assert!(!parsed.is_empty(), "expected valid entries to survive junk");
+            }
+        )*
+    };
+}
+
+filtered_junk_tolerance_tests! {
+    test_search_albums_drop_junk_entries: "./test_json/search_albums_20231226.json" => AlbumsFilter, Vec<crate::parse::SearchResultAlbum>;
+    test_search_profiles_drop_junk_entries: "./test_json/search_profiles_20231226.json" => ProfilesFilter, Vec<crate::parse::SearchResultProfile>;
+    test_search_episodes_drop_junk_entries: "./test_json/search_episodes_20231226.json" => EpisodesFilter, Vec<crate::parse::SearchResultEpisode>;
+    test_search_podcasts_drop_junk_entries: "./test_json/search_podcasts_20231226.json" => PodcastsFilter, Vec<crate::parse::SearchResultPodcast>;
+    test_search_playlists_drop_junk_entries: "./test_json/search_playlists_20231228.json" => PlaylistsFilter, Vec<crate::parse::SearchResultPlaylist>;
+    test_search_community_playlists_drop_junk_entries: "./test_json/search_community_playlists_20231226.json" => CommunityPlaylistsFilter, Vec<crate::parse::SearchResultPlaylist>;
+    test_search_featured_playlists_drop_junk_entries: "./test_json/search_featured_playlists_20231226.json" => FeaturedPlaylistsFilter, Vec<crate::parse::SearchResultFeaturedPlaylist>;
+}

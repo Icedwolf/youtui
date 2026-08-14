@@ -270,8 +270,8 @@ fn parse_artist_songs(mut json: impl JsonCrawler) -> Result<GetArtistSongs> {
     let results = json
         .borrow_pointer("/contents")?
         .try_into_iter()?
-        .map(parse_artist_song)
-        .collect::<Result<Vec<ArtistSong>>>()?;
+        .filter_map(|r| parse_artist_song(r).ok())
+        .collect();
     Ok(GetArtistSongs { results, browse_id })
 }
 fn parse_artist_top_releases_from_section_list_contents(
@@ -306,10 +306,11 @@ fn parse_artist_top_releases_from_section_list_contents(
             ArtistTopReleaseCategory::Related => (),
             ArtistTopReleaseCategory::Videos => (),
             ArtistTopReleaseCategory::Singles => {
-                let mut results = Vec::new();
-                for i in r.navigate_pointer("/contents")?.try_iter_mut()? {
-                    results.push(parse_album_from_mtrir(i.navigate_pointer(MTRIR)?)?);
-                }
+                let results = r
+                    .navigate_pointer("/contents")?
+                    .try_iter_mut()?
+                    .filter_map(|i| i.navigate_pointer(MTRIR).ok().and_then(|m| parse_album_from_mtrir(m).ok()))
+                    .collect();
                 singles = Some(GetArtistAlbums {
                     browse_id,
                     params,
@@ -317,10 +318,11 @@ fn parse_artist_top_releases_from_section_list_contents(
                 });
             }
             ArtistTopReleaseCategory::Albums => {
-                let mut results = Vec::new();
-                for i in r.navigate_pointer("/contents")?.try_iter_mut()? {
-                    results.push(parse_album_from_mtrir(i.navigate_pointer(MTRIR)?)?);
-                }
+                let results = r
+                    .navigate_pointer("/contents")?
+                    .try_iter_mut()?
+                    .filter_map(|i| i.navigate_pointer(MTRIR).ok().and_then(|m| parse_album_from_mtrir(m).ok()))
+                    .collect();
                 albums = Some(GetArtistAlbums {
                     browse_id,
                     params,
@@ -455,9 +457,12 @@ fn parse_artist_albums_from_grid(
     let albums = grid_renderer
         .navigate_pointer("/items")?
         .try_into_iter()?
-        .flat_map(|i| i.navigate_pointer(MTRIR))
-        .map(parse_artist_album_item)
-        .collect::<crate::Result<_>>()?;
+        .filter_map(|i| {
+            i.navigate_pointer(MTRIR)
+                .ok()
+                .and_then(|m| parse_artist_album_item(m).ok())
+        })
+        .collect();
     Ok((albums, continuation_params))
 }
 
@@ -587,5 +592,86 @@ mod tests {
             .expect("artist with a missing section list must still parse");
         assert_eq!(artist.name, "Some Artist");
         assert_eq!(artist.top_releases, GetArtistTopReleases::default());
+    }
+
+    // Push a junk entry (a partial musicResponsiveListItemRenderer, like the
+    // videos/playlists leaked into artist shelves/carousels) into every
+    // `renderer_key.<array_key>` list in the response.
+    fn inject_junk_into_lists(source: &str, targets: &[(&str, &str)]) -> String {
+        fn walk(value: &mut serde_json::Value, targets: &[(&str, &str)]) {
+            match value {
+                serde_json::Value::Object(map) => {
+                    for (key, child) in map.iter_mut() {
+if let Some(list) = targets
+                        .iter()
+                        .find(|(rk, _)| *rk == key)
+                        .and_then(|(_, array_key)| {
+                            child
+                                .get_mut(*array_key)
+                                .and_then(serde_json::Value::as_array_mut)
+                        })
+                    {
+                        list.push(serde_json::json!({
+                            "musicResponsiveListItemRenderer": {},
+                            "musicTwoRowItemRenderer": {}
+                        }));
+                    }
+                        walk(child, targets);
+                    }
+                }
+                serde_json::Value::Array(items) => {
+                    for item in items {
+                        walk(item, targets);
+                    }
+                }
+                _ => {}
+            }
+        }
+        let mut json: serde_json::Value = serde_json::from_str(source).unwrap();
+        walk(&mut json, targets);
+        json.to_string()
+    }
+
+    #[tokio::test]
+    async fn test_get_artist_drops_junk_entries() {
+        // The 2026-08-13 junk leak hits the artist page too: a leaked entry in
+        // the top songs shelf or an Albums/Singles carousel aborted the whole
+        // artist fetch. Junk must drop; the real songs/albums/singles survive.
+        use crate::process_json;
+        use crate::query::GetArtistQuery;
+
+        let source = tokio::fs::read_to_string("./test_json/get_artist_20240705.json")
+            .await
+            .unwrap();
+        let source = inject_junk_into_lists(
+            &source,
+            &[("musicShelfRenderer", "contents"), ("musicCarouselShelfRenderer", "contents")],
+        );
+        let parsed: crate::parse::GetArtist = process_json::<_, BrowserToken>(
+            source,
+            GetArtistQuery::new(ArtistChannelID::from_raw("")),
+        )
+        .unwrap();
+        assert!(!parsed.top_releases.songs.unwrap().results.is_empty());
+        assert!(!parsed.top_releases.albums.unwrap().results.is_empty());
+        assert!(!parsed.top_releases.singles.unwrap().results.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_get_artist_albums_drop_junk_entries() {
+        // The full Albums tab grid gets the same leak: an entry without the
+        // album browseId aborted the whole albums fetch.
+        use crate::process_json;
+
+        let source = tokio::fs::read_to_string("./test_json/browse_artist_albums.json")
+            .await
+            .unwrap();
+        let source = inject_junk_into_lists(&source, &[("gridRenderer", "items")]);
+        let parsed: Vec<crate::parse::GetArtistAlbumsAlbum> = process_json::<_, BrowserToken>(
+            source,
+            GetArtistAlbumsQuery::new(ArtistChannelID::from_raw(""), BrowseParams::from_raw("")),
+        )
+        .unwrap();
+        assert!(!parsed.is_empty());
     }
 }
