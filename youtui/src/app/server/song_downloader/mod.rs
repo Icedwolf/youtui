@@ -741,12 +741,20 @@ async fn ytdlp_pipeline(
                 )?;
                 (stderr_handle, write_handle, ffmpeg_child, None, None)
             } else if ffmpeg_avail {
-                let YtDlpSpawn { stderr_handle, stdout: yt_stdout, child: yt_dlp_child } =
-                    spawn_ytdlp(cfg, "ba/bestaudio", buffer.clone(), t0, true)?;
-
+                // Spawn ffmpeg before yt-dlp. If the relay's yt-dlp fails the
+                // buffer instantly (e.g. a throttled 403 written before ffmpeg
+                // was up), the init-wait loop below bails on the first
+                // `is_failed()` check and kill_on_drop would kill a just-spawned
+                // ffmpeg before it produced its first byte. Starting ffmpeg
+                // first guarantees it is running (and reading `pipe:0`) before
+                // the relay's output can fail the buffer, and overlaps its
+                // startup with the yt-dlp spawn.
                 let (_ffmpeg_stderr_handle, write_handle, ffmpeg_child, ffmpeg_stdin) =
                     spawn_ffmpeg(FfmpegInput::Pipe, writer, "ffmpeg", None, buffer.clone())?;
                 let mut ffmpeg_stdin = ffmpeg_stdin.context("no ffmpeg stdin")?;
+
+                let YtDlpSpawn { stderr_handle, stdout: yt_stdout, child: yt_dlp_child } =
+                    spawn_ytdlp(cfg, "ba/bestaudio", buffer.clone(), t0, true)?;
 
                 let relay = tokio::spawn(async move {
                     use tokio::io::{AsyncReadExt, AsyncWriteExt};
