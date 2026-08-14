@@ -1476,10 +1476,15 @@ fi
             // PATH is process-global; only these two E2E tests mutate it
             // (serialized by PIPELINE_TEST_LOCK). The sibling by-name spawns
             // (ffmpeg_relay_ttf_from_webm_file, m4a_decoder_ttf_from_full_download,
-            // download_pipeline_comparison) are skip-tolerant bench tests, so a
-            // stray overlap degrades to a skip or garbage bench, never a wrong
-            // failure. glibc setenv/getenv are mutex-protected, so concurrent
-            // reads by other test threads are benign.
+            // download_pipeline_comparison) can collide with the ~10ms window:
+            // the common case degrades to a skip or a garbage bench, but a
+            // real-yt-dlp + fake-ffmpeg pairing can panic download_pipeline_comparison
+            // (webm cat'd through untranscoded) and a stray fake-ffmpeg spawn can
+            // inflate the E2E pipe:0 count. Both need a rare temporal overlap and
+            // are accepted: serializing the 30s bench against the lock would tax
+            // every networked suite run, and the flake self-heals on re-run.
+            // glibc setenv/getenv are mutex-protected, so concurrent reads by
+            // other test threads are benign.
             unsafe { std::env::set_var("PATH", new_path) };
             FakePath { dir }
         }
