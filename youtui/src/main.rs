@@ -19,7 +19,6 @@ mod keyaction;
 mod keybind;
 mod widgets;
 
-pub(crate) const POTOKEN_FILENAME: &str = "po_token.txt";
 pub(crate) const COOKIE_FILENAME: &str = "cookie.txt";
 pub(crate) const COOKIE_NETSCAPE_FILENAME: &str = "cookies_netscape.txt";
 
@@ -53,8 +52,6 @@ pub(crate) fn detect_browser_source() -> Option<String> {
 
 const BROWSER_AUTH_SETUP_STEPS_URL: &str =
     "https://github.com/Icedwolf/youtui?tab=readme-ov-file#browser-auth-setup-steps";
-const POTOKEN_INFORMATION_URL: &str =
-    "https://github.com/Icedwolf/youtui?tab=readme-ov-file#po-token-information";
 const RUNNING_YOUTUI_GUIDE_URL: &str =
     "https://github.com/Icedwolf/youtui?tab=readme-ov-file#running-youtui";
 const DIRECTORY_NAME_ERROR_MESSAGE: &str = "Error generating application directory for your host system. See README.md for more information about application directories.";
@@ -405,8 +402,8 @@ async fn try_main() -> anyhow::Result<()> {
     // (Which key to load depends on configuration)
     // TODO: api_key and po_token could be more lazily loaded.
     let api_key = load_api_key(&config).await?;
-    // Use PoToken, if the user has supplied one (otherwise don't).
-    let po_token = load_po_token().await.ok();
+    // Use the bundled PO-token generator, if present (otherwise don't).
+    let po_token = load_po_token().await;
     let rt = RuntimeInfo {
         debug,
         config,
@@ -478,20 +475,21 @@ pub(crate) fn get_config_dir() -> anyhow::Result<PathBuf> {
     Ok(directory)
 }
 
-async fn load_po_token() -> anyhow::Result<String> {
-    let mut path = get_config_dir()?;
-    path.push(POTOKEN_FILENAME);
-    tokio::fs::read_to_string(&path)
-        .await
-        // Allocation is required here if we wish to trim within this function.
-        .map(|s| s.trim().to_string())
-        .with_context(|| {
-            format!(
-                "Error loading po_token from {}. Does the file exist? See README.md for more information on PO tokens: {}",
-                path.display(),
-                POTOKEN_INFORMATION_URL
-            )
-        })
+/// Locate the bundled GVS PO-token generator script. Returns its path when the
+/// `pot-provider/generate.mjs` botguard script exists (node availability is
+/// checked separately at startup as `js_runtime`); `None` otherwise. The static
+/// `po_token.txt` scheme is obsolete: current yt-dlp rejects a bare token and
+/// YouTube binds the token to each video ID, so a real token must be minted
+/// per song by the generator at resolve time.
+async fn load_po_token() -> Option<String> {
+    let mut path = get_config_dir().ok()?;
+    path.push("pot-provider");
+    path.push("generate.mjs");
+    if tokio::fs::try_exists(&path).await.unwrap_or(false) {
+        Some(path.display().to_string())
+    } else {
+        None
+    }
 }
 
 async fn load_cookie_file() -> anyhow::Result<String> {

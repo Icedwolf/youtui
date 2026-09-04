@@ -81,7 +81,7 @@ pub(crate) fn file_has_auth_cookie(path: &Path) -> bool {
 pub fn apply_ytdlp_auth_args(
     cmd: &mut tokio::process::Command,
     po_token: Option<&str>,
-    cookie_path: Option<&Path>,
+    _cookie_path: Option<&Path>,
     cookie_header: Option<&str>,
     js_runtime: Option<&str>,
     video_id: &str,
@@ -91,22 +91,33 @@ pub fn apply_ytdlp_auth_args(
     // owns the full argument list and must not inherit broken host config.
     cmd.arg("--ignore-config");
     let skip = "hls,translated_subs";
-    let extractor_args = match po_token {
-        Some(pt) => format!("youtube:po_token={pt};skip={skip}"),
-        None => format!("youtube:skip={skip}"),
+    // `po_token` now carries the path to the bundled `pot-provider/generate.mjs`
+    // script (present only when node + the script exist at startup). When
+    // available, mint a per-video GVS token and force the `web_music` client:
+    // current yt-dlp requires the `CLIENT.CONTEXT+TOKEN` format, a bare token is
+    // skipped, and `web_music` is the client YouTube binds GVS tokens to. Only
+    // force `web_music` when a token exists — without a pot it errors out.
+    let extractor_args = if let (Some(gen_path), Some(node)) = (po_token, js_runtime) {
+        let path = std::path::Path::new(gen_path);
+        match super::pot::generate_po_token(video_id, path, Some(node)) {
+            Some(token) => format!(
+                "youtube:player_client=web_music;po_token=web_music.gvs+{token};skip={skip}"
+            ),
+            None => {
+                warn!(%video_id, "po_token: generation unavailable/failed — resolve without a token");
+                format!("youtube:skip={skip}")
+            }
+        }
+    } else {
+        format!("youtube:skip={skip}")
     };
     cmd.arg("--extractor-args");
     cmd.arg(&extractor_args);
-    // Pass --cookies only for a file that exists, has content, AND holds a
-    // signed-in session. A non-empty but guest/stale file must not shadow the
-    // manual auth header (or degrade playback — yt-dlp aborts on a malformed
-    // --cookies file). Fall back to the header, then to neither.
-    if let Some(cp) = cookie_path
-        .filter(|cp| is_nonempty_cookie_file(cp) && file_has_auth_cookie(cp))
-    {
-        cmd.arg("--cookies");
-        cmd.arg(cp);
-    } else if let Some(ch) = cookie_header {
+    // Always use --add-header Cookie: instead of --cookies <file>.
+    // --cookies triggers yt-dlp's "tv downgraded" player API which returns only
+    // m3u8 HLS streams (no separate audio-only DASH formats), making bestaudio
+    // unavailable. --add-header returns the normal DASH format set.
+    if let Some(ch) = cookie_header {
         cmd.arg("--add-header");
         cmd.arg(format!("Cookie: {ch}"));
     }
@@ -147,6 +158,7 @@ pub async fn resolve_url(
     // the select!, the future is dropped and the child is killed. Without this,
     // a cancelled resolve left an orphan yt-dlp running for its full duration.
     cmd.kill_on_drop(true);
+    debug!(%video_id, ?js_runtime, "resolve: spawning yt-dlp with --print url -f bestaudio[ext=webm]/bestaudio");
     let child = match cmd.spawn() {
         Ok(child) => child,
         Err(e) => {
@@ -351,10 +363,12 @@ mod tests {
     }
 
     #[test]
-    fn signed_in_cookie_file_uses_cookies_arg() {
+    fn signed_in_cookie_file_uses_header() {
         use tokio::process::Command;
-        // A file carrying a signed-in session is the preferred auth source:
-        // `--cookies` wins over the manual header.
+        // A file carrying a signed-in session: always use --add-header Cookie:
+        // instead of --cookies, because --cookies triggers yt-dlp's "tv
+        // downgraded" player API which returns only m3u8 HLS streams (no DASH
+        // audio-only formats), making bestaudio unavailable.
         let signed = unique_tmp("signed_cookies");
         std::fs::write(
             &signed,
@@ -377,13 +391,13 @@ mod tests {
             .map(|a| a.to_string_lossy().into_owned())
             .collect();
         assert!(
-            args.windows(2)
-                .any(|w| w[0] == "--cookies" && w[1] == signed.to_str().unwrap()),
-            "signed-in file must be passed as --cookies: {args:?}"
+            !args.windows(2).any(|w| w[0] == "--cookies"),
+            "must not use --cookies (triggers tv downgraded API): {args:?}"
         );
         assert!(
-            !args.windows(2).any(|w| w[0] == "--add-header"),
-            "manual header must not override a signed-in file: {args:?}"
+            args.windows(2)
+                .any(|w| w[0] == "--add-header" && w[1] == "Cookie: SID=manual-header"),
+            "must use --add-header Cookie: for auth: {args:?}"
         );
         std::fs::remove_file(&signed).ok();
     }
@@ -410,6 +424,79 @@ mod tests {
         assert!(
             args.windows(2).any(|w| w[0] == "--ignore-config"),
             "expected --ignore-config in args: {args:?}"
+        );
+    }
+
+    #[test]
+    fn generator_configures_web_music_po_token() {
+        use tokio::process::Command;
+        // A configured generator + node must force the web_music client and
+        // pass the token in the `web_music.gvs+TOKEN` format that current
+        // yt-dlp requires (a bare token is rejected and skipped). Fail-first:
+        // the old code emitted a bare `po_token=<path>` with no player_client.
+        // The fake is JS because the app invokes it as `node <script> -c vid`.
+        let gen_script = unique_tmp("fake_generate.js");
+        std::fs::write(
+            &gen_script,
+            "console.log('{\"poToken\":\"fake.web_music.token\",\"contentBinding\":\"vid\",\"expiresAt\":\"2026-09-05T00:00:00Z\"}')\n",
+        )
+        .expect("write fake generator");
+
+        let mut cmd = Command::new("yt-dlp");
+        apply_ytdlp_auth_args(
+            &mut cmd,
+            Some(gen_script.to_str().expect("gen path")),
+            None,
+            None,
+            Some("node"),
+            "web-music-vid",
+        );
+        let args: Vec<String> = cmd
+            .as_std()
+            .get_args()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect();
+        let extractor = args
+            .windows(2)
+            .find(|w| w[0] == "--extractor-args")
+            .map(|w| w[1].clone())
+            .expect("extractor args present");
+        assert!(
+            extractor.contains("player_client=web_music"),
+            "must force web_music client: {extractor}"
+        );
+        assert!(
+            extractor.contains("po_token=web_music.gvs+fake.web_music.token"),
+            "must pass web_music.gvs+TOKEN: {extractor}"
+        );
+        std::fs::remove_file(&gen_script).ok();
+    }
+
+    #[test]
+    fn no_generator_skips_po_token_and_web_music() {
+        use tokio::process::Command;
+        // No generator path (or no node) -> no web_music forcing, no po_token:
+        // the historical ANDROID_VR/M4A path is preserved so a no-node/no-gen
+        // host does not regress into web_music (which requires a pot).
+        let mut cmd = Command::new("yt-dlp");
+        apply_ytdlp_auth_args(&mut cmd, None, None, None, None, "dQw4w9WgXcQ");
+        let args: Vec<String> = cmd
+            .as_std()
+            .get_args()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect();
+        let extractor = args
+            .windows(2)
+            .find(|w| w[0] == "--extractor-args")
+            .map(|w| w[1].clone())
+            .expect("extractor args present");
+        assert!(
+            !extractor.contains("player_client=web_music"),
+            "must NOT force web_music without a token: {extractor}"
+        );
+        assert!(
+            !extractor.contains("po_token="),
+            "must NOT pass a po_token without a generator: {extractor}"
         );
     }
 

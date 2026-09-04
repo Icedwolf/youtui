@@ -91,9 +91,12 @@ required for age-restricted (`18+`) content, which yt-dlp would otherwise refuse
 
 ### PO token information
 
-If yt-dlp downloads always fail with a sign-in/`po_token` error, you can supply a PO Token by
-saving it to `po_token.txt` in the config directory. For more information on PO Tokens and how
-to obtain them, see [the yt-dlp PO Token guide](https://github.com/yt-dlp/yt-dlp/wiki/Po-Token-Guide).
+YouTube Music now requires a GVS PO token for the `web_music` client and binds it to each
+*video ID*. A static `po_token.txt` no longer works (current yt-dlp rejects a bare token, and
+the token must be bound per song). youtui instead auto-mints a per-song token when both
+`node` and the bundled `pot-provider/generate.mjs` botguard script are present in
+`~/.config/youtui/` — no manual token file needed. No other action required; without the
+generator (no node/script) playback falls back to the previous behavior.
 
 ## Architecture notes
 

@@ -1,10 +1,19 @@
 # Youtui Backlog
 
 **Build:** 0 errors, 0 warnings, 0 clippy
-**Tests:** 364 youtui + 268 ytmapi-rs lib + doctests, +2 ignored (live network tests are flaky)
-**Last updated:** 2026-08-14
+**Tests:** 370 youtui + 268 ytmapi-rs lib + doctests, +2 ignored (live network tests are flaky)
+**Last updated:** 2026-09-04
 
 ## Completed
+
+### Session 2026-09-04 — Per-video GVS PO token: auto-generation rescues playback from the 403 throttle
+
+- **Root cause of the total download failure.** YouTube Music now requires a GVS PO token on the `web_music` (WEB_REMIX) client and binds it to each *video ID*. The prior ANDROID_VR URLs (and any no-pot URL) are refused `403 Forbidden (access denied)` at fetch time. yt-dlp-ejs (bundled 0.8.0) only solves the nsig/player-JS challenge — `[pot] PO Token Providers: none` — so a nsig-solved, no-pot URL still 403s. Verified: nsig-only URL → ffmpeg 403; a `web_music.gvs+TOKEN` URL → plays.
+- **The plugin path is dead on this host.** The `/usr/bin/yt-dlp` PyInstaller build reports `Plugin directories: none` and loads no external plugin, so a custom POT-provider plugin (the chosen direction) cannot work. Only option: generate the token Rust-side.
+- **Content binding = video ID.** A visitor_data-bound token played one song then 403'd a second (the bind-to-video-ID experiment is on 2026-09-04); a token bound to the song's `video_id` played cleanly across 5 different IDs, with no visitor_data alignment needed. Recipe: `node <config>/pot-provider/generate.mjs -c <video_id>` → token; yt-dlp `--extractor-args youtube:player_client=web_music;po_token=web_music.gvs+<TOKEN>;skip=hls,translated_subs` → WEB_REMIX itag-251 URL with `pot` that ffmpeg plays.
+- **New `pot.rs`:** `generate_po_token(video_id, gen_path, node)` runs the bundled generator, parses `poToken` from its JSON stdout, caches per-video-id (30min TTL, so a relay retry doesn't re-spawn node). `apply_ytdlp_auth_args` now forces `player_client=web_music` + `po_token=web_music.gvs+<token>` only when node + the generator produced a token; otherwise emits `skip=` alone (ANDROID_VR/M4A path preserved — no regression for no-node/no-gen hosts). `load_po_token` (main.rs) now locates `pot-provider/generate.mjs` instead of reading the obsolete `po_token.txt`; the dead `POTOKEN_FILENAME`/`POTOKEN_INFORMATION_URL` consts removed.
+- **Tests (fail-first):** `generator_configures_web_music_po_token` (red on the old bare-`po_token=` code; asserts `player_client=web_music` + `web_music.gvs+TOKEN`), `no_generator_skips_po_token_and_web_music`, plus `pot.rs` unit tests (`parse_po_token_*`, `no_node_yields_none`, `missing_generator_yields_none`). Verified: cargo check 0, clippy 0, 370 youtui tests green, `cargo build --release` clean, and the exact production command plays a real song (E2E).
+- Docs updated: DECISIONS.md:30-32, README `PO token information`, AGENTS.md (gitignored, local).
 
 ### Session 2026-08-14 — DECISIONS:31 sweep to all 14 list-parse abort sites; relay spawn-order flake fixed
 

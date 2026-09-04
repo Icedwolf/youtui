@@ -1,4 +1,5 @@
 mod cache;
+mod pot;
 pub(crate) mod resolve;
 
 pub use cache::{cache_clear, create_decoder_from_cache, set_cache_max_entries};
@@ -668,6 +669,7 @@ fn build_ytdlp_command(cfg: &DownloadConfig, format: &str) -> tokio::process::Co
         cfg.js_runtime.as_deref(),
         &cfg.video_id,
     );
+    debug!(%cfg.video_id, format, js_runtime = ?cfg.js_runtime, cookie_path = ?cfg.cookie_path, "build_ytdlp_command: spawning yt-dlp");
     cmd
 }
 

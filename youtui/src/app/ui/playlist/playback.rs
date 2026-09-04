@@ -720,7 +720,7 @@ Re-log into your browser, or refresh your cookie file / po_token, then restart."
                             })
                         }
                         Ok(Err(e)) => {
-                            let err = e.to_string();
+                            let err = format!("{:#}", e);
                             Box::new(move |this: &mut Playlist| {
                                 this.handle_song_download_progress_update(
                                     DownloadProgressUpdate::Error(err), song_id,
@@ -1460,7 +1460,7 @@ fn cancel_song_download(&self, id: ListSongID) {
                 if is_cancellation_error(&e) {
                     debug!("download_error: song_id={}, error={}", video_id, e);
                 } else {
-                    warn!("download_error: song_id={}, error={}", video_id, e);
+                    warn!("download_error: song_id={}, error={:#}", video_id, e);
                 }
                 if let Some(idx) = self.get_index_from_id(id)
                     && let Some(song) = self.list.get_list_iter_mut().nth(idx)
