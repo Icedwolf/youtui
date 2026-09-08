@@ -94,7 +94,7 @@ impl Playlist {
         let clipped: String = detail.chars().take(200).collect();
         let body = format!(
             "{clipped} — your YouTube login looks stale and songs are being skipped. \
-Re-log into your browser, or refresh your cookie file / po_token, then restart."
+Re-log into your browser, or check your cookie file / PO-token provider, then restart."
         );
         spawn_notification("YouTube Authentication Issue", &body, 8000);
     }
@@ -680,7 +680,7 @@ Re-log into your browser, or refresh your cookie file / po_token, then restart."
             move |server: &crate::app::server::ArcServer| {
                 let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
                 let yt_cmd = server.config.yt_dlp_command.clone();
-                let pt = server.po_token.clone();
+                let pot_provider = server.pot_provider.clone();
                 let cp = server.cookie_path.clone();
                 let ch = server.cookie_header.clone();
                 let jr = server.js_runtime.clone();
@@ -699,7 +699,7 @@ Re-log into your browser, or refresh your cookie file / po_token, then restart."
                         download_and_decode(crate::app::server::song_downloader::DownloadConfig {
                             yt_dlp_command: yt_cmd,
                             video_id: vid,
-                            po_token: pt,
+                            pot_provider,
                             cookie_path: cp,
                             cookie_header: ch,
                             js_runtime: jr,

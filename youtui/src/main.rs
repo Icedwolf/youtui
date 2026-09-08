@@ -358,7 +358,7 @@ pub(crate) struct RuntimeInfo {
     disable_media_controls: bool,
     config: Config,
     api_key: ApiKey,
-    po_token: Option<String>,
+    pot_provider: Option<app::PotProvider>,
 }
 
 #[tokio::main]
@@ -400,15 +400,14 @@ async fn try_main() -> anyhow::Result<()> {
     }
     // Once config has loaded, load API key to memory
     // (Which key to load depends on configuration)
-    // TODO: api_key and po_token could be more lazily loaded.
+    // TODO: api_key and the POT-provider paths could be more lazily loaded.
     let api_key = load_api_key(&config).await?;
-    // Use the bundled PO-token generator, if present (otherwise don't).
-    let po_token = load_po_token().await;
+    let pot_provider = load_pot_provider();
     let rt = RuntimeInfo {
         debug,
         config,
         api_key,
-        po_token,
+        pot_provider,
         disable_media_controls,
     };
     match cli.command {
@@ -475,18 +474,34 @@ pub(crate) fn get_config_dir() -> anyhow::Result<PathBuf> {
     Ok(directory)
 }
 
-/// Locate the bundled GVS PO-token generator script. Returns its path when the
-/// `pot-provider/generate.mjs` botguard script exists (node availability is
-/// checked separately at startup as `js_runtime`); `None` otherwise. The static
-/// `po_token.txt` scheme is obsolete: current yt-dlp rejects a bare token and
-/// YouTube binds the token to each video ID, so a real token must be minted
-/// per song by the generator at resolve time.
-async fn load_po_token() -> Option<String> {
-    let mut path = get_config_dir().ok()?;
-    path.push("pot-provider");
-    path.push("generate.mjs");
-    if tokio::fs::try_exists(&path).await.unwrap_or(false) {
-        Some(path.display().to_string())
+/// Detect the externally installed yt-dlp POT provider. Both assets are
+/// required: the plugin invokes the executable at resolve time, so exposing
+/// only one would force `web_music` without a token and fail resolution.
+fn load_pot_provider() -> Option<app::PotProvider> {
+    let config_dir = get_config_dir().ok()?;
+    let plugin_dir = config_dir.join("yt-dlp-plugins");
+    let cli = config_dir.join("bin/bgutil-pot");
+    let plugin = plugin_dir
+        .join("bgutil-ytdlp-pot-provider")
+        .join("yt_dlp_plugins");
+    let executable = std::fs::metadata(&cli)
+        .ok()
+        .is_some_and(|metadata| {
+            metadata.is_file()
+                && {
+                    #[cfg(unix)]
+                    {
+                        use std::os::unix::fs::PermissionsExt;
+                        metadata.permissions().mode() & 0o111 != 0
+                    }
+                    #[cfg(not(unix))]
+                    {
+                        true
+                    }
+                }
+        });
+    if plugin.is_dir() && executable {
+        Some(app::PotProvider { plugin_dir, cli })
     } else {
         None
     }

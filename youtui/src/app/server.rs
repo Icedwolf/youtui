@@ -1,5 +1,6 @@
 use crate::config::Config;
-use self::song_downloader::resolve::is_nonempty_cookie_file;
+use self::song_downloader::resolve::{PotProvider, is_nonempty_cookie_file};
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tracing::warn;
@@ -15,7 +16,7 @@ pub struct Server {
     pub api: api::Api,
     pub player: player::Player,
     pub config: Arc<Config>,
-    pub po_token: Option<String>,
+    pub pot_provider: Option<PotProvider>,
     pub cookie_path: Option<PathBuf>,
     pub cookie_header: Option<String>,
     pub js_runtime: Option<String>,
@@ -24,7 +25,7 @@ pub struct Server {
 impl Server {
     pub fn new(
         api_key: crate::config::ApiKey,
-        po_token: Option<String>,
+        pot_provider: Option<PotProvider>,
         config: &Config,
         cookie_path: Option<PathBuf>,
         js_runtime: Option<String>,
@@ -57,7 +58,7 @@ impl Server {
             api,
             player,
             config: Arc::new(config.clone()),
-            po_token,
+            pot_provider,
             cookie_path,
             cookie_header,
             js_runtime,
@@ -123,6 +124,7 @@ fn resolve_cookie_header(
 
 fn extract_cookie_header_str(cookie_str: &str) -> Option<String> {
     let mut cookies: Vec<String> = Vec::new();
+    let mut seen: HashSet<String> = HashSet::new();
     for line in cookie_str.lines() {
         let line = line.trim();
         if line.starts_with('#') || line.is_empty() {
@@ -130,7 +132,19 @@ fn extract_cookie_header_str(cookie_str: &str) -> Option<String> {
         }
         let fields: Vec<&str> = line.split('\t').collect();
         if fields.len() >= 7 {
-            cookies.push(format!("{}={}", fields[5], fields[6]));
+            // Netscape row: domain<TAB>...<TAB>name<TAB>value. Keep only the
+            // YouTube/Google domains and drop duplicate names — an all-domain
+            // browser export carries unrelated ad/analytics cookies that also
+            // push ffmpeg's request past its "overlong headers" limit.
+            let domain = fields[0];
+            if !(domain.ends_with(".youtube.com") || domain.ends_with(".google.com")) {
+                continue;
+            }
+            let name = fields[5];
+            if !seen.insert(name.to_string()) {
+                continue;
+            }
+            cookies.push(format!("{name}={}", fields[6]));
         } else {
             let header = line.strip_prefix("Cookie:").unwrap_or(line).trim();
             for kv in header.split(';') {
@@ -138,7 +152,7 @@ fn extract_cookie_header_str(cookie_str: &str) -> Option<String> {
                 if let Some((name, value)) = kv.split_once('=') {
                     let name = name.trim();
                     let value = value.trim();
-                    if !name.is_empty() && !value.is_empty() {
+                    if !name.is_empty() && !value.is_empty() && seen.insert(name.to_string()) {
                         cookies.push(format!("{name}={value}"));
                     }
                 }
@@ -253,8 +267,11 @@ Cookie: SAPISID=from_header";
         let result = extract_cookie_header(&api_key);
         assert!(result.is_some());
         let header = result.unwrap();
+        // First (Netscape) occurrence of a name wins; the duplicate from the
+        // trailing "Cookie:" line is dropped. Duplicate names with different
+        // values confuse the CDN's session binding.
         assert!(header.contains("SAPISID=from_netscape"));
-        assert!(header.contains("SAPISID=from_header"));
+        assert!(!header.contains("SAPISID=from_header"));
     }
 
     #[test]

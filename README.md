@@ -14,12 +14,15 @@ This project is not supported or endorsed by Google.
 - Search songs, artists, and playlists (songs only)
 - Queue management, shuffle, filter, sort
 - **Lossless streaming playback** — `bestaudio[ext=webm]` piped through ffmpeg to ALAC in a
-  fragmented MP4, decoded incrementally as it arrives. ~16 MB/song in RAM, no disk cache.
-  No pre-download buffering: the first frames stream in as soon as the URL resolves and the
-  first chunk arrives (resolve + first-byte latency are the dominant cost, typically 2-5s on
-  a cold start).
+  fragmented MP4, decoded incrementally as it arrives. In-RAM footprint varies with song
+  duration/source (recent 3–4 minute tracks measured about 45–90 MB of buffer), no disk cache.
+  The selected song always gets the initial download bandwidth; after its fill finishes, one
+  immediate successor may be filled while it plays. First frames stream in as soon as the URL
+  resolves and the first chunk arrives (resolve + first-byte latency are the dominant cost,
+  typically 2-5s on a cold start).
 - M4A/AAC full-download fallback when ffmpeg is unavailable.
-- In-memory audio cache (1 entry ≈ 32 MB total, configurable via `download_cache_size`).
+- In-memory audio cache (1 entry by default; each buffer's size varies with song
+  duration/source, configurable via `download_cache_size`).
 - One download at a time — no parallel yt-dlp/ffmpeg processes competing for bandwidth.
 - DBus MPRIS media keys, desktop notifications, configurable keybinds.
 
@@ -91,12 +94,38 @@ required for age-restricted (`18+`) content, which yt-dlp would otherwise refuse
 
 ### PO token information
 
-YouTube Music now requires a GVS PO token for the `web_music` client and binds it to each
-*video ID*. A static `po_token.txt` no longer works (current yt-dlp rejects a bare token, and
-the token must be bound per song). youtui instead auto-mints a per-song token when both
-`node` and the bundled `pot-provider/generate.mjs` botguard script are present in
-`~/.config/youtui/` — no manual token file needed. No other action required; without the
-generator (no node/script) playback falls back to the previous behavior.
+YouTube Music requires a GVS PO token for the `web_music` client and binds it to each *video
+ID*. A static `po_token.txt` does not work. youtui delegates minting to yt-dlp's POT framework:
+download the `bgutil-ytdlp-pot-provider-rs` release zip, extract its `yt_dlp_plugins/` directory
+to `~/.config/youtui/yt-dlp-plugins/bgutil-ytdlp-pot-provider/`, and place the Linux
+`bgutil-pot` release executable at `~/.config/youtui/bin/bgutil-pot` (`chmod 755`). The plugin
+supplies the per-video token to yt-dlp; youtui has no token generator of its own. Node is still
+required (if installed) — yt-dlp uses it as its JavaScript runtime to solve the nsig
+player-JS challenge. Both assets are required for `web_music` playback.
+
+**Required patch:** `bgutil-pot` keeps a per-video token cache on disk
+(`~/.cache/bgutil-ytdlp-pot-provider/cache.json`) that YouTube invalidates *before* the token's
+advertised expiry, so a replayed song is 403-refused (and the relay retry replays the same
+stale token). In
+`~/.config/youtui/yt-dlp-plugins/bgutil-ytdlp-pot-provider/yt_dlp_plugins/extractor/getpot_bgutil_cli.py`,
+make `--bypass-cache` unconditional — replace
+
+```python
+if request.bypass_cache:
+    command_args.append('--bypass-cache')
+```
+
+with
+
+```python
+command_args.append('--bypass-cache')
+```
+
+so a fresh token is minted on every resolve (minting is ~0.6s; the app's own 6-hour URL cache
+already deduplicates resolves). Note that `--bypass-cache` only disables *reading* the disk
+cache; `bgutil-pot` still *writes* `cache.json` after every mint, so the file keeps growing and
+never going stale isn't a sign the patch is missing — it is never consulted again after the
+patch.
 
 ## Architecture notes
 
@@ -106,9 +135,13 @@ generator (no node/script) playback falls back to the previous behavior.
   in the first ~700 bytes, so decoding starts from a few KB.
 - **No parallel downloads**: a semaphore (1 permit) is held from pipeline start until the
   background cache fill finishes, so a second ffmpeg can't spawn mid-song.
-- **No prefetch before playback**: nothing downloads until the selected song is actually
-  playing; then the next song is queued for download (1 ahead). The cache (default 1 entry)
-  keeps the current song's buffer so a re-select/replay is instant.
+- **Bounded successor fill**: nothing competes with the selected song's initial fill. Once it
+  completes, at most the immediately next song may fill while the current song plays; the cache
+  (default 1 entry) keeps replay/resume data in memory.
+- **CDN 403 → capped retry ladder**: a throttled direct-URL fetch retries via the credential
+  relay; a throttled relay gets one more relay attempt (three capped attempts total: URL →
+  relay → relay), so a song whose two fresh resolves were both refused by an intermittent CDN
+  wave plays on a third instead of skipping first.
 - Subprocesses run with a bounded environment (`env_clear()` + allowlist) — children never
   inherit the parent's oversized `envp` (E2BIG-safe by construction).
 

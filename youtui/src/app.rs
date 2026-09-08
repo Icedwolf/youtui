@@ -16,6 +16,7 @@ use queue_persistence::auto_save;
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
 use server::Server;
+pub(crate) use server::song_downloader::resolve::PotProvider;
 use std::borrow::Cow;
 use std::fmt::Display;
 use std::io;
@@ -84,7 +85,7 @@ impl Youtui {
         let RuntimeInfo {
             api_key,
             debug,
-            po_token,
+            pot_provider,
             config,
             disable_media_controls,
         } = rt;
@@ -166,7 +167,7 @@ impl Youtui {
         // Setup components
         let task_manager = effect::TaskManager::<YoutuiWindow>::new();
         let t_server = std::time::Instant::now();
-        let server = Arc::new(server::Server::new(api_key, po_token, &config, cookie_path, js_runtime)?);
+        let server = Arc::new(server::Server::new(api_key, pot_provider, &config, cookie_path, js_runtime)?);
         debug!(
             "startup_timing: Server::new() = {}ms",
             t_server.elapsed().as_millis()
@@ -220,12 +221,11 @@ impl Youtui {
         if let Some(first_song) = window_state.playlist.list.get_list_iter().next() {
             let vid = first_song.video_id.get_raw().to_string();
             let yt_cmd = server.config.yt_dlp_command.clone();
-            let pt = server.po_token.clone();
-            let cp = server.cookie_path.clone();
+            let pot_provider = server.pot_provider.clone();
             let jr = server.js_runtime.clone();
             let ch = server.cookie_header.clone();
             tokio::spawn(async move {
-                song_downloader::resolve_url(&vid, &yt_cmd, pt.as_deref(), cp.as_deref(), ch.as_deref(), jr.as_deref(), None).await;
+                song_downloader::resolve_url(&vid, &yt_cmd, pot_provider.as_ref(), ch.as_deref(), jr.as_deref(), None).await;
             });
         }
 

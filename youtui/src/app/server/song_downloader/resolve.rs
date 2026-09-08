@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::{LazyLock, Mutex};
 use std::time::Instant;
 
@@ -78,10 +78,23 @@ pub(crate) fn file_has_auth_cookie(path: &Path) -> bool {
     false
 }
 
+/// Locations of the yt-dlp POT provider plugin and the `bgutil-pot` binary.
+/// When both are present (detected once at startup), yt-dlp's own PO-token
+/// framework mints the per-video GVS token and attaches it to the `web_music`
+/// URL — the app carries no token code of its own.
+#[derive(Clone, Debug)]
+pub struct PotProvider {
+    /// Passed to `--plugin-dirs`; contains
+    /// `bgutil-ytdlp-pot-provider/yt_dlp_plugins/`.
+    pub plugin_dir: PathBuf,
+    /// The `bgutil-pot` executable, passed via
+    /// `--extractor-args youtubepot-bgutilcli:cli_path=`.
+    pub cli: PathBuf,
+}
+
 pub fn apply_ytdlp_auth_args(
     cmd: &mut tokio::process::Command,
-    po_token: Option<&str>,
-    _cookie_path: Option<&Path>,
+    pot_provider: Option<&PotProvider>,
     cookie_header: Option<&str>,
     js_runtime: Option<&str>,
     video_id: &str,
@@ -91,28 +104,21 @@ pub fn apply_ytdlp_auth_args(
     // owns the full argument list and must not inherit broken host config.
     cmd.arg("--ignore-config");
     let skip = "hls,translated_subs";
-    // `po_token` now carries the path to the bundled `pot-provider/generate.mjs`
-    // script (present only when node + the script exist at startup). When
-    // available, mint a per-video GVS token and force the `web_music` client:
-    // current yt-dlp requires the `CLIENT.CONTEXT+TOKEN` format, a bare token is
-    // skipped, and `web_music` is the client YouTube binds GVS tokens to. Only
-    // force `web_music` when a token exists — without a pot it errors out.
-    let extractor_args = if let (Some(gen_path), Some(node)) = (po_token, js_runtime) {
-        let path = std::path::Path::new(gen_path);
-        match super::pot::generate_po_token(video_id, path, Some(node)) {
-            Some(token) => format!(
-                "youtube:player_client=web_music;po_token=web_music.gvs+{token};skip={skip}"
-            ),
-            None => {
-                warn!(%video_id, "po_token: generation unavailable/failed — resolve without a token");
-                format!("youtube:skip={skip}")
-            }
-        }
+    // YouTube Music requires a per-video GVS PO token; the provider plugin +
+    // `bgutil-pot` binary let yt-dlp mint and attach it itself. Force
+    // `web_music` only when the provider is present — without a token that
+    // client errors out (the default no-pot clients are 403-refused at fetch).
+    if let Some(pp) = pot_provider {
+        cmd.arg("--plugin-dirs").arg(&pp.plugin_dir);
+        cmd.arg("--extractor-args").arg(format!(
+            "youtubepot-bgutilcli:cli_path={}",
+            pp.cli.display()
+        ));
+        cmd.arg("--extractor-args")
+            .arg(format!("youtube:player_client=web_music;skip={skip}"));
     } else {
-        format!("youtube:skip={skip}")
-    };
-    cmd.arg("--extractor-args");
-    cmd.arg(&extractor_args);
+        cmd.arg("--extractor-args").arg(format!("youtube:skip={skip}"));
+    }
     // Always use --add-header Cookie: instead of --cookies <file>.
     // --cookies triggers yt-dlp's "tv downgraded" player API which returns only
     // m3u8 HLS streams (no separate audio-only DASH formats), making bestaudio
@@ -131,8 +137,7 @@ pub fn apply_ytdlp_auth_args(
 pub async fn resolve_url(
     video_id: &str,
     yt_dlp_cmd: &str,
-    po_token: Option<&str>,
-    cookie_path: Option<&Path>,
+    pot_provider: Option<&PotProvider>,
     cookie_header: Option<&str>,
     js_runtime: Option<&str>,
     cancel_token: Option<&tokio_util::sync::CancellationToken>,
@@ -151,7 +156,7 @@ pub async fn resolve_url(
     cmd.arg("--print").arg("url");
     cmd.arg("-f").arg("bestaudio[ext=webm]/bestaudio");
     cmd.arg("--no-warnings").arg("--no-playlist");
-    apply_ytdlp_auth_args(&mut cmd, po_token, cookie_path, cookie_header, js_runtime, video_id);
+    apply_ytdlp_auth_args(&mut cmd, pot_provider, cookie_header, js_runtime, video_id);
     cmd.stdout(std::process::Stdio::piped());
     cmd.stderr(std::process::Stdio::piped());
     // kill_on_drop + child owned by the `resolve` future: when cancellation wins
@@ -214,8 +219,8 @@ pub async fn resolve_url(
 #[cfg(test)]
 mod tests {
     use super::{
-        ResolveOutcome, apply_ytdlp_auth_args, is_nonempty_cookie_file, resolve_url, url_cache_get,
-        url_cache_put, url_cache_remove,
+        PotProvider, ResolveOutcome, apply_ytdlp_auth_args, is_nonempty_cookie_file, resolve_url,
+        url_cache_get, url_cache_put, url_cache_remove,
     };
     use std::time::Duration;
 
@@ -267,7 +272,6 @@ mod tests {
             let url = resolve_url(
                 &format!("fake-video-{}", std::process::id()),
                 script.to_str().expect("script path"),
-                None,
                 None,
                 None,
                 None,
@@ -340,7 +344,6 @@ mod tests {
         apply_ytdlp_auth_args(
             &mut cmd,
             None,
-            Some(&guest),
             Some("SID=manual-signed-in; x=y"),
             None,
             "dQw4w9WgXcQ",
@@ -380,7 +383,6 @@ mod tests {
         apply_ytdlp_auth_args(
             &mut cmd,
             None,
-            Some(&signed),
             Some("SID=manual-header"),
             None,
             "dQw4w9WgXcQ",
@@ -408,8 +410,7 @@ mod tests {
         let mut cmd = Command::new("yt-dlp");
         apply_ytdlp_auth_args(
             &mut cmd,
-            Some("po"),
-            Some(std::path::Path::new("/nonexistent/cookies")),
+            None,
             Some("cookie=header"),
             None,
             "dQw4w9WgXcQ",
@@ -428,27 +429,19 @@ mod tests {
     }
 
     #[test]
-    fn generator_configures_web_music_po_token() {
+    fn pot_provider_configures_plugin_cli_and_web_music() {
         use tokio::process::Command;
-        // A configured generator + node must force the web_music client and
-        // pass the token in the `web_music.gvs+TOKEN` format that current
-        // yt-dlp requires (a bare token is rejected and skipped). Fail-first:
-        // the old code emitted a bare `po_token=<path>` with no player_client.
-        // The fake is JS because the app invokes it as `node <script> -c vid`.
-        let gen_script = unique_tmp("fake_generate.js");
-        std::fs::write(
-            &gen_script,
-            "console.log('{\"poToken\":\"fake.web_music.token\",\"contentBinding\":\"vid\",\"expiresAt\":\"2026-09-05T00:00:00Z\"}')\n",
-        )
-        .expect("write fake generator");
+        let provider = PotProvider {
+            plugin_dir: std::path::PathBuf::from("/plugins"),
+            cli: std::path::PathBuf::from("/bin/bgutil-pot"),
+        };
 
         let mut cmd = Command::new("yt-dlp");
         apply_ytdlp_auth_args(
             &mut cmd,
-            Some(gen_script.to_str().expect("gen path")),
+            Some(&provider),
             None,
             None,
-            Some("node"),
             "web-music-vid",
         );
         let args: Vec<String> = cmd
@@ -456,30 +449,34 @@ mod tests {
             .get_args()
             .map(|a| a.to_string_lossy().into_owned())
             .collect();
-        let extractor = args
-            .windows(2)
-            .find(|w| w[0] == "--extractor-args")
-            .map(|w| w[1].clone())
-            .expect("extractor args present");
         assert!(
-            extractor.contains("player_client=web_music"),
-            "must force web_music client: {extractor}"
+            args.windows(2).any(|w| w[0] == "--plugin-dirs" && w[1] == "/plugins"),
+            "must configure the plugin directory: {args:?}"
         );
         assert!(
-            extractor.contains("po_token=web_music.gvs+fake.web_music.token"),
-            "must pass web_music.gvs+TOKEN: {extractor}"
+            args.windows(2).any(|w| {
+                w[0] == "--extractor-args"
+                    && w[1] == "youtubepot-bgutilcli:cli_path=/bin/bgutil-pot"
+            }),
+            "must configure the bgutil CLI: {args:?}"
         );
-        std::fs::remove_file(&gen_script).ok();
+        assert!(
+            args.windows(2).any(|w| {
+                w[0] == "--extractor-args"
+                    && w[1].contains("player_client=web_music")
+                    && !w[1].contains("po_token=")
+            }),
+            "yt-dlp must mint the token itself for web_music: {args:?}"
+        );
     }
 
     #[test]
-    fn no_generator_skips_po_token_and_web_music() {
+    fn no_pot_provider_skips_web_music() {
         use tokio::process::Command;
-        // No generator path (or no node) -> no web_music forcing, no po_token:
-        // the historical ANDROID_VR/M4A path is preserved so a no-node/no-gen
-        // host does not regress into web_music (which requires a pot).
+        // Without both installed provider assets, do not force web_music,
+        // which requires a GVS token.
         let mut cmd = Command::new("yt-dlp");
-        apply_ytdlp_auth_args(&mut cmd, None, None, None, None, "dQw4w9WgXcQ");
+        apply_ytdlp_auth_args(&mut cmd, None, None, None, "dQw4w9WgXcQ");
         let args: Vec<String> = cmd
             .as_std()
             .get_args()
@@ -496,7 +493,7 @@ mod tests {
         );
         assert!(
             !extractor.contains("po_token="),
-            "must NOT pass a po_token without a generator: {extractor}"
+            "must NOT pass a PO token without a provider: {extractor}"
         );
     }
 
@@ -512,7 +509,6 @@ mod tests {
             let outcome = resolve_url(
                 "auth-video",
                 script.to_str().expect("script path"),
-                None,
                 None,
                 None,
                 None,
@@ -546,7 +542,6 @@ mod tests {
                 None,
                 None,
                 None,
-                None,
             )
             .await;
             assert!(
@@ -573,7 +568,6 @@ mod tests {
             let outcome = resolve_url(
                 "ok-video",
                 script.to_str().expect("script path"),
-                None,
                 None,
                 None,
                 None,

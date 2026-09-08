@@ -143,7 +143,7 @@ impl SharedBuffer {
 
     /// True when ffmpeg's direct HTTP fetch of the resolved stream URL was
     /// refused by the CDN (403 Forbidden). The video is not dead and the
-    /// session cookies are fine — this is the nsig/po_token throttling wave:
+    /// session cookies are fine — this is the nsig/GVS-token throttling wave:
     /// the same song re-fetched through the credential-carrying yt-dlp relay
     /// (or a freshly re-resolved URL) usually plays. Distinct from
     /// `is_auth_error`: a throttle must trigger a relay retry, never surface

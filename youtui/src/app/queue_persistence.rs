@@ -102,7 +102,7 @@ pub fn load_queue(
     debug!("Loading queue from path: {:?}", path);
 
     let json = fs::read_to_string(&path)?;
-    debug!("Read JSON: {}", json);
+    debug!(bytes = json.len(), "Read queue JSON");
 
     if let Ok(saved) = serde_json::from_str::<CompactSavedQueue>(&json) {
         debug!("Parsed as CompactSavedQueue ({} songs)", saved.songs.len());
