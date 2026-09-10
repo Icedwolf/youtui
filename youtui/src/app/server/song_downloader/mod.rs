@@ -649,6 +649,36 @@ fn relay_client_fallback_retry(
     }
 }
 
+/// Unified retry-decision ladder for the `'attempt` loop's three bail points
+/// (no-data, empty-pipe, ffmpeg-exit). Runs the throttle retry (relay →
+/// relay → relay, capped at three attempts) then the client fallback (default
+/// clients → web_music+POT, exactly once). Returns `true` when a retry was
+/// scheduled — the caller must `continue 'attempt`; `false` means no retry
+/// applies and the caller bails with its site-specific message.
+fn try_pipeline_retry(
+    buffer: &SharedBuffer,
+    relay_attempts: usize,
+    web_music_fallback_used: &mut bool,
+    provider_available: bool,
+    video_id: &str,
+    t0: tokio::time::Instant,
+) -> bool {
+    if relay_throttle_retry(buffer, relay_attempts, video_id, t0) {
+        return true;
+    }
+    if relay_client_fallback_retry(
+        buffer,
+        *web_music_fallback_used,
+        provider_available,
+        video_id,
+        t0,
+    ) {
+        *web_music_fallback_used = true;
+        return true;
+    }
+    false
+}
+
 /// Build the yt-dlp command for streaming a song to stdout, with the auth
 /// cookie/header applied. Shared by the relay (WebM→ffmpeg) and direct M4A
 /// paths; the caller configures stdio and spawns.
@@ -809,17 +839,14 @@ async fn ytdlp_pipeline(
             if cfg.cancel_token.is_cancelled() {
                 bail!("download cancelled during buffering");
             }
-            if relay_throttle_retry(&buffer, relay_attempts, &cfg.video_id, t0) {
-                continue 'attempt;
-            }
-            if relay_client_fallback_retry(
+            if try_pipeline_retry(
                 &buffer,
-                web_music_fallback_used,
+                relay_attempts,
+                &mut web_music_fallback_used,
                 cfg.pot_provider.is_some(),
                 &cfg.video_id,
                 t0,
             ) {
-                web_music_fallback_used = true;
                 continue 'attempt;
             }
             bail_failed_buffer(&buffer, &cfg.video_id, t0, "before data arrived")?;
@@ -875,17 +902,14 @@ async fn ytdlp_pipeline(
                         }
                     }
                 }
-                if relay_throttle_retry(&buffer, relay_attempts, &cfg.video_id, t0) {
-                    continue 'attempt;
-                }
-                if relay_client_fallback_retry(
+                if try_pipeline_retry(
                     &buffer,
-                    web_music_fallback_used,
+                    relay_attempts,
+                    &mut web_music_fallback_used,
                     cfg.pot_provider.is_some(),
                     &cfg.video_id,
                     t0,
                 ) {
-                    web_music_fallback_used = true;
                     continue 'attempt;
                 }
                 bail_failed_buffer(&buffer, &cfg.video_id, t0, "during empty-pipe wait")?;
@@ -945,17 +969,14 @@ async fn ytdlp_pipeline(
                         // — otherwise a throttled relay is misread as a generic
                         // failure and the song skips instead of relay-retrying.
                         tokio::task::yield_now().await;
-                        if relay_throttle_retry(&buffer, relay_attempts, &cfg.video_id, t0) {
-                            continue 'attempt;
-                        }
-                        if relay_client_fallback_retry(
+                        if try_pipeline_retry(
                             &buffer,
-                            web_music_fallback_used,
+                            relay_attempts,
+                            &mut web_music_fallback_used,
                             cfg.pot_provider.is_some(),
                             &cfg.video_id,
                             t0,
                         ) {
-                            web_music_fallback_used = true;
                             continue 'attempt;
                         }
                         bail!("ffmpeg exited with code {code}");
@@ -1491,6 +1512,37 @@ mod tests {
         assert!(!relay_client_fallback_retry(&throttled, false, true, "v1", t0));
         assert!(!relay_client_fallback_retry(&failed, false, true, "v1", t0));
         assert!(!relay_client_fallback_retry(&SharedBuffer::new(), false, true, "v1", t0));
+    }
+
+    #[test]
+    fn try_pipeline_retry_decision() {
+        let t0 = tokio::time::Instant::from_std(std::time::Instant::now());
+        let throttled = SharedBuffer::new();
+        throttled.mark_throttled();
+        let formats_gone = SharedBuffer::new();
+        formats_gone.mark_format_unavailable();
+        let plain = SharedBuffer::new();
+
+        // Throttle ladder wins: a throttled relay under the cap retries, and
+        // the web_music flag is NOT touched by a throttle retry.
+        let mut used = false;
+        assert!(try_pipeline_retry(&throttled, 1, &mut used, true, "v1", t0));
+        assert!(!used, "a throttle retry must not consume the client-fallback slot");
+        assert!(try_pipeline_retry(&throttled, 2, &mut used, true, "v1", t0));
+        // At the third throttled attempt the ladder falls through to the
+        // fallback check, which does not apply to a throttled buffer.
+        assert!(!try_pipeline_retry(&throttled, 3, &mut used, true, "v1", t0));
+
+        // Client fallback: a fresh format-unavailable refusal with a provider
+        // retries once AND commits the slot. A second use refuses.
+        let mut used = false;
+        assert!(try_pipeline_retry(&formats_gone, 1, &mut used, true, "v1", t0));
+        assert!(used, "the client fallback must commit its one-shot slot");
+        assert!(!try_pipeline_retry(&formats_gone, 1, &mut used, true, "v1", t0));
+        // No provider → nothing to escape to → refuse.
+        assert!(!try_pipeline_retry(&formats_gone, 1, &mut false, false, "v1", t0));
+        // Plain failure → no retry of any kind.
+        assert!(!try_pipeline_retry(&plain, 1, &mut false, true, "v1", t0));
     }
 
     // The E2E throttle tests below put fake `ffmpeg`/`yt-dlp` binaries on PATH
