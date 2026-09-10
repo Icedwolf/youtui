@@ -449,6 +449,15 @@ fn spawn_stderr_handler(
                         debug!(%video_id, total_bytes = bytes, "Parsed total size from yt-dlp progress");
                         buffer.set_total_len(bytes);
                     } else if line.contains("ERROR") {
+                        // `self_warned` distinguishes errors the classifier
+                        // already named with its own WARN (throttle / client
+                        // fallback) from errors whose only log signal is the
+                        // generic line below (dead video, auth, or novel
+                        // unclassified). The redundant generic line after a
+                        // classifier WARN is a duplicate entry during a throttle
+                        // wave (two WARNs per song); dead/auth must keep their
+                        // single WARN — that line is what surfaces them.
+                        let mut self_warned = false;
                         if is_permanently_unavailable(&line) {
                             buffer.mark_dead_video();
                         } else if is_auth_error_line(&line) {
@@ -462,6 +471,7 @@ fn spawn_stderr_handler(
                             warn!(%video_id, stderr_line = %line.trim(),
                                 "yt-dlp 403 (throttled), marking buffer for relay retry");
                             buffer.mark_throttled();
+                            self_warned = true;
                         } else if is_format_unavailable_line(&line) {
                             // The default clients have no playable formats
                             // (SABR/abandoned client), not a dead video. Mark
@@ -470,8 +480,15 @@ fn spawn_stderr_handler(
                             warn!(%video_id, stderr_line = %line.trim(),
                                 "yt-dlp format unavailable (client/scrape), marking buffer for client fallback");
                             buffer.mark_format_unavailable();
+                            self_warned = true;
                         }
-                        warn!(%video_id, stderr_line = %line.trim(), "yt-dlp stderr (error), failing buffer");
+                        if self_warned {
+                            debug!(%video_id, stderr_line = %line.trim(),
+                                "yt-dlp stderr (error), failing buffer");
+                        } else {
+                            warn!(%video_id, stderr_line = %line.trim(),
+                                "yt-dlp stderr (error), failing buffer");
+                        }
                         buffer.fail();
                     } else if line.contains("WARNING") {
                         debug!(%video_id, stderr_line = %line.trim(), "yt-dlp stderr (warning)");
