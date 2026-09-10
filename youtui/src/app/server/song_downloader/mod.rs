@@ -34,12 +34,16 @@ const BG_PROGRESS_POLL_MS: u64 = 1000;
 /// after playback starts, and a hard cap truncates the buffer mid-song.
 const BG_STALL_TIMEOUT_S: u64 = 60;
 const M4A_TOTAL_LEN_TIMEOUT_S: u64 = 15;
-/// A held next/prev key queues one download per press, and each download spawns
-/// a yt-dlp that mints a fresh PO token (~0.6s). A burst mints a flood of
-/// tokens — a bot signal the CDN answers with 403 throttles. This settle window
-/// (in `download_and_decode`, before the semaphore) lets a burst coalesce to its
-/// final song before any yt-dlp spawns.
-const RESOLVE_SETTLE_MS: u64 = 150;
+/// A held next/prev key queues one download per press, and each download would
+/// spawn its own yt-dlp extraction. The primary path is token-free since the
+/// client flip (DECISIONS.md:42) — no GVS mint — but a burst still fires a
+/// burst of extractions at YouTube, the original bot-signal/throttle trigger.
+/// This settle window (in `download_and_decode`, before the semaphore) lets a
+/// burst coalesce to its final song before any yt-dlp spawns. 100ms still
+/// covers key autorepeat (~30-40ms cadence) and any superseding press within
+/// it; a leak at a sub-100ms deliberate-mash cadence is a mint-free extraction
+/// killed on the next press — cheap next to the pre-flip mint flood.
+const RESOLVE_SETTLE_MS: u64 = 100;
 /// Shared tail of the ffmpeg invocation for ALAC-in-fragmented-mp4 streaming.
 /// The `-i pipe:0` input precedes these mux flags (see DECISIONS.md:10).
 const ALAC_FFMPEG_ARGS: [&str; 13] = [
@@ -99,7 +103,7 @@ fn parse_total_size(line: &str) -> Option<u64> {
     }
 }
 
-fn check_ffmpeg() -> bool {
+pub(crate) fn check_ffmpeg() -> bool {
     static HAS_FFMPEG: LazyLock<bool> = LazyLock::new(|| {
         let mut cmd = std::process::Command::new("ffmpeg");
         apply_child_env(&mut cmd);
@@ -369,15 +373,17 @@ pub(crate) const DEAD_VIDEO_ERR: &str = "video unavailable (yt-dlp error)";
 pub(crate) const AUTH_ERR: &str = "authentication error (stale cookies)";
 
 /// Classify a yt-dlp stderr line as a *permanently* unavailable video
-/// (removed, terminated account) as opposed to a transient error (bot-check,
-/// bad cookie file, format/network issue). Only the permanent class triggers
-/// auto-removal; everything else must never touch the queue.
+/// (removed, terminated account, region-blocked) as opposed to a transient
+/// error (bot-check, bad cookie file, format/network issue). The bare
+/// `Video unavailable` line is yt-dlp's own label for the permanently-dead
+/// class on the music extractor; the variant suffixes it once used to print
+/// (`... not available`, `... removed by the uploader`, `... in your country`)
+/// are all contained in it, so matching the bare phrase covers every form.
+/// Only the permanent class session-flags the song (skip + notify; never fed
+/// to the transient-failure halt counter); everything else stays transient.
 fn is_permanently_unavailable(line: &str) -> bool {
     let line = line.to_ascii_lowercase();
     line.contains("video unavailable")
-        && (line.contains("not available")
-            || line.contains("no longer available")
-            || line.contains("removed by the uploader"))
 }
 
 /// Classify a yt-dlp stderr line as an authentication/cookie problem: sign-in
@@ -457,10 +463,10 @@ fn spawn_stderr_handler(
                                 "yt-dlp 403 (throttled), marking buffer for relay retry");
                             buffer.mark_throttled();
                         } else if is_format_unavailable_line(&line) {
-                            // The forced client has no playable formats (GVS/SABR/
-                            // abandoned client), not a dead video. Mark it so the
-                            // pipeline retries once through the token-free
-                            // `android_vr` client.
+                            // The default clients have no playable formats
+                            // (SABR/abandoned client), not a dead video. Mark
+                            // it so the pipeline retries once through
+                            // `web_music` with the GVS-token provider.
                             warn!(%video_id, stderr_line = %line.trim(),
                                 "yt-dlp format unavailable (client/scrape), marking buffer for client fallback");
                             buffer.mark_format_unavailable();
@@ -619,23 +625,24 @@ fn relay_throttle_retry(
     }
 }
 
-/// Allow exactly one client fallback per song: when the forced `web_music`
-/// client reports no playable formats (`Requested format is not available`),
-/// retry once through `android_vr`, which returns a direct CDN URL without a
-/// GVS token. Bounded — once `android_fallback_used`, an android_vr retry
-/// that also fails is definitive (bail, halt counter intact). Only meaningful
-/// while a provider forces `web_music`; otherwise the default clients already
-/// include a token-free path and there is nothing to escape.
+/// Allow exactly one client fallback per song: when the default clients report
+/// no playable formats (`Requested format is not available`), retry once
+/// through `web_music`, where a present POT provider mints a fresh per-video
+/// GVS token (slow, ~9.4s, but the most reliably playable client). Bounded —
+/// once `web_music_fallback_used`, the fallback's own refusal is definitive
+/// (bail, halt counter intact). Only meaningful while a provider is installed:
+/// without one there is no token source to escape to, and the retry guard
+/// refuses.
 fn relay_client_fallback_retry(
     buffer: &SharedBuffer,
-    android_fallback_used: bool,
-    forcing_web_music: bool,
+    web_music_fallback_used: bool,
+    provider_available: bool,
     video_id: &str,
     t0: tokio::time::Instant,
 ) -> bool {
-    if buffer.is_format_unavailable() && !android_fallback_used && forcing_web_music {
+    if buffer.is_format_unavailable() && !web_music_fallback_used && provider_available {
         warn!(%video_id, elapsed = ?t0.elapsed(),
-            "web_music formats unavailable — retrying once via android_vr (no PO token)");
+            "default-client formats unavailable — retrying once via web_music (GVS token)");
         true
     } else {
         false
@@ -648,7 +655,7 @@ fn relay_client_fallback_retry(
 fn build_ytdlp_command(
     cfg: &DownloadConfig,
     format: &str,
-    android_fallback: bool,
+    web_music_fallback: bool,
 ) -> tokio::process::Command {
     let yt_dlp_cmd = if cfg.yt_dlp_command.is_empty() {
         "yt-dlp".to_string()
@@ -664,7 +671,7 @@ fn build_ytdlp_command(
         cfg.cookie_header.as_deref(),
         cfg.js_runtime.as_deref(),
         &cfg.video_id,
-        android_fallback,
+        web_music_fallback,
     );
     debug!(%cfg.video_id, format, js_runtime = ?cfg.js_runtime, cookie_path = ?cfg.cookie_path, "build_ytdlp_command: spawning yt-dlp");
     cmd
@@ -689,9 +696,9 @@ fn spawn_ytdlp(
     buffer: Arc<SharedBuffer>,
     t0: tokio::time::Instant,
     log_cancellation: bool,
-    android_fallback: bool,
+    web_music_fallback: bool,
 ) -> anyhow::Result<YtDlpSpawn> {
-    let mut cmd = build_ytdlp_command(cfg, format, android_fallback);
+    let mut cmd = build_ytdlp_command(cfg, format, web_music_fallback);
     cmd.stdout(std::process::Stdio::piped());
     cmd.stderr(std::process::Stdio::piped());
     cmd.kill_on_drop(true);
@@ -722,18 +729,22 @@ async fn ytdlp_pipeline(
     // ALAC transcoding requires ffmpeg; without it the pipeline must use the
     // direct M4A path, since symphonia cannot decode Opus in a webm container.
     //
-    // The relay is the only download path: yt-dlp (with auth + a fresh PO
-    // token) streams the audio, and ffmpeg transcodes it to fragmented-MP4
-    // ALAC. A throttled relay is retried up to twice (`relay_throttle_retry`),
-    // capped at three relay attempts total: the CDN's throttle wave occasionally
-    // beats two consecutive fresh mints and a third (fresh mint, possibly
-    // different edge) plays. Dead/auth failures never throttle, so a truly
-    // unplayable song fails fast. The
+    // The relay is the only download path: yt-dlp streams the audio, and
+    // ffmpeg transcodes it to fragmented-MP4 ALAC. The first attempt runs on
+    // yt-dlp's default (token-free) playback clients — measured ~2.5s to first
+    // byte vs ~9.4s for a web_music GVS mint — so the common path pays no
+    // resolve penalty. If the default clients report no playable formats, one
+    // bounded retry re-runs the pipeline through `web_music` + POT
+    // (`relay_client_fallback_retry`). A throttled relay is retried up to
+    // twice (`relay_throttle_retry`), capped at three relay attempts total: the
+    // CDN's throttle wave occasionally beats two consecutive fresh mints and a
+    // third (fresh mint, possibly different edge) plays. Dead/auth failures
+    // never throttle, so a truly unplayable song fails fast. The
     // permit stays owned by this function across attempts — it is only moved
     // into the background cache task on a successful streaming init, which
     // returns.
     let mut relay_attempts = 0;
-    let mut android_fallback_used = false;
+    let mut web_music_fallback_used = false;
     'attempt: loop {
         relay_attempts += 1;
 
@@ -755,7 +766,7 @@ async fn ytdlp_pipeline(
             let mut ffmpeg_stdin = ffmpeg_stdin.context("no ffmpeg stdin")?;
 
             let YtDlpSpawn { stderr_handle, stdout: yt_stdout, child: yt_dlp_child } =
-                spawn_ytdlp(cfg, "ba/bestaudio", buffer.clone(), t0, true, android_fallback_used)?;
+                spawn_ytdlp(cfg, "ba/bestaudio", buffer.clone(), t0, true, web_music_fallback_used)?;
 
             let relay = tokio::spawn(async move {
                 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -803,12 +814,12 @@ async fn ytdlp_pipeline(
             }
             if relay_client_fallback_retry(
                 &buffer,
-                android_fallback_used,
+                web_music_fallback_used,
                 cfg.pot_provider.is_some(),
                 &cfg.video_id,
                 t0,
             ) {
-                android_fallback_used = true;
+                web_music_fallback_used = true;
                 continue 'attempt;
             }
             bail_failed_buffer(&buffer, &cfg.video_id, t0, "before data arrived")?;
@@ -869,12 +880,12 @@ async fn ytdlp_pipeline(
                 }
                 if relay_client_fallback_retry(
                     &buffer,
-                    android_fallback_used,
+                    web_music_fallback_used,
                     cfg.pot_provider.is_some(),
                     &cfg.video_id,
                     t0,
                 ) {
-                    android_fallback_used = true;
+                    web_music_fallback_used = true;
                     continue 'attempt;
                 }
                 bail_failed_buffer(&buffer, &cfg.video_id, t0, "during empty-pipe wait")?;
@@ -939,12 +950,12 @@ async fn ytdlp_pipeline(
                         }
                         if relay_client_fallback_retry(
                             &buffer,
-                            android_fallback_used,
+                            web_music_fallback_used,
                             cfg.pot_provider.is_some(),
                             &cfg.video_id,
                             t0,
                         ) {
-                            android_fallback_used = true;
+                            web_music_fallback_used = true;
                             continue 'attempt;
                         }
                         bail!("ffmpeg exited with code {code}");
@@ -1328,6 +1339,8 @@ mod tests {
             "ERROR: [youtube] 5cmbsjSt3K0: Video unavailable. This video is not available",
             "ERROR: [youtube] 4y5R7urKjAQ: Video unavailable. This video is no longer available because the YouTube account associated with this video has been terminated.",
             "ERROR: [youtube] X: Video unavailable. This video has been removed by the uploader",
+            "ERROR: [youtube] gPBZjyavHwc: Video unavailable",
+            "ERROR: [youtube] X: Video unavailable in your country",
         ];
         for line in permanent {
             assert!(is_permanently_unavailable(line), "expected permanent: {line}");
@@ -1464,14 +1477,14 @@ mod tests {
         let throttled = SharedBuffer::new();
         throttled.mark_throttled();
 
-        // A fresh web_music attempt with formats unavailable gets exactly one
-        // android_vr fallback (once per song).
+        // A fresh default-client attempt with formats unavailable gets exactly
+        // one web_music fallback (once per song).
         assert!(relay_client_fallback_retry(&formats_gone, false, true, "v1", t0));
-        // An already-fallen-back song never falls back again — the android_vr
+        // An already-fallen-back song never falls back again — the web_music
         // attempt's own failure is definitive.
         assert!(!relay_client_fallback_retry(&formats_gone, true, true, "v1", t0));
-        // No fallback when no provider forces web_music: the default clients
-        // already include a token-free path.
+        // No fallback without a provider: there is no GVS token source to
+        // escape to, so the default-clients refusal is definitive.
         assert!(!relay_client_fallback_retry(&formats_gone, false, false, "v1", t0));
         // Classifiers stay exclusive: a throttle/plain failure is NOT a
         // reason to switch clients.
@@ -1736,12 +1749,133 @@ cat\n",
     }
 
     #[test]
-    fn web_music_format_unavailable_falls_back_to_android_vr_and_plays() {
-        // The client-fallback repro: driven with a stale/unsolvable `web_music`
-        // conf, yt-dlp refuses with "Requested format is not available" (no
-        // 403). The video is not dead — the token client is. The pipeline must
-        // retry exactly once through the token-free `android_vr` client, which
-        // streams the fixture, instead of skipping the song.
+    fn cancel_download_during_settle_never_spawns_ytdlp() {
+        // A press superseded within the settle window must abort before any
+        // yt-dlp spawn: the settle exists so a held next/prev burst coalesces to
+        // its final song instead of spawning one extraction per press. Cancel
+        // 60ms in (inside the 100ms window) and assert no yt-dlp ever touched
+        // the counter file — a settle removed/shortened below the cancel point
+        // would let the pipeline reach the spawn and fail this.
+        let _pipe = PIPELINE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _sem = SEMAPHORE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _cache = CACHE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+
+        let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
+        rt.block_on(async {
+            let fakebin = FakePath::new();
+            let ffmpeg_log = fakebin.dir.join("ffmpeg.log");
+            write_fake_bin(&fakebin.dir, "ffmpeg", &fake_ffmpeg_body(&ffmpeg_log));
+            let count_file = fakebin.dir.join("yt-dlp_count");
+            write_fake_bin(
+                &fakebin.dir,
+                "yt-dlp",
+                &format!(
+                    "{}echo 1 >> '{}'\ncat '{}'\n",
+                    YTDLP_FAKE_HEAD,
+                    count_file.display(),
+                    alac_fixture_path().display(),
+                ),
+            );
+
+            let token = tokio_util::sync::CancellationToken::new();
+            let cfg = DownloadConfig {
+                yt_dlp_command: "yt-dlp".to_string(),
+                video_id: format!("settle-e2e-{}", std::process::id()),
+                pot_provider: None,
+                cookie_path: None,
+                cookie_header: None,
+                js_runtime: None,
+                cancel_token: token.clone(),
+            };
+
+            let handle = tokio::spawn(download_and_decode(cfg));
+            tokio::time::sleep(std::time::Duration::from_millis(60)).await;
+            token.cancel();
+            let result = handle.await.expect("download task must not panic");
+            let err = match result {
+                Ok(_) => panic!("a cancel within the settle window must abort the download"),
+                Err(e) => e,
+            };
+            assert!(
+                err.to_string().contains("settle"),
+                "cancel inside the settle window must bail at the settle, got: {err}"
+            );
+            assert!(
+                !count_file.exists(),
+                "no yt-dlp may spawn while the settle window is open; \
+                 a removed/shortened settle lets the pipeline reach the spawn"
+            );
+        });
+    }
+
+    #[test]
+    fn download_and_decode_pre_cancelled_bails_without_spawning() {
+        // A token already cancelled before the download begins must bail at the
+        // pre-start check, never reaching the settle or the yt-dlp spawn.
+        let _pipe = PIPELINE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _sem = SEMAPHORE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _cache = CACHE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+
+        let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
+        rt.block_on(async {
+            let fakebin = FakePath::new();
+            let ffmpeg_log = fakebin.dir.join("ffmpeg.log");
+            write_fake_bin(&fakebin.dir, "ffmpeg", &fake_ffmpeg_body(&ffmpeg_log));
+            let count_file = fakebin.dir.join("yt-dlp_count");
+            write_fake_bin(
+                &fakebin.dir,
+                "yt-dlp",
+                &format!("{}echo 1 >> '{}'\nexit 1\n", YTDLP_FAKE_HEAD, count_file.display()),
+            );
+
+            let token = tokio_util::sync::CancellationToken::new();
+            token.cancel();
+            let cfg = DownloadConfig {
+                yt_dlp_command: "yt-dlp".to_string(),
+                video_id: format!("precancel-e2e-{}", std::process::id()),
+                pot_provider: None,
+                cookie_path: None,
+                cookie_header: None,
+                js_runtime: None,
+                cancel_token: token,
+            };
+
+            let err = match download_and_decode(cfg).await {
+                Ok(_) => panic!("a pre-cancelled token must abort the download"),
+                Err(e) => e,
+            };
+            assert!(
+                err.to_string().contains("before start"),
+                "pre-cancelled download must bail at the pre-start check, got: {err}"
+            );
+            assert!(
+                !count_file.exists(),
+                "a pre-cancelled download must never spawn yt-dlp"
+            );
+        });
+    }
+
+    #[test]
+    #[allow(clippy::assertions_on_constants)] // intentionally a compile-time contract guard
+    fn settle_window_still_covers_key_autorepeat() {
+        // X11/Wayland key autorepeat cadence is ~30-40ms. The settle window
+        // must stay above the worst-case repeat gap, or a held key leaks a
+        // spawn per press and the burst-coalescing purpose (and the throttle
+        // protection it buys) silently degrades.
+        assert!(
+            RESOLVE_SETTLE_MS > 50,
+            "settle window {RESOLVE_SETTLE_MS}ms must stay above the ~40ms key-repeat cadence"
+        );
+    }
+
+    #[test]
+    fn default_client_format_unavailable_falls_back_to_web_music_and_plays() {
+        // The client-fallback repro after the primary/fallback flip: the common
+        // path runs yt-dlp's default (token-free) clients; if they report
+        // "Requested format is not available" (SABR experiment stripping
+        // formats, abandoned default), the video is not dead — the client is.
+        // The pipeline must retry exactly once through `web_music` + the POT
+        // provider, which streams the fixture, instead of skipping the song.
         let _pipe = PIPELINE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let _sem = SEMAPHORE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let _cache = CACHE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
@@ -1752,15 +1886,15 @@ cat\n",
             let ffmpeg_log = fakebin.dir.join("ffmpeg.log");
             write_fake_bin(&fakebin.dir, "ffmpeg", &fake_ffmpeg_body(&ffmpeg_log));
             let fixture = alac_fixture_path();
-            // The android_vr attempt (recognized by its player_client arg)
-            // streams the fixture; the web_music attempt dies with the
-            // format-not-available refusal.
+            // The web_music fallback attempt (recognized by its player_client
+            // arg) streams the fixture; the default-clients attempt dies with
+            // the format-not-available refusal.
             write_fake_bin(
                 &fakebin.dir,
                 "yt-dlp",
                 &format!(
                     "{}case \" $* \" in\n\
-                     *android_vr*) cat '{}'; exit 0 ;;\n\
+                     *web_music*) cat '{}'; exit 0 ;;\n\
                      esac\n\
                      echo 'ERROR: [youtube] xyz: Requested format is not available' >&2\n\
                      exit 1\n",
@@ -1785,15 +1919,15 @@ cat\n",
 
             let mut decoder = download_and_decode(cfg)
                 .await
-                .expect("a web_music format refusal must fall back to android_vr and play");
+                .expect("a default-client format refusal must fall back to web_music and play");
             assert!(
                 time_to_first_frame(&mut decoder, 1024).is_some(),
-                "the android_vr fallback download must produce audio frames"
+                "the web_music fallback download must produce audio frames"
             );
             assert_eq!(
                 ffmpeg_relay_invocations(&ffmpeg_log),
                 2,
-                "exactly one fallback attempt: web_music (rejected) + android_vr (streamed) \
+                "exactly one fallback attempt: default clients (rejected) + web_music (streamed) \
                  = two pipe:0 spawns"
             );
         });
@@ -1838,7 +1972,7 @@ cat\n",
 
             let err = match download_and_decode(cfg).await {
                 Ok(_) => panic!(
-                    "an android_vr fallback that also refuses the format must not play"
+                    "a web_music fallback that also refuses the format must not play"
                 ),
                 Err(e) => e,
             };
@@ -1850,7 +1984,7 @@ cat\n",
             assert_eq!(
                 ffmpeg_relay_invocations(&ffmpeg_log),
                 2,
-                "exactly one fallback attempt (web_music + android_vr) then bail; \
+                "exactly one fallback attempt (default clients + web_music) then bail; \
                  no third attempt"
             );
         });

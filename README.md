@@ -94,14 +94,17 @@ required for age-restricted (`18+`) content, which yt-dlp would otherwise refuse
 
 ### PO token information
 
-YouTube Music requires a GVS PO token for the `web_music` client and binds it to each *video
-ID*. A static `po_token.txt` does not work. youtui delegates minting to yt-dlp's POT framework:
-download the `bgutil-ytdlp-pot-provider-rs` release zip, extract its `yt_dlp_plugins/` directory
-to `~/.config/youtui/yt-dlp-plugins/bgutil-ytdlp-pot-provider/`, and place the Linux
+YouTube Music's `web_music` client requires a GVS PO token bound to each *video ID*, and a static
+`po_token.txt` does not work. youtui's primary download path **avoids the token entirely**: it runs
+yt-dlp's default (token-free) clients — measured ~2.5s to first byte on the 2026-08-30 nightly,
+versus ~9.4s for a forced `web_music` mint — so the provider is only used as the bounded
+client-fallback safety net below. When it fires, youtui delegates minting to yt-dlp's POT
+framework: download the `bgutil-ytdlp-pot-provider-rs` release zip, extract its `yt_dlp_plugins/`
+directory to `~/.config/youtui/yt-dlp-plugins/bgutil-ytdlp-pot-provider/`, and place the Linux
 `bgutil-pot` release executable at `~/.config/youtui/bin/bgutil-pot` (`chmod 755`). The plugin
 supplies the per-video token to yt-dlp; youtui has no token generator of its own. Node is still
 required (if installed) — yt-dlp uses it as its JavaScript runtime to solve the nsig
-player-JS challenge. Both assets are required for `web_music` playback.
+player-JS challenge. Both assets are required for the `web_music` fallback to fire.
 
 **Required patch:** `bgutil-pot` keeps a per-video token cache on disk
 (`~/.cache/bgutil-ytdlp-pot-provider/cache.json`) that YouTube invalidates *before* the token's
@@ -143,10 +146,13 @@ patch.
   (three capped attempts total), so a song whose early fresh resolve+fetch attempts were
   refused by an intermittent CDN wave plays on a later one instead of skipping — even
   when the wave beats two consecutive fresh mints.
-- **Client fallback (bounded)**: a forced-`web_music` refusal (`Requested format is not
-  available` — GVS/SABR/unsolvable client) retries the song **exactly once** through the
-  token-free `android_vr` client before bailing, so an abandoned client never skips a
-  playable song.
+- **Token-free default clients first**: the primary attempt runs yt-dlp's default playback
+  clients (no client pinning, no POT mint) — the fast common path. yt-dlp tracks the moving
+  token-free client target itself (android_vr was removed upstream in 2026-08-19/#17461).
+- **Client fallback (bounded)**: a default-client refusal (`Requested format is not
+  available` — SABR experiment stripping formats / abandoned client) retries the song
+  **exactly once** through `web_music` with the GVS-token provider before bailing, so an
+  abandoned client never skips a playable song.
 - Subprocesses run with a bounded environment (`env_clear()` + allowlist) — children never
   inherit the parent's oversized `envp` (E2BIG-safe by construction).
 

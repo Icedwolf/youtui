@@ -31,6 +31,11 @@ impl Server {
         js_runtime: Option<String>,
     ) -> anyhow::Result<Server> {
         let cookie_header = resolve_cookie_header(cookie_path.as_deref(), &api_key);
+        // Warm the ffmpeg-presence probe at startup. `check_ffmpeg` is a
+        // LazyLock, so its one-time `ffmpeg -version` spawn (~50-100ms) lands
+        // on the first download's critical path otherwise; running it here
+        // turns the first song's `check_ffmpeg()` into a sub-ns cache hit.
+        song_downloader::check_ffmpeg();
         let downloader_client = {
             use reqwest::header::{COOKIE, HeaderMap, HeaderValue};
             if let Some(ref cookie) = cookie_header {

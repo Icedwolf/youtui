@@ -478,7 +478,9 @@ pub(crate) fn get_config_dir() -> anyhow::Result<PathBuf> {
 
 /// Detect the externally installed yt-dlp POT provider. Both assets are
 /// required: the plugin invokes the executable at resolve time, so exposing
-/// only one would force `web_music` without a token and fail resolution.
+/// only one would make the `web_music` client-fallback retry mint a token
+/// without its CLI and fail. The provider is only used on that fallback —
+/// the primary download runs yt-dlp's token-free default clients.
 fn load_pot_provider() -> Option<app::PotProvider> {
     let config_dir = get_config_dir().ok()?;
     let plugin_dir = config_dir.join("yt-dlp-plugins");

@@ -165,11 +165,11 @@ impl SharedBuffer {
     }
 
     /// True when yt-dlp reported that the requested format set is unavailable
-    /// on the forced player client (`Requested format is not available`).
+    /// on the default player clients (`Requested format is not available`).
     /// Distinct from `is_throttled`/`is_dead_video`/`is_auth_error`: the video
-    /// is fine but the client cannot serve it (GVS/un-SABR'd/abandoned
-    /// client), so the pipeline retries once through a token-free client
-    /// (`android_vr`) instead of skipping the song.
+    /// is fine but the default clients cannot serve it (SABR experiment /
+    /// abandoned client), so the pipeline retries once through the `web_music`
+    /// client with the GVS-token provider instead of skipping the song.
     #[must_use]
     pub fn is_format_unavailable(&self) -> bool {
         self.inner.lock().unwrap_or_warn().format_unavailable

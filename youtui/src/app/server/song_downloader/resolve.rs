@@ -33,8 +33,9 @@ pub(crate) fn file_has_auth_cookie(path: &Path) -> bool {
 
 /// Locations of the yt-dlp POT provider plugin and the `bgutil-pot` binary.
 /// When both are present (detected once at startup), yt-dlp's own PO-token
-/// framework mints the per-video GVS token and attaches it to the `web_music`
-/// URL — the app carries no token code of its own.
+/// framework can mint a per-video GVS token and attach it to a `web_music`
+/// URL — used only by the client-fallback retry, never the primary attempt.
+/// The app carries no token code of its own.
 #[derive(Clone, Debug)]
 pub struct PotProvider {
     /// Passed to `--plugin-dirs`; contains
@@ -45,41 +46,56 @@ pub struct PotProvider {
     pub cli: PathBuf,
 }
 
+/// Apply the auth/client argument set a yt-dlp streaming child needs.
+///
+/// The **primary** attempt (`web_music_fallback = false`) uses yt-dlp's default
+/// playback clients (token-free, ~2.5s to first byte on the 2026-08-30 nightly)
+/// and ignores the POT provider entirely — the provider is only wired in on the
+/// **fallback** retry, when the default clients report no playable formats.
+/// yt-dlp itself tracks the (moving) token-free client target (android_vr was
+/// removed in 2026-08-19/#17461; web_embedded refuses embedded-only content),
+/// so the fast common path needs no client pinning at all.
 pub fn apply_ytdlp_auth_args(
     cmd: &mut tokio::process::Command,
     pot_provider: Option<&PotProvider>,
     cookie_header: Option<&str>,
     js_runtime: Option<&str>,
     video_id: &str,
-    android_fallback: bool,
+    web_music_fallback: bool,
 ) {
     // Ignore yt-dlp's own config files (~/.config/yt-dlp/config etc). A
     // zero-byte `--cookies` entry there would hard-fail every download; youtui
     // owns the full argument list and must not inherit broken host config.
     cmd.arg("--ignore-config");
     let skip = "hls,translated_subs";
-    if android_fallback {
-        // Client-fallback attempt: `web_music` had no playable formats, so
-        // retry through `android_vr`, which returns a direct CDN URL without a
-        // GVS PO token (verified current-client dry-run). No plugin/pot args
-        // needed — forcing the token client is exactly what failed.
-        cmd.arg("--extractor-args")
-            .arg(format!("youtube:player_client=android_vr;skip={skip}"));
-    } else if let Some(pp) = pot_provider {
-        cmd.arg("--plugin-dirs").arg(&pp.plugin_dir);
-        cmd.arg("--extractor-args").arg(format!(
-            "youtubepot-bgutilcli:cli_path={}",
-            pp.cli.display()
-        ));
-        cmd.arg("--extractor-args")
-            .arg(format!("youtube:player_client=web_music;skip={skip}"));
+    if web_music_fallback {
+        // Client-fallback attempt: the default clients had no playable formats
+        // (SABR experiment / abandoned client), so retry through `web_music`
+        // with the GVS PO-token provider — slow (~9.4s first byte) but the most
+        // reliably playable client. Only meaningful with a provider present;
+        // without one there is nothing to escape to, so degrade to the default
+        // clients (the retry guard never requests this combination).
+        if let Some(pp) = pot_provider {
+            cmd.arg("--plugin-dirs").arg(&pp.plugin_dir);
+            cmd.arg("--extractor-args").arg(format!(
+                "youtubepot-bgutilcli:cli_path={}",
+                pp.cli.display()
+            ));
+            cmd.arg("--extractor-args")
+                .arg(format!("youtube:player_client=web_music;skip={skip}"));
+        } else {
+            cmd.arg("--extractor-args")
+                .arg(format!("youtube:skip={skip}"));
+        }
     } else {
         cmd.arg("--extractor-args").arg(format!("youtube:skip={skip}"));
     }
-    // Always use --add-header Cookie: instead of --cookies <file>.
-    // --cookies triggers yt-dlp's "tv downgraded" player API which returns only
-    // m3u8 HLS streams (no separate audio-only DASH formats), making bestaudio
-    // unavailable. --add-header returns the normal DASH format set.
+    // Always use --add-header Cookie: instead of --cookies <file>. The
+    // historical --cookies "tv downgraded" m3u8-only regression (yt-dlp reading
+    // a signed-in Netscape file probed the downgraded player API) is fixed on
+    // the 2026-08-30 nightly (itag-251/proto=https re-test), but a --cookies
+    // run still resolves ~2x slower (signed-in client probing, 6.5s vs 2.9s),
+    // so the header stays for the fast single-song hot path.
     if let Some(ch) = cookie_header {
         cmd.arg("--add-header");
         cmd.arg(format!("Cookie: {ch}"));
@@ -224,8 +240,12 @@ mod tests {
     }
 
     #[test]
-    fn pot_provider_configures_plugin_cli_and_web_music() {
+    fn pot_provider_keeps_primary_on_default_clients() {
         use tokio::process::Command;
+        // The provider's presence must NOT force web_music on the primary
+        // attempt: the common path stays on yt-dlp's default (token-free)
+        // clients — measured ~2.5s to first byte vs ~9.4s for a web_music
+        // GVS mint. The provider is only wired in by the fallback retry.
         let provider = PotProvider {
             plugin_dir: std::path::PathBuf::from("/plugins"),
             cli: std::path::PathBuf::from("/bin/bgutil-pot"),
@@ -246,23 +266,20 @@ mod tests {
             .map(|a| a.to_string_lossy().into_owned())
             .collect();
         assert!(
-            args.windows(2).any(|w| w[0] == "--plugin-dirs" && w[1] == "/plugins"),
-            "must configure the plugin directory: {args:?}"
+            !args.windows(2).any(|w| w[0] == "--plugin-dirs"),
+            "primary must not pass --plugin-dirs (stays token-free): {args:?}"
+        );
+        assert!(
+            !args.windows(2).any(|w| {
+                w[0] == "--extractor-args" && w[1].contains("player_client=web_music")
+            }),
+            "primary must not force web_music: {args:?}"
         );
         assert!(
             args.windows(2).any(|w| {
-                w[0] == "--extractor-args"
-                    && w[1] == "youtubepot-bgutilcli:cli_path=/bin/bgutil-pot"
+                w[0] == "--extractor-args" && w[1] == "youtube:skip=hls,translated_subs"
             }),
-            "must configure the bgutil CLI: {args:?}"
-        );
-        assert!(
-            args.windows(2).any(|w| {
-                w[0] == "--extractor-args"
-                    && w[1].contains("player_client=web_music")
-                    && !w[1].contains("po_token=")
-            }),
-            "yt-dlp must mint the token itself for web_music: {args:?}"
+            "primary must use the default clients (skip-only): {args:?}"
         );
     }
 
@@ -294,11 +311,12 @@ mod tests {
     }
 
     #[test]
-    fn android_fallback_uses_tokenfree_client() {
+    fn web_music_fallback_configures_plugin_cli_and_web_music() {
         use tokio::process::Command;
-        // The client-fallback retry must force `android_vr` (direct CDN URL,
-        // no GVS token) and skip the POT plugin entirely — the token client is
-        // exactly what failed.
+        // The client-fallback retry must wire up the POT provider and force
+        // `web_music`: the default clients had no playable formats, so yt-dlp
+        // mints a fresh GVS token for the most reliably playable client.
+        // Only when a provider is present (the pair is the token's source).
         let provider = PotProvider {
             plugin_dir: std::path::PathBuf::from("/plugins"),
             cli: std::path::PathBuf::from("/bin/bgutil-pot"),
@@ -324,17 +342,18 @@ mod tests {
             .map(|w| &w[1])
             .collect();
         assert!(
-            extractors.iter().any(|e| e.contains("player_client=android_vr")),
-            "client fallback must force android_vr: {args:?}"
+            args.windows(2).any(|w| w[0] == "--plugin-dirs" && w[1] == "/plugins"),
+            "client fallback must configure the plugin directory: {args:?}"
         );
         assert!(
-            !extractors.iter().any(|e| e.contains("player_client=web_music"))
-                && !extractors.iter().any(|e| e.contains("bgutilcli")),
-            "client fallback must not force the token client or plugin: {args:?}"
+            extractors.iter().any(|e| e.contains("player_client=web_music")),
+            "client fallback must force web_music: {args:?}"
         );
         assert!(
-            !args.windows(2).any(|w| w[0] == "--plugin-dirs"),
-            "client fallback must not pass --plugin-dirs: {args:?}"
+            extractors
+                .iter()
+                .any(|e| e.contains("youtubepot-bgutilcli:cli_path=")),
+            "client fallback must configure the bgutil CLI (token source): {args:?}"
         );
         assert!(
             args.windows(2)
