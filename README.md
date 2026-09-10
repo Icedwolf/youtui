@@ -121,27 +121,32 @@ with
 command_args.append('--bypass-cache')
 ```
 
-so a fresh token is minted on every resolve (minting is ~0.6s; the app's own 6-hour URL cache
-already deduplicates resolves). Note that `--bypass-cache` only disables *reading* the disk
+so a fresh token is minted on every download (minting is ~0.6s; the in-memory audio cache
+already deduplicates replay). Note that `--bypass-cache` only disables *reading* the disk
 cache; `bgutil-pot` still *writes* `cache.json` after every mint, so the file keeps growing and
 never going stale isn't a sign the patch is missing — it is never consulted again after the
 patch.
 
 ## Architecture notes
 
-- **Streaming path**: `resolve_url` (yt-dlp) → ffmpeg (`-f mp4 -movflags
+- **Streaming path**: yt-dlp relay (`-o -`) piped to ffmpeg (`-f mp4 -movflags
   empty_moov+default_base_moof+frag_every_frame -c:a alac`) → non-seekable buffer →
   symphonia isomp4 incremental decode. `empty_moov` puts the moov atom (ALAC sample entry)
-  in the first ~700 bytes, so decoding starts from a few KB.
+  in the first ~700 bytes, so decoding starts from a few KB. A no-ffmpeg host falls back to a
+  full-download M4A.
 - **No parallel downloads**: a semaphore (1 permit) is held from pipeline start until the
   background cache fill finishes, so a second ffmpeg can't spawn mid-song.
 - **Bounded successor fill**: nothing competes with the selected song's initial fill. Once it
   completes, at most the immediately next song may fill while the current song plays; the cache
   (default 1 entry) keeps replay/resume data in memory.
-- **CDN 403 → capped retry ladder**: a throttled direct-URL fetch retries via the credential
-  relay; a throttled relay gets one more relay attempt (three capped attempts total: URL →
-  relay → relay), so a song whose two fresh resolves were both refused by an intermittent CDN
-  wave plays on a third instead of skipping first.
+- **CDN 403 → capped relay retry**: a throttled yt-dlp relay gets up to two retries
+  (three capped attempts total), so a song whose early fresh resolve+fetch attempts were
+  refused by an intermittent CDN wave plays on a later one instead of skipping — even
+  when the wave beats two consecutive fresh mints.
+- **Client fallback (bounded)**: a forced-`web_music` refusal (`Requested format is not
+  available` — GVS/SABR/unsolvable client) retries the song **exactly once** through the
+  token-free `android_vr` client before bailing, so an abandoned client never skips a
+  playable song.
 - Subprocesses run with a bounded environment (`env_clear()` + allowlist) — children never
   inherit the parent's oversized `envp` (E2BIG-safe by construction).
 

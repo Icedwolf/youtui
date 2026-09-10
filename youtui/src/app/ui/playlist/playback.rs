@@ -1334,8 +1334,13 @@ fn cancel_song_download(&self, id: ListSongID) {
     }
 
     fn regenerate_downloads_for_current(&mut self) -> Effects<Self> {
+        // No drop_unscoped_from_id here: download_upcoming_from_id already
+        // restores the scope via cancel_out_of_scope_downloads with the same
+        // inclusive {current, next} membership. The half-open drop boundary
+        // would cancel an already-in-flight next-song prebuffer and the caller
+        // would re-resolve it a moment later — a wasted yt-dlp round trip per
+        // song start.
         if let Some(current_id) = self.get_cur_playing_id() {
-            self.drop_unscoped_from_id(current_id);
             self.download_upcoming_from_id(current_id)
         } else {
             Effects::none()

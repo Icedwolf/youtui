@@ -341,6 +341,7 @@ mod state_transitions {
         DownloadProgressUpdate, HALT_AFTER_CONSECUTIVE_FAILURES, Playlist, PlaylistAction,
         QueueState, is_auth_error, is_dead_video_error,
     };
+    use std::sync::Arc;
     use crate::app::view::HasTitle;
     use pretty_assertions::assert_eq;
     use ratatui::style::Color;
@@ -1751,6 +1752,72 @@ mod state_transitions {
         assert!(
             p.shuffle_regen_token.is_none(),
             "handle_playing must clear the pending shuffle regen"
+        );
+    }
+
+    #[test]
+    fn handle_playing_regen_preserves_inflight_prebuffer() {
+        let mut p = undownloaded_songs(3);
+        let id0 = p.get_id_from_index(0).expect("song 0");
+        let id1 = p.get_id_from_index(1).expect("song 1");
+
+        let _ = p.play_song(id0);
+        assert_eq!(p.play_status, PlayState::Buffering(id0));
+
+        // The buffering-phase prebuffer already has the next song's resolve in
+        // flight when playback actually starts. handle_playing's scope regen
+        // must NOT cancel and re-resolve it.
+        let _ = p.download_upcoming_from_id(id0);
+        let prebuffer_token = p
+            .active_downloads
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .iter()
+            .find(|(sid, task)| *sid == id1 && !task.cancel_token.is_cancelled())
+            .map(|(_, task)| Arc::clone(&task.cancel_token))
+            .expect("prebuffer download for the next song must be registered");
+
+        let _ = p.handle_playing(Some(std::time::Duration::from_secs(180)), id0);
+
+        let downloads = p.active_downloads.lock().unwrap_or_else(|e| e.into_inner());
+        let (_, task) = downloads
+            .iter()
+            .find(|(sid, _)| *sid == id1)
+            .expect("next-song prebuffer must stay registered after the regen");
+        assert!(
+            !task.cancel_token.is_cancelled(),
+            "handle_playing's scope regen must not cancel the in-flight next-song prebuffer"
+        );
+        assert!(
+            Arc::ptr_eq(&prebuffer_token, &task.cancel_token),
+            "the regen must reuse the same prebuffer download, not cancel+re-create it"
+        );
+    }
+
+    #[test]
+    fn handle_playing_regen_still_cancels_out_of_scope_downloads() {
+        let mut p = undownloaded_songs(4);
+        let id0 = p.get_id_from_index(0).expect("song 0");
+        let id2 = p.get_id_from_index(2).expect("song 2");
+
+        let _ = p.play_song(id0);
+        // A stray download outside the {current + next} scope.
+        let _ = p.download_song(id2);
+        let token = p
+            .active_downloads
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .iter()
+            .find(|(sid, _)| *sid == id2)
+            .map(|(_, task)| Arc::clone(&task.cancel_token))
+            .expect("out-of-scope download must be registered");
+        assert!(!token.is_cancelled(), "precondition: download in flight");
+
+        let _ = p.handle_playing(Some(std::time::Duration::from_secs(180)), id0);
+
+        assert!(
+            token.is_cancelled(),
+            "handle_playing's regen must still cancel out-of-scope downloads"
         );
     }
 

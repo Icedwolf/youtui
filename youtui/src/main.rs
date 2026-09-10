@@ -399,8 +399,10 @@ async fn try_main() -> anyhow::Result<()> {
         config.auth_type = auth_type
     }
     // Once config has loaded, load API key to memory
-    // (Which key to load depends on configuration)
-    // TODO: api_key and the POT-provider paths could be more lazily loaded.
+    // (Which key to load depends on configuration). Both the app and every CLI
+    // command consume these, and the cost is a single small cookie-file read +
+    // a couple of stat syscalls — lazy-loading would add indirection for no
+    // measurable startup gain.
     let api_key = load_api_key(&config).await?;
     let pot_provider = load_pot_provider();
     let rt = RuntimeInfo {

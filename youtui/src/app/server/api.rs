@@ -743,7 +743,10 @@ fn get_playlist_songs(
             Ok(api) => api,
         };
         let query = ytmapi_rs::query::GetPlaylistTracksQuery::new((&playlist_id).into());
-        // TODO: Streaming
+        // Deliberately fetches only the first page of a playlist's tracks (no
+        // continuation pagination) — full multi-page playlist loading is out of
+        // scope for a single-song-hot-path player, and the single batch already
+        // streams its items over the channel in one `Songs` update.
         let first_tracks = query_api_with_retry(&api, query).await;
         match first_tracks {
             Ok(t) => {

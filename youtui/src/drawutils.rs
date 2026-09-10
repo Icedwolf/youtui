@@ -9,7 +9,8 @@ use ratatui::widgets::{Block, Borders};
 // Standard app colour scheme
 pub(crate) const SELECTED_BORDER_COLOUR: Color = Color::Cyan;
 pub(crate) const DESELECTED_BORDER_COLOUR: Color = Color::Reset;
-// TODO: Implement in all locations.
+// Theming is out of scope (suckless player) — TEXT_COLOUR stays `Reset`, a
+// no-op default. Do not wire configurable colours.
 pub(crate) const TEXT_COLOUR: Color = Color::Reset;
 pub(crate) const BUTTON_BG_COLOUR: Color = Color::Gray;
 pub(crate) const BUTTON_FG_COLOUR: Color = Color::Black;

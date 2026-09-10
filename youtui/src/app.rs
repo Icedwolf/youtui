@@ -27,7 +27,6 @@ use server::song_downloader;
 use structures::ListSong;
 use tracing::{debug, error, info, warn};
 use tracing_subscriber::prelude::*;
-use ytmapi_rs::common::YoutubeID;
 use ui::{WindowContext, YoutuiWindow};
 
 #[macro_use]
@@ -215,18 +214,6 @@ impl Youtui {
             Err(e) => {
                 debug!("Auto-load failed ({}). Starting with empty playlist.", e);
             }
-        }
-
-        // Pre-resolve the first song's URL to avoid cold 2-4s latency on first play.
-        if let Some(first_song) = window_state.playlist.list.get_list_iter().next() {
-            let vid = first_song.video_id.get_raw().to_string();
-            let yt_cmd = server.config.yt_dlp_command.clone();
-            let pot_provider = server.pot_provider.clone();
-            let jr = server.js_runtime.clone();
-            let ch = server.cookie_header.clone();
-            tokio::spawn(async move {
-                song_downloader::resolve_url(&vid, &yt_cmd, pot_provider.as_ref(), ch.as_deref(), jr.as_deref(), None).await;
-            });
         }
 
         Ok(Youtui {

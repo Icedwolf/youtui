@@ -82,9 +82,13 @@ Located in `youtui/src/config/keymap.rs`:
 ### Persistence
 
 Queue saving in `youtui/src/app/queue_persistence.rs`:
-- Saves only `video_id` for minimal file size
-- On load, creates placeholder `ListSong::create_placeholder()`
-- Metadata refreshes when songs are fetched via API
+- Stores each song's `video_id` + display metadata (`title`, `artists`,
+  `album`, `duration_string`) as a compact `CompactSongRef`, so a restored
+  queue renders instantly with no network round-trips (a 136k-song autosave
+  is ~19 MB and loads in ~300 ms)
+- Metadata is NOT refreshed after load — it comes straight from the file
+- Older `LegacySong` (full `ListSong`) files are normalized to the compact
+  format on load
 
 ## Adding New Features
 

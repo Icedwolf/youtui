@@ -503,17 +503,11 @@ impl SongSearchBrowser {
                 TextEntryAction::Submit => {
                     return self.search();
                 }
-                // Handled by old handle_text_event_impl.
-                //
-                // TODO: remove the duplication of responsibilities between this function and
-                // handle_text_event_impl.
-                TextEntryAction::Left => (),
-                TextEntryAction::Right => (),
-                TextEntryAction::Backspace => (),
                 TextEntryAction::DeleteWord => {
                     self.search.delete_word();
                     return Effects::none();
                 }
+                _ => return Effects::none(),
             }
         }
         Effects::none()

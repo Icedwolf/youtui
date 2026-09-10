@@ -8,6 +8,7 @@ struct SharedBufferInner {
     dead_video: bool,
     auth_error: bool,
     throttled: bool,
+    format_unavailable: bool,
     total_len: Option<u64>,
     state: BufferState,
 }
@@ -58,6 +59,7 @@ impl SharedBuffer {
                 dead_video: false,
                 auth_error: false,
                 throttled: false,
+                format_unavailable: false,
                 total_len: None,
                 state: BufferState::Partial(Vec::with_capacity(cap)),
             }),
@@ -141,14 +143,13 @@ impl SharedBuffer {
         guard.auth_error = true;
     }
 
-    /// True when ffmpeg's direct HTTP fetch of the resolved stream URL was
-    /// refused by the CDN (403 Forbidden). The video is not dead and the
-    /// session cookies are fine — this is the nsig/GVS-token throttling wave:
-    /// the same song re-fetched through the credential-carrying yt-dlp relay
-    /// (or a freshly re-resolved URL) usually plays. Distinct from
-    /// `is_auth_error`: a throttle must trigger a relay retry, never surface
-    /// as stale cookies. `mark_throttled` also fails the buffer so the
-    /// init-wait/empty-pipe loops break into classification immediately.
+    /// True when the relay's yt-dlp reported the CDN refused the fetch
+    /// (403 Forbidden). The video is not dead and the session cookies are
+    /// fine — this is the nsig/GVS-token throttling wave: a fresh relay mint
+    /// usually plays. Distinct from `is_auth_error`: a throttle must trigger
+    /// a relay retry, never surface as stale cookies. `mark_throttled` also
+    /// fails the buffer so the init-wait/empty-pipe loops break into
+    /// classification immediately.
     #[must_use]
     pub fn is_throttled(&self) -> bool {
         self.inner.lock().unwrap_or_warn().throttled
@@ -161,6 +162,22 @@ impl SharedBuffer {
         guard.finished = true;
         record_len_if_unknown(&mut guard);
         self.cvar.notify_all();
+    }
+
+    /// True when yt-dlp reported that the requested format set is unavailable
+    /// on the forced player client (`Requested format is not available`).
+    /// Distinct from `is_throttled`/`is_dead_video`/`is_auth_error`: the video
+    /// is fine but the client cannot serve it (GVS/un-SABR'd/abandoned
+    /// client), so the pipeline retries once through a token-free client
+    /// (`android_vr`) instead of skipping the song.
+    #[must_use]
+    pub fn is_format_unavailable(&self) -> bool {
+        self.inner.lock().unwrap_or_warn().format_unavailable
+    }
+
+    pub fn mark_format_unavailable(&self) {
+        let mut guard = self.inner.lock().unwrap_or_warn();
+        guard.format_unavailable = true;
     }
 
     pub fn fail(&self) {
