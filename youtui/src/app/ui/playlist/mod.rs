@@ -139,6 +139,7 @@ pub struct Playlist {
     auth_notif_last: Option<std::time::Instant>,
     consecutive_download_failures: u8,
     shuffle_regen_token: Option<tokio_util::sync::CancellationToken>,
+    last_download_trigger: Option<std::time::Instant>,
 }
 
 impl Component for Playlist {}

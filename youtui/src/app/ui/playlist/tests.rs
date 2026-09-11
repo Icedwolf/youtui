@@ -1911,4 +1911,97 @@ mod state_transitions {
             "an idle shuffle toggle must clear a stale pending regen token"
         );
     }
+
+    #[test]
+    fn fresh_settle_window_for_is_zero() {
+        let p = undownloaded_songs(1);
+        assert_eq!(
+            p.settle_window_for(),
+            0,
+            "an isolated selection with no prior trigger must skip the settle"
+        );
+    }
+
+    #[test]
+    fn recent_trigger_yields_full_settle_window() {
+        let mut p = undownloaded_songs(1);
+        p.last_download_trigger = Some(std::time::Instant::now());
+        assert_eq!(
+            p.settle_window_for(),
+            crate::app::server::song_downloader::RESOLVE_SETTLE_MS,
+            "a selection within the window of the previous one is a burst"
+        );
+    }
+
+    #[test]
+    fn stale_trigger_skips_settle_window() {
+        let mut p = undownloaded_songs(1);
+        p.last_download_trigger = Some(
+            std::time::Instant::now()
+                - std::time::Duration::from_millis(
+                    crate::app::server::song_downloader::RESOLVE_SETTLE_MS + 1,
+                ),
+        );
+        assert_eq!(
+            p.settle_window_for(),
+            0,
+            "an old trigger is an isolated selection, not a burst"
+        );
+    }
+
+    #[test]
+    fn live_download_yields_full_settle_window() {
+        let p = undownloaded_songs(1);
+        p.active_downloads.lock().unwrap_or_else(|e| e.into_inner()).push((
+            p.get_id_from_index(0).expect("song 0"),
+            crate::app::ui::playlist::DownloadTask {
+                cancel_token: Arc::new(tokio_util::sync::CancellationToken::new()),
+            },
+        ));
+        assert_eq!(
+            p.settle_window_for(),
+            crate::app::server::song_downloader::RESOLVE_SETTLE_MS,
+            "a streaming fill is a live burst signal"
+        );
+    }
+
+    #[test]
+    fn burst_second_press_coalesces_after_out_of_scope_drop() {
+        let mut p = undownloaded_songs(3);
+        let id0 = p.get_id_from_index(0).expect("song 0");
+        let id1 = p.get_id_from_index(1).expect("song 1");
+        // Press 1: registers its download and ticks the trigger.
+        let _ = p.download_song(id0);
+        assert!(
+            p.last_download_trigger.is_some(),
+            "selecting a song must record the trigger"
+        );
+        // The scope change (`play_song` → `prepare_playback_id` →
+        // `drop_unscoped_from_id`) drops press-1's out-of-scope entry BEFORE
+        // press 2's decision runs — the exact storm shape the settle was built
+        // for. Without the trigger signal, press 2 would see an empty set and
+        // skip the settle, spawning one yt-dlp per held-key press.
+        p.active_downloads
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .retain(|(sid, _)| *sid != id0);
+        assert_eq!(
+            p.settle_window_for(),
+            crate::app::server::song_downloader::RESOLVE_SETTLE_MS,
+            "press 2 within the window of press 1 must still coalesce"
+        );
+        let _ = id1;
+    }
+
+    #[test]
+    fn download_song_ticks_last_download_trigger() {
+        let mut p = undownloaded_songs(1);
+        assert!(p.last_download_trigger.is_none());
+        let id0 = p.get_id_from_index(0).expect("song 0");
+        let _effect = p.download_song(id0);
+        assert!(
+            p.last_download_trigger.is_some(),
+            "selecting a song must record the trigger so the next rapid press coalesces"
+        );
+    }
 }

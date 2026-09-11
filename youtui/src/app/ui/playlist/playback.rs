@@ -67,6 +67,7 @@ impl Playlist {
             auth_notif_last: None,
             consecutive_download_failures: 0,
             shuffle_regen_token: None,
+            last_download_trigger: None,
         };
 
         (playlist, task)
@@ -592,12 +593,42 @@ Re-log into your browser, or check your cookie file / PO-token provider, then re
         combined_effect
     }
 
+    /// The coalescing window a new download should pay, decided from the two
+    /// burst signals: a live download in `active_downloads` (steady-play fill)
+    /// or a selection/trigger fired within `RESOLVE_SETTLE_MS`. Pure — does not
+    /// mutate state — so the decision is unit-testable without a server.
+    pub(crate) fn settle_window_for(&self) -> u64 {
+        let has_live_download = !self.active_downloads.lock().unwrap_or_warn().is_empty();
+        let recent_trigger = self.last_download_trigger.is_some_and(|t| {
+            t.elapsed() <= std::time::Duration::from_millis(
+                crate::app::server::song_downloader::RESOLVE_SETTLE_MS,
+            )
+        });
+        crate::app::server::song_downloader::settle_window_ms(
+            has_live_download || recent_trigger,
+        )
+    }
+
     pub fn download_song(&mut self, id: ListSongID) -> Effects<Self> {
         let Some(song_index) = self.get_index_from_id(id) else {
             debug!("download_song: song id {:?} not found", id);
             self.play_status = PlayState::NotPlaying;
             return Effects::none();
         };
+
+        // Rapid-switch coalescing window: engage the full settle only when a
+        // download burst may be in progress. Two signals catch the two burst
+        // shapes: a live download (the current song's fill streaming during
+        // steady play) OR a just-fired trigger — a selection whose download
+        // already left `active_downloads`, because `play_song` →
+        // `prepare_playback_id` → `drop_unscoped_from_id` cancels and removes
+        // the previous press's out-of-scope entry *before* this decision runs.
+        // Without the trigger signal, every rapid press past the first would
+        // observe an empty set and skip the settle — a held-key burst would
+        // spawn one yt-dlp per press, the storm this window exists to prevent.
+        // An isolated selection with neither signal pays 0ms.
+        let settle_window_ms = self.settle_window_for();
+        self.last_download_trigger = Some(std::time::Instant::now());
 
         let song = match self.list.get_list_iter_mut().nth(song_index) {
             Some(s) => s,
@@ -649,14 +680,6 @@ Re-log into your browser, or check your cookie file / PO-token provider, then re
 
         let cancel_token = Arc::new(tokio_util::sync::CancellationToken::new());
         let cancel_token_for_stream = cancel_token.clone();
-
-        // Rapid-switch coalescing window: engage the full settle only when a
-        // download is already live (a burst may be in progress; the press chain
-        // keeps the previous press's download in-scope here). An isolated
-        // selection with nothing live pays 0ms — the common single-song hot
-        // path skips the wait entirely.
-        let settle_window_ms =
-            crate::app::server::song_downloader::settle_window_ms(!self.active_downloads.lock().unwrap_or_warn().is_empty());
 
         let mut downloads = self.active_downloads.lock().unwrap_or_warn();
         if downloads.iter().any(|(sid, task)| *sid == id && !task.cancel_token.is_cancelled()) {

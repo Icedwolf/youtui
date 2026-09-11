@@ -836,6 +836,8 @@ async fn ytdlp_pipeline(
             let (_ffmpeg_stderr_handle, write_handle, ffmpeg_child, ffmpeg_stdin) =
                 spawn_ffmpeg(writer, "ffmpeg", &cfg.video_id)?;
             let mut ffmpeg_stdin = ffmpeg_stdin.context("no ffmpeg stdin")?;
+            let video_id = cfg.video_id.clone();
+            let buffer_for_first = buffer.clone();
 
             let YtDlpSpawn { stderr_handle, stdout: yt_stdout, child: yt_dlp_child } =
                 spawn_ytdlp(cfg, "ba/bestaudio", buffer.clone(), t0, true, web_music_fallback_used)?;
@@ -844,12 +846,18 @@ async fn ytdlp_pipeline(
                 use tokio::io::{AsyncReadExt, AsyncWriteExt};
                 let mut rdr = tokio::io::BufReader::new(yt_stdout);
                 let mut buf = vec![0u8; READ_BUF_SIZE];
+                let mut first_write = true;
                 loop {
                     match rdr.read(&mut buf).await {
                         Ok(0) => break,
                         Ok(n) => {
                             if ffmpeg_stdin.write_all(&buf[..n]).await.is_err() {
                                 break;
+                            }
+                            if first_write {
+                                first_write = false;
+                                debug!(%video_id, buf_len = buffer_for_first.len(), elapsed = ?t0.elapsed(),
+                                    "relay: first chunk forwarded to ffmpeg");
                             }
                         }
                         Err(_) => break,
