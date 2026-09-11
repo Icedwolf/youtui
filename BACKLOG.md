@@ -1,10 +1,16 @@
 # Youtui Backlog
 
 **Build:** 0 errors, 0 warnings, 0 clippy
-**Tests:** 368 youtui bins + 2 ignored green (workspace 643 passed/20 ignored)
+**Tests:** 371 youtui bins + 2 ignored green (3 clean parallel runs)
 **Last updated:** 2026-09-11
 
 ## Completed
+
+### Session 2026-09-11 — Conditional settle; pipeline cleanup (retry-ladder + log dedup)
+
+- **The 100ms settle is now conditional: an isolated selection pays zero, a live download pays the full window.** `settle_window_ms(has_live_download)` in `download_song` reads `active_downloads` at selection time (before scope cancels clear burst predecessors): non-empty → full 100ms window (a rapid-switch burst may be in progress); empty → 0ms, skipping the `select!` entirely. Storm-proof by construction: a next/prev burst keeps each press's download in-scope for the following press (it is that press's "next" prebuffer), so every press after the first observes a live download and coalesces; the first idle press (empty) is the only 0ms path, leaking one token-free extraction killed on the next press. Prebuffer and cache-hit paths never reach `download_song` (the preloaded/cache decoder path at `play_song` is unchanged, unaffected). The field is injectable per-download (`DownloadConfig.settle_window_ms`), making the decision deterministically testable.
+- **Pipeline cleanup: retry-ladder DRY, error-log dedup.** `try_pipeline_retry` helper unifies the three identical throttle+client-fallback blocks in the `'attempt` loop (:812, :878, :948) into one call site + decision-table test (`try_pipeline_retry_decision`). The error-handler bare `warn!("failing buffer")` after classifier warns now fires only for unclassified errors; throttle/format lines (already logged by their classifier) get `debug!` — one warn per song in a wave, not two; dead/auth/novel unclassified keep their sole warn (decidability preserved). No behavior change to buffer state or classifier tests. (Commits `7146ecb`, `0d47f3a`.)
+- **Tests (fail-first proven):** `isolated_download_skips_settle_spawns_immediately` — fake-bin yt-dlp records spawn-nanos via argv-guarded fake; asserts spawn at <60ms — **RED at RESOLVE_SETTLE_MS (spawn at 105ms)**, GREEN at 0ms; parallel-safe (guard on unique video_id in case `$*`). `settle_window_ms_decides_on_live_downloads` — pure decision test (true→100ms, false→0). `try_pipeline_retry_decision` — existing decision-table guard for the new helper. Pinned test `cancel_download_during_settle_never_spawns_ytdlp` updated to document the burst-modeling via the explicit `settle_window_ms: RESOLVE_SETTLE_MS` field. Three consecutive clean parallel `cargo test -p youtui --bins` runs (371 passed, 2 ignored), clippy 0, release clean (68s). (Commits `7146ecb`, `0d47f3a`.)
 
 ### Session 2026-09-11 — Start-latency trims: settle 150→100ms; ffmpeg probe pre-warmed
 

@@ -43,7 +43,28 @@ const M4A_TOTAL_LEN_TIMEOUT_S: u64 = 15;
 /// covers key autorepeat (~30-40ms cadence) and any superseding press within
 /// it; a leak at a sub-100ms deliberate-mash cadence is a mint-free extraction
 /// killed on the next press — cheap next to the pre-flip mint flood.
-const RESOLVE_SETTLE_MS: u64 = 100;
+///
+/// The window is *conditional*: `settle_window_ms` is 0 when no download is
+/// live at selection time. An isolated select (idle -> chosen song, or a
+/// fresh choice after the previous fill finished) has nothing to coalesce, so
+/// it skips the window entirely (~100ms off the hot path). A live download
+/// (current song still filling, a prebuffer, a burst predecessor) means a
+/// rapid switch may be in progress, so the full window engages and the burst
+/// coalesces to its final song. A next/prev burst keeps each press's download
+/// in-scope for the following press, so every press after the first observes
+/// a live download and settles — only a truly idle selection skips.
+pub(crate) const RESOLVE_SETTLE_MS: u64 = 100;
+
+/// Decide the settle window for a download: engage the full coalescing window
+/// only when a rapid-switch burst might be in progress (a download is already
+/// live); an isolated selection with nothing live pays zero.
+pub(crate) fn settle_window_ms(has_live_download: bool) -> u64 {
+    if has_live_download {
+        RESOLVE_SETTLE_MS
+    } else {
+        0
+    }
+}
 /// Shared tail of the ffmpeg invocation for ALAC-in-fragmented-mp4 streaming.
 /// The `-i pipe:0` input precedes these mux flags (see DECISIONS.md:10).
 const ALAC_FFMPEG_ARGS: [&str; 13] = [
@@ -70,6 +91,10 @@ pub(crate) struct DownloadConfig {
     pub cookie_header: Option<String>,
     pub js_runtime: Option<String>,
     pub cancel_token: tokio_util::sync::CancellationToken,
+    /// Settle window in ms before the semaphore/spawn (0 = skip; see
+    /// `settle_window_ms`). Set at selection time by the UI from the live
+    /// download count; explicitly injectable in tests.
+    pub settle_window_ms: u64,
 }
 
 static DOWNLOAD_SEMAPHORE: LazyLock<Semaphore> =
@@ -1129,19 +1154,22 @@ pub async fn download_and_decode(cfg: DownloadConfig) -> anyhow::Result<Symphoni
     }
 
     // Rapid song switches (a held next/prev key) enqueue one download per
-    // press, and each download spawns a yt-dlp that mints a fresh PO token — a
-    // token-mint flood the CDN reads as a bot signal and answers with 403
-    // throttles. Settle briefly before the semaphore so a burst coalesces to
-    // its final song: presses superseded within this window cancel here and
-    // never spawn yt-dlp. The single-song hot path pays it once (a small slice
-    // of the ~10s relay), and decoder-cache hits return above this point.
+    // press, and each download spawns its own yt-dlp extraction — a burst fires
+    // a burst of extractions at YouTube, the bot-signal/throttle trigger. When
+    // a download is already live (`settle_window_ms > 0`, a rapid switch may be
+    // in progress) settle briefly before the semaphore so the burst coalesces
+    // to its final song: presses superseded within this window cancel here and
+    // never spawn yt-dlp. An isolated selection with nothing live skips the
+    // window (0ms) — there is no burst to coalesce, and decoder-cache hits
+    // return above this point. The biased `select!` keeps a pre-spawn cancel
+    // absorbing at the settle even when the window is zero.
     tokio::select! {
         biased;
         _ = cfg.cancel_token.cancelled() => {
             debug!(%cfg.video_id, "download cancelled during settle");
             anyhow::bail!("download cancelled during settle");
         }
-        _ = tokio::time::sleep(std::time::Duration::from_millis(RESOLVE_SETTLE_MS)) => {}
+        _ = tokio::time::sleep(std::time::Duration::from_millis(cfg.settle_window_ms)) => {}
     }
 
     let ffmpeg_avail = check_ffmpeg();
@@ -1687,6 +1715,7 @@ cat\n",
                 cookie_header: None,
                 js_runtime: None,
                 cancel_token: tokio_util::sync::CancellationToken::new(),
+                settle_window_ms: RESOLVE_SETTLE_MS,
             };
 
             let mut decoder = download_and_decode(cfg)
@@ -1750,6 +1779,7 @@ cat\n",
                 cookie_header: None,
                 js_runtime: None,
                 cancel_token: tokio_util::sync::CancellationToken::new(),
+                settle_window_ms: RESOLVE_SETTLE_MS,
             };
 
             let mut decoder = download_and_decode(cfg)
@@ -1796,6 +1826,7 @@ cat\n",
                 cookie_header: None,
                 js_runtime: None,
                 cancel_token: tokio_util::sync::CancellationToken::new(),
+                settle_window_ms: RESOLVE_SETTLE_MS,
             };
 
             let err = match download_and_decode(cfg).await {
@@ -1824,7 +1855,12 @@ cat\n",
         // its final song instead of spawning one extraction per press. Cancel
         // 60ms in (inside the 100ms window) and assert no yt-dlp ever touched
         // the counter file — a settle removed/shortened below the cancel point
-        // would let the pipeline reach the spawn and fail this.
+        // would let the pipeline reach the spawn and fail this. This test
+        // injects the full window (`settle_window_ms: RESOLVE_SETTLE_MS`) to
+        // model the burst case: the UI's conditional settle (see
+        // `settle_window_ms`) would pass 0 for an isolated selection in
+        // production, which `isolated_download_skips_settle_spawns_immediately`
+        // exercises.
         let _pipe = PIPELINE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let _sem = SEMAPHORE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let _cache = CACHE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
@@ -1855,6 +1891,7 @@ cat\n",
                 cookie_header: None,
                 js_runtime: None,
                 cancel_token: token.clone(),
+                settle_window_ms: RESOLVE_SETTLE_MS,
             };
 
             let handle = tokio::spawn(download_and_decode(cfg));
@@ -1907,6 +1944,7 @@ cat\n",
                 cookie_header: None,
                 js_runtime: None,
                 cancel_token: token,
+                settle_window_ms: RESOLVE_SETTLE_MS,
             };
 
             let err = match download_and_decode(cfg).await {
@@ -1935,6 +1973,87 @@ cat\n",
             RESOLVE_SETTLE_MS > 50,
             "settle window {RESOLVE_SETTLE_MS}ms must stay above the ~40ms key-repeat cadence"
         );
+    }
+
+    #[test]
+    fn settle_window_ms_decides_on_live_downloads() {
+        // The window is conditional: a live download means a rapid switch may
+        // be in progress (settle full window), an isolated selection with
+        // nothing live pays zero.
+        assert_eq!(settle_window_ms(true), RESOLVE_SETTLE_MS);
+        assert_eq!(settle_window_ms(false), 0);
+    }
+
+    #[test]
+    fn isolated_download_skips_settle_spawns_immediately() {
+        // An isolated selection (no live download at selection time) must not
+        // pay the 100ms coalescing window — there is no burst to coalesce. The
+        // yt-dlp fake records its spawn nanosecond; the spawn must happen well
+        // before the full window would have elapsed AND the pipeline must still
+        // stream the fixture to a decoder (skipping the wait never breaks the
+        // download).
+        let _pipe = PIPELINE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _sem = SEMAPHORE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _cache = CACHE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+
+        let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
+        rt.block_on(async {
+            let fakebin = FakePath::new();
+            let ffmpeg_log = fakebin.dir.join("ffmpeg.log");
+            write_fake_bin(&fakebin.dir, "ffmpeg", &fake_ffmpeg_body(&ffmpeg_log));
+            // The unique video marker guards the fake body on argv: during this
+            // test's process-global PATH window a sibling test may resolve
+            // `yt-dlp` by name onto this fake dir; without the guard that
+            // foreign invocation would append a second timestamp and break the
+            // parse (observed under the parallel suite). Only this test's
+            // invocation (its own video_id) records and streams.
+            let vid = format!("settle-skip-e2e-{}", std::process::id());
+            let spawn_file = fakebin.dir.join("yt-dlp_spawn_nanos");
+            write_fake_bin(
+                &fakebin.dir,
+                "yt-dlp",
+                &format!(
+                    "{}case \" $* \" in\n\
+                     *{vid}*) echo \"$(date +%s%N)\" >> '{}'; cat '{}' ;;\n\
+                     esac\n",
+                    YTDLP_FAKE_HEAD,
+                    spawn_file.display(),
+                    alac_fixture_path().display(),
+                ),
+            );
+
+            let cfg = DownloadConfig {
+                yt_dlp_command: "yt-dlp".to_string(),
+                video_id: vid,
+                pot_provider: None,
+                cookie_path: None,
+                cookie_header: None,
+                js_runtime: None,
+                cancel_token: tokio_util::sync::CancellationToken::new(),
+                // The whole point: an isolated selection injects 0ms.
+                settle_window_ms: 0,
+            };
+
+            let start_nanos = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("clock before epoch")
+                .as_nanos();
+            let decoder = download_and_decode(cfg)
+                .await
+                .expect("a zero-settle download must still play");
+            let spawn_raw = std::fs::read_to_string(&spawn_file)
+                .expect("yt-dlp must have spawned");
+            let spawn_nanos: u128 = spawn_raw
+                .trim()
+                .parse()
+                .unwrap_or_else(|e| panic!("spawn timestamp {e:?}, raw: {spawn_raw:?}"));
+            let spawn_ms = ((spawn_nanos - start_nanos) / 1_000_000) as u64;
+            assert!(
+                spawn_ms < 60,
+                "an isolated download must spawn before the full settle window, spawned at {spawn_ms}ms"
+            );
+            drop(decoder);
+        });
     }
 
     #[test]
@@ -1984,6 +2103,7 @@ cat\n",
                 cookie_header: None,
                 js_runtime: None,
                 cancel_token: tokio_util::sync::CancellationToken::new(),
+                settle_window_ms: RESOLVE_SETTLE_MS,
             };
 
             let mut decoder = download_and_decode(cfg)
@@ -2037,6 +2157,7 @@ cat\n",
                 cookie_header: None,
                 js_runtime: None,
                 cancel_token: tokio_util::sync::CancellationToken::new(),
+                settle_window_ms: RESOLVE_SETTLE_MS,
             };
 
             let err = match download_and_decode(cfg).await {

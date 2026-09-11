@@ -650,6 +650,14 @@ Re-log into your browser, or check your cookie file / PO-token provider, then re
         let cancel_token = Arc::new(tokio_util::sync::CancellationToken::new());
         let cancel_token_for_stream = cancel_token.clone();
 
+        // Rapid-switch coalescing window: engage the full settle only when a
+        // download is already live (a burst may be in progress; the press chain
+        // keeps the previous press's download in-scope here). An isolated
+        // selection with nothing live pays 0ms — the common single-song hot
+        // path skips the wait entirely.
+        let settle_window_ms =
+            crate::app::server::song_downloader::settle_window_ms(!self.active_downloads.lock().unwrap_or_warn().is_empty());
+
         let mut downloads = self.active_downloads.lock().unwrap_or_warn();
         if downloads.iter().any(|(sid, task)| *sid == id && !task.cancel_token.is_cancelled()) {
             if matches!(song.download_status, DownloadStatus::Queued) {
@@ -704,6 +712,7 @@ Re-log into your browser, or check your cookie file / PO-token provider, then re
                             cookie_header: ch,
                             js_runtime: jr,
                             cancel_token: (*cancel_token_for_stream).clone(),
+                            settle_window_ms,
                         }),
                     )
                     .catch_unwind()
