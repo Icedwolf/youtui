@@ -837,7 +837,6 @@ async fn ytdlp_pipeline(
                 spawn_ffmpeg(writer, "ffmpeg", &cfg.video_id)?;
             let mut ffmpeg_stdin = ffmpeg_stdin.context("no ffmpeg stdin")?;
             let video_id = cfg.video_id.clone();
-            let buffer_for_first = buffer.clone();
 
             let YtDlpSpawn { stderr_handle, stdout: yt_stdout, child: yt_dlp_child } =
                 spawn_ytdlp(cfg, "ba/bestaudio", buffer.clone(), t0, true, web_music_fallback_used)?;
@@ -856,7 +855,7 @@ async fn ytdlp_pipeline(
                             }
                             if first_write {
                                 first_write = false;
-                                debug!(%video_id, buf_len = buffer_for_first.len(), elapsed = ?t0.elapsed(),
+                                debug!(%video_id, first_chunk = n, elapsed = ?t0.elapsed(),
                                     "relay: first chunk forwarded to ffmpeg");
                             }
                         }
