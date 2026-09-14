@@ -220,6 +220,30 @@ pub fn auto_load(
     }
 }
 
+/// Read + deserialize the autosave file's compact format without touching the
+/// playlist, so the CPU-bound `serde_json` parse (~200ms for a ~19MB / 135k-song
+/// queue) can run on a blocking thread and overlap the rest of startup. Returns
+/// `None` when the file is missing, corrupt, or the legacy (`ListSong`) format —
+/// those fall back to the full synchronous `auto_load`. `CompactSavedQueue` is
+/// `Send` (unlike `ListSong`, which holds `Rc`/`MaybeRc`), so it can cross the
+/// `spawn_blocking` boundary.
+pub fn read_autosave_compact() -> anyhow::Result<Option<CompactSavedQueue>> {
+    let path = get_queue_dir()
+        .map_err(|e| anyhow::anyhow!("{e}"))?
+        .join(format!("{}.json", AUTO_SAVE));
+    let json = fs::read_to_string(&path)?;
+    Ok(serde_json::from_str::<CompactSavedQueue>(&json).ok())
+}
+
+/// Apply an already-parsed compact autosave to the playlist (the mutation half
+/// of `auto_load`, split from `read_autosave_compact`).
+pub fn apply_compact_autosave(
+    playlist: &mut Playlist,
+    saved: CompactSavedQueue,
+) -> Result<Effects<Playlist>, Box<dyn std::error::Error>> {
+    load_compact_queue(playlist, saved)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

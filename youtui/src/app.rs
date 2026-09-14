@@ -156,6 +156,12 @@ impl Youtui {
         // async thread serially. `check_ffmpeg` is a LazyLock, so the warm only
         // pays once and the first download still gets a sub-ns cache hit.
         let ffmpeg_warm = tokio::task::spawn_blocking(song_downloader::check_ffmpeg);
+        // The autosave JSON deserialize is CPU-bound (~200ms for a 135k-song
+        // queue) and pure — read+parse it on the blocking pool so it overlaps
+        // server/terminal/media-controls setup instead of blocking the async
+        // thread serially. Falls back to the synchronous full `auto_load` for
+        // the legacy/corrupt format below.
+        let autosave_read = tokio::task::spawn_blocking(queue_persistence::read_autosave_compact);
         let t_server = std::time::Instant::now();
         let server = Arc::new(server::Server::new(api_key, pot_provider, &config, cookie_path)?);
         debug!(
@@ -185,7 +191,25 @@ impl Youtui {
 
         // Auto-load playlist from previous session (if any)
         let t_load = std::time::Instant::now();
-        match queue_persistence::auto_load(&mut window_state.playlist) {
+        let load_result = match autosave_read.await {
+            Ok(Ok(Some(saved))) => {
+                queue_persistence::apply_compact_autosave(&mut window_state.playlist, saved)
+            }
+            Ok(Ok(None)) => {
+                // Legacy (`ListSong`) or corrupt format: fall back to the full
+                // synchronous load, which re-reads and normalizes it.
+                queue_persistence::auto_load(&mut window_state.playlist)
+            }
+            Ok(Err(e)) => {
+                debug!("Auto-load read failed ({}). Starting with empty playlist.", e);
+                queue_persistence::auto_load(&mut window_state.playlist)
+            }
+            Err(join_err) => {
+                debug!("Auto-load task panicked ({}). Starting with empty playlist.", join_err);
+                queue_persistence::auto_load(&mut window_state.playlist)
+            }
+        };
+        match load_result {
             Ok(load_effect) => {
                 let song_count = window_state.playlist.list.get_list_iter().count();
                 info!(
