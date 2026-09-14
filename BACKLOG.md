@@ -1,7 +1,7 @@
 # Youtui Backlog
 
 **Build:** 0 errors, 0 warnings, 0 clippy
-**Tests:** 366 youtui bins green (2 ignored)
+**Tests:** 358 youtui bins green (2 ignored)
 **Last updated:** 2026-09-14
 
 This file is a working backlog only — no changelog, no session archaeology. Past work
@@ -14,8 +14,10 @@ _None._
 The codebase is at a local optimum across the areas this project optimizes:
 
 - **Startup latency** — cookie export is conditional (fresh-file skip); the `ffmpeg -version`
-  probe is warmed on the blocking pool so it overlaps the rest of startup; the vestigial
-  `node --version` spawn (leftover from the removed custom PO-token generator) is gone.
+  probe is warmed on the blocking pool so it overlaps the rest of startup; the autosave
+  deserialize overlaps startup on the blocking pool and the load moves `CompactSongRef`
+  fields (no clone) + skips the redundant post-load dedup pass — a 135k-song restore
+  measures ~171ms in-app (was ~300ms); the vestigial `node --version` spawn is gone.
 - **Song-start latency** — measured headless 1:1: ~2.0–2.6s is yt-dlp bootstrap + resolve +
   CDN first byte (external); the in-app cost after the first byte is ~6ms (ffmpeg transcode)
   plus sub-ms decoder init. No in-app lever remains without daemonizing yt-dlp (rejected).
