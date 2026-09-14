@@ -189,9 +189,7 @@ impl TextHandler for FilterManager {
     ) -> Option<Effects<Self>> {
         match handle_events(&mut self.filter_text, true, event) {
             rat_text::event::TextOutcome::Continue => None,
-            rat_text::event::TextOutcome::Unchanged => None,
-            rat_text::event::TextOutcome::Changed => Some(Effects::none()),
-            rat_text::event::TextOutcome::TextChanged => Some(Effects::none()),
+            _ => Some(Effects::none()),
         }
     }
 }
@@ -212,9 +210,7 @@ impl TextHandler for SearchBlock {
     ) -> Option<Effects<Self>> {
         match handle_events(&mut self.search_contents, true, event) {
             rat_text::event::TextOutcome::Continue => None,
-            rat_text::event::TextOutcome::Unchanged => Some(Effects::none()),
-            rat_text::event::TextOutcome::Changed => Some(Effects::none()),
-            rat_text::event::TextOutcome::TextChanged => Some(Effects::none()),
+            _ => Some(Effects::none()),
         }
     }
 }
