@@ -5,7 +5,7 @@ use std::borrow::Cow;
 use std::ops::Deref;
 use std::rc::Rc;
 use std::time::Duration;
-use tracing::{debug, info, warn};
+use tracing::{debug, warn};
 use ytmapi_rs::common::{
     AlbumID, ArtistChannelID, Explicit, UploadAlbumID, UploadArtistID, VideoID, YoutubeID,
 };
@@ -687,42 +687,6 @@ impl BrowserSongsList {
         }
         Some(self.list.remove(idx))
     }
-    /// Remove songs with duplicate `video_id`s, keeping the first occurrence.
-    /// Returns the number of duplicates removed.
-    pub fn deduplicate(&mut self) -> usize {
-        let len_before = self.list.len();
-        if len_before < 2 {
-            return 0;
-        }
-        // O(n) HashSet scan instead of O(n²) Vec::contains.
-        // We collect indices to remove, then remove in reverse to avoid
-        // O(n) shifts per removal (each remove is O(1) amortized from back).
-        let (to_remove, _): (Vec<usize>, std::collections::HashSet<&str>) = {
-            let mut seen = std::collections::HashSet::with_capacity(len_before);
-            let mut to_remove = Vec::with_capacity(len_before);
-            for (i, song) in self.list.iter().enumerate() {
-                let raw = song.video_id.get_raw();
-                if seen.contains(raw) {
-                    to_remove.push(i);
-                } else {
-                    seen.insert(raw);
-                }
-            }
-            (to_remove, seen)
-        };
-        if to_remove.is_empty() {
-            return 0;
-        }
-        for i in to_remove.into_iter().rev() {
-            self.list.remove(i);
-        }
-        let removed = len_before - self.list.len();
-        if removed > 0 {
-            info!("Removed {removed} duplicates from playlist");
-        }
-        removed
-    }
-
     pub fn create_next_id(&mut self) -> ListSongID {
         let id = self.next_id;
         self.next_id.0 += 1;
@@ -730,17 +694,6 @@ impl BrowserSongsList {
     }
     pub fn get_song_from_idx(&self, idx: usize) -> Option<&ListSong> {
         self.list.get(idx)
-    }
-
-    #[cfg(test)]
-    /// Bypasses dedup filtering for direct injection into self.list.
-    /// Used by tests that need specific duplicate arrangements.
-    pub fn push_songs_direct(&mut self, songs: Vec<ListSong>) {
-        for mut song in songs {
-            song.id = self.create_next_id();
-            song.ensure_cached_fields();
-            self.list.push(song);
-        }
     }
 }
 
@@ -767,86 +720,6 @@ mod tests {
         list.get_list_iter()
             .map(|s| s.video_id.get_raw().to_string())
             .collect()
-    }
-
-    // --- deduplicate tests ---
-    //
-    // NOTE: These use push_songs_direct() to inject duplicates bypassing
-    // push_song_list's within-batch dedup filtering. deduplicate() is the
-    // safety net for data that entered the list before filtering existed
-    // (e.g. legacy autosave files).
-
-    #[test]
-    fn dedup_empty_returns_0() {
-        let mut list = BrowserSongsList::default();
-        assert_eq!(list.deduplicate(), 0);
-        assert_eq!(collect_ids(&list).len(), 0);
-    }
-
-    #[test]
-    fn dedup_single_returns_0() {
-        let mut list = BrowserSongsList::default();
-        list.push_songs_direct(songs(&["a"]));
-        assert_eq!(list.deduplicate(), 0);
-        assert_eq!(collect_ids(&list), vec!["a"]);
-    }
-
-    #[test]
-    fn dedup_no_duplicates_returns_0() {
-        let mut list = BrowserSongsList::default();
-        list.push_songs_direct(songs(&["a", "b", "c"]));
-        assert_eq!(list.deduplicate(), 0);
-        assert_eq!(collect_ids(&list), vec!["a", "b", "c"]);
-    }
-
-    #[test]
-    fn dedup_adjacent_duplicates_keeps_first() {
-        let mut list = BrowserSongsList::default();
-        list.push_songs_direct(songs(&["a", "a", "b"]));
-        assert_eq!(list.deduplicate(), 1);
-        assert_eq!(collect_ids(&list), vec!["a", "b"]);
-    }
-
-    #[test]
-    fn dedup_non_adjacent_duplicates_keeps_first() {
-        let mut list = BrowserSongsList::default();
-        list.push_songs_direct(songs(&["a", "b", "a"]));
-        assert_eq!(list.deduplicate(), 1);
-        assert_eq!(collect_ids(&list), vec!["a", "b"]);
-    }
-
-    #[test]
-    fn dedup_all_same_keeps_one() {
-        let mut list = BrowserSongsList::default();
-        list.push_songs_direct(songs(&["a", "a", "a", "a"]));
-        assert_eq!(list.deduplicate(), 3);
-        assert_eq!(collect_ids(&list), vec!["a"]);
-    }
-
-    #[test]
-    fn dedup_multiple_distinct_duplicates() {
-        let mut list = BrowserSongsList::default();
-        list.push_songs_direct(songs(&["a", "b", "a", "c", "b"]));
-        assert_eq!(list.deduplicate(), 2);
-        assert_eq!(collect_ids(&list), vec!["a", "b", "c"]);
-    }
-
-    #[test]
-    fn dedup_interleaved_keeps_first_of_each() {
-        let mut list = BrowserSongsList::default();
-        list.push_songs_direct(songs(&["a", "b", "a", "b"]));
-        assert_eq!(list.deduplicate(), 2);
-        assert_eq!(collect_ids(&list), vec!["a", "b"]);
-    }
-
-    #[test]
-    fn dedup_idempotent() {
-        let mut list = BrowserSongsList::default();
-        list.push_songs_direct(songs(&["a", "b", "a", "c", "b"]));
-        list.deduplicate();
-        // Second call should remove nothing
-        assert_eq!(list.deduplicate(), 0);
-        assert_eq!(collect_ids(&list), vec!["a", "b", "c"]);
     }
 
     // --- push_song_list dedup filter tests ---
@@ -914,27 +787,6 @@ mod tests {
         let id = list.push_song_list(songs(&["a", "b", "a"]));
         assert!(id.0 > 0);
         assert_eq!(collect_ids(&list), vec!["a", "b"]);
-    }
-
-    /// 58k unique songs: verify O(n) dedup completes in < 500ms (would take
-    /// minutes with O(n²)).
-    #[test]
-    fn dedup_58k_unique_performance() {
-        let mut list = BrowserSongsList::default();
-        let many: Vec<ListSong> = (0..58_000u32)
-            .map(|i| song(&format!("video_{i}")))
-            .collect();
-        list.push_song_list(many);
-        let start = std::time::Instant::now();
-        let removed = list.deduplicate();
-        let elapsed = start.elapsed();
-        assert_eq!(removed, 0);
-        assert!(
-            elapsed.as_millis() < 500,
-            "dedup(58000) took {}ms, expected <500ms for O(n)",
-            elapsed.as_millis(),
-        );
-        eprintln!("[PERF] dedup(58000 unique): {}ms", elapsed.as_millis(),);
     }
 
     /// Verify push_song_list with 58k songs doesn't O(n²) on existing lookup

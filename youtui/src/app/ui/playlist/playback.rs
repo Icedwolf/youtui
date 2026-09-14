@@ -234,21 +234,6 @@ Re-log into your browser, or check your cookie file / PO-token provider, then re
         effect
     }
 
-    pub fn deduplicate(&mut self) {
-        let removed = self.list.deduplicate();
-        if removed > 0 {
-            debug!(%removed, "Removed duplicate songs from playlist");
-        }
-        self.rebuild_id_cache();
-        if removed > 0 {
-            if self.shuffle_enabled {
-                self.generate_shuffle_indices();
-            }
-            self.update_search_indices();
-            self.cached_title.borrow_mut().take();
-        }
-    }
-
     pub fn shuffle_seed(&self) -> u64 {
         self.shuffle_seed
     }

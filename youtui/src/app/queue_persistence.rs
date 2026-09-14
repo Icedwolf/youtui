@@ -146,8 +146,9 @@ fn load_compact_queue(
         debug!("Created {} songs from compact metadata", songs.len());
         let (first_id, push_effect) = playlist.push_song_list(songs);
         effect = effect.push(push_effect);
-        // Remove any duplicates that might exist in the saved data
-        playlist.deduplicate();
+        // No post-load `deduplicate()`: `push_song_list` already filters
+        // duplicate video_ids within the incoming batch (existing list is empty
+        // after `reset`), so a second full HashSet scan would be pure waste.
 
         if saved.shuffle_enabled {
             playlist.enable_shuffle(saved.shuffle_seed);
@@ -393,6 +394,33 @@ mod tests {
         assert_eq!(playlist.list.get_list_iter().count(), 0);
         assert!(playlist.get_cur_playing_index().is_none());
         assert!(effect.is_empty(), "empty load should produce no-op");
+    }
+
+    #[test]
+    fn test_load_compact_queue_dedups_duplicate_video_ids() {
+        // A malformed save with duplicate video_ids must load each id exactly
+        // once: `push_song_list` filters duplicates within the incoming batch
+        // (existing list is empty after `reset`), so the post-load `deduplicate`
+        // pass is redundant work — this pins that the load path still yields a
+        // deduped queue without it.
+        let ref_ = CompactSongRef {
+            video_id: VideoID::from_raw("dup1"),
+            title: "Dup".to_string(),
+            artists: vec!["A".to_string()],
+            album: None,
+            duration_string: "1:00".to_string(),
+        };
+        let saved = CompactSavedQueue {
+            current_index: None,
+            shuffle_enabled: false,
+            shuffle_seed: 0,
+            songs: vec![ref_; 3],
+        };
+        let (mut playlist, _effect) = Playlist::new(Percentage(50));
+        let _ = load_compact_queue(&mut playlist, saved).unwrap();
+        let loaded: Vec<_> = playlist.list.get_list_iter().collect();
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded[0].video_id.get_raw(), "dup1");
     }
 
     #[test]
