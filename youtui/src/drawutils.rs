@@ -74,19 +74,6 @@ pub(crate) fn left_bottom_corner_rect(height: u16, width: u16, r: Rect) -> Rect 
         height: height.min(r_y2.saturating_sub(y)),
     }
 }
-/// Helper function to create a popup below a chunk.
-//  We pass in the max bounds that can be rendered by the application,
-//  to avoid returning a Rect that is not drawable.
-// TODO: Add a test to ensure this is returning correct area
-pub(crate) fn below_left_rect(height: u16, width: u16, r: Rect, max_bounds: Rect) -> Rect {
-    let y = r.y.saturating_add(r.height.saturating_sub(1));
-    Rect {
-        x: r.x,
-        y,
-        width: width.min(max_bounds.right().saturating_sub(r.x)),
-        height: (height.saturating_add(1)).min(max_bounds.bottom().saturating_sub(y)),
-    }
-}
 /// Helper function to create a popup in the center of a chunk.
 pub(crate) fn centered_rect(height: u16, width: u16, r: Rect) -> Rect {
     Rect {
@@ -94,15 +81,6 @@ pub(crate) fn centered_rect(height: u16, width: u16, r: Rect) -> Rect {
         y: (r.y + r.height / 2).saturating_sub(height / 2).max(r.y),
         width: width.min(r.width),
         height: height.min(r.height),
-    }
-}
-/// Helper function to get the bottom line of a chunk, ignoring side borders.
-pub(crate) fn bottom_of_rect(r: Rect) -> Rect {
-    Rect {
-        x: r.x.saturating_add(1),
-        y: r.y.saturating_add(r.height.saturating_sub(1)),
-        width: r.width.saturating_sub(2),
-        height: 1,
     }
 }
 pub(crate) fn get_offset_after_list_resize(
@@ -140,7 +118,7 @@ pub(crate) fn get_offset_after_list_resize(
 
 #[cfg(test)]
 mod tests {
-    use super::{below_left_rect, bottom_of_rect, centered_rect, left_bottom_corner_rect};
+    use super::{centered_rect, left_bottom_corner_rect};
     use crate::drawutils::{get_offset_after_list_resize, resolve_display_duration};
     use ratatui::layout::Rect;
     use std::time::Duration;
@@ -381,229 +359,5 @@ mod tests {
         bounds_check_rect(r2, t_r2);
         bounds_check_rect(r3, t_r3);
         bounds_check_rect(r4, t_r4);
-    }
-    #[test]
-    fn test_bottom_of_rect_normal() {
-        let r = Rect {
-            x: 5,
-            y: 10,
-            width: 20,
-            height: 5,
-        };
-        let b = bottom_of_rect(r);
-        assert_eq!(b.x, 6);
-        assert_eq!(b.y, 14);
-        assert_eq!(b.width, 18);
-        assert_eq!(b.height, 1);
-    }
-    #[test]
-    fn test_bottom_of_rect_zero_height() {
-        let r = Rect {
-            x: 0,
-            y: 0,
-            width: 10,
-            height: 0,
-        };
-        let b = bottom_of_rect(r);
-        assert_eq!(b.y, 0);
-        assert_eq!(b.width, 8);
-        assert_eq!(b.height, 1);
-    }
-    #[test]
-    fn test_bottom_of_rect_zero_width() {
-        let r = Rect {
-            x: 0,
-            y: 0,
-            width: 0,
-            height: 10,
-        };
-        let b = bottom_of_rect(r);
-        assert_eq!(b.x, 1);
-        assert_eq!(b.y, 9);
-        assert_eq!(b.width, 0);
-        assert_eq!(b.height, 1);
-    }
-    #[test]
-    fn test_below_left_rect_zero_height() {
-        let chunk = Rect {
-            x: 0,
-            y: 0,
-            width: 10,
-            height: 0,
-        };
-        let max = Rect {
-            x: 0,
-            y: 0,
-            width: 50,
-            height: 50,
-        };
-        // height 0 chunk: y = 0 + 0 - 1 = 0 (saturated)
-        let b = below_left_rect(5, 10, chunk, max);
-        assert_eq!(b.x, 0);
-        assert_eq!(b.y, 0);
-        assert_eq!(b.width, 10);
-        assert!(b.height <= max.height);
-    }
-    #[test]
-    fn test_below_left_rect_normal() {
-        // below_left_rect adds 1 to height internally
-        let chunk = Rect {
-            x: 5,
-            y: 10,
-            width: 20,
-            height: 5,
-        };
-        let max = Rect {
-            x: 0,
-            y: 0,
-            width: 100,
-            height: 100,
-        };
-        let r = below_left_rect(10, 15, chunk, max);
-        assert_eq!(r.x, 5);
-        assert_eq!(r.y, 14);
-        assert_eq!(r.width, 15);
-        assert_eq!(r.height, 11);
-        bounds_check_rect(r, max);
-    }
-
-    #[test]
-    fn test_below_left_rect_clamped_to_max() {
-        let chunk = Rect {
-            x: 50,
-            y: 90,
-            width: 20,
-            height: 5,
-        };
-        let max = Rect {
-            x: 0,
-            y: 0,
-            width: 100,
-            height: 100,
-        };
-        let r = below_left_rect(20, 30, chunk, max);
-        assert_eq!(r.x, 50);
-        assert_eq!(r.y, 94);
-        assert_eq!(r.width, 30);
-        assert_eq!(r.height, 6);
-        bounds_check_rect(r, max);
-    }
-
-    #[test]
-    fn test_below_left_rect_width_clamped_right() {
-        let chunk = Rect {
-            x: 85,
-            y: 10,
-            width: 20,
-            height: 5,
-        };
-        let max = Rect {
-            x: 0,
-            y: 0,
-            width: 100,
-            height: 100,
-        };
-        let r = below_left_rect(10, 30, chunk, max);
-        assert_eq!(r.x, 85);
-        assert_eq!(r.y, 14);
-        assert_eq!(r.width, 15);
-        assert_eq!(r.height, 11);
-        bounds_check_rect(r, max);
-    }
-
-    #[test]
-    fn test_below_left_rect_zero_height_chunk() {
-        let chunk = Rect {
-            x: 0,
-            y: 0,
-            width: 10,
-            height: 0,
-        };
-        let max = Rect {
-            x: 0,
-            y: 0,
-            width: 100,
-            height: 100,
-        };
-        let r = below_left_rect(5, 10, chunk, max);
-        assert_eq!(r.y, 0);
-        assert_eq!(r.height, 6);
-        bounds_check_rect(r, max);
-    }
-
-    #[test]
-    fn bounds_check_below_left_rect_no_panic() {
-        // Verify no panics with extreme values
-        let cases = [
-            (
-                u16::MAX,
-                u16::MAX,
-                Rect {
-                    x: 0,
-                    y: 0,
-                    height: 50,
-                    width: 50,
-                },
-                Rect {
-                    x: 100,
-                    y: 100,
-                    height: 1050,
-                    width: 1050,
-                },
-            ),
-            (
-                u16::MAX,
-                u16::MAX,
-                Rect {
-                    x: 0,
-                    y: 50,
-                    height: 50,
-                    width: 50,
-                },
-                Rect {
-                    x: 100,
-                    y: 1050,
-                    height: 1050,
-                    width: 1050,
-                },
-            ),
-            (
-                u16::MAX,
-                u16::MAX,
-                Rect {
-                    x: 50,
-                    y: 0,
-                    height: 50,
-                    width: 50,
-                },
-                Rect {
-                    x: 1050,
-                    y: 100,
-                    height: 1050,
-                    width: 1050,
-                },
-            ),
-            (
-                u16::MAX,
-                u16::MAX,
-                Rect {
-                    x: 50,
-                    y: 50,
-                    height: 50,
-                    width: 50,
-                },
-                Rect {
-                    x: 1050,
-                    y: 1050,
-                    height: 1050,
-                    width: 1050,
-                },
-            ),
-        ];
-        for (h, w, chunk, max) in &cases {
-            let r = below_left_rect(*h, *w, *chunk, *max);
-            assert_eq!(r.x, chunk.x, "below_left_rect x must match chunk x");
-            assert!(r.y >= chunk.y + chunk.height.saturating_sub(1));
-        }
     }
 }

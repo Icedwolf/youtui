@@ -262,13 +262,6 @@ impl TextHandler for Browser {
             BrowserVariant::Playlist => self.playlist_search_browser.get_text(),
         }
     }
-    fn replace_text(&mut self, text: impl Into<String>) {
-        match self.variant {
-            BrowserVariant::Artist => self.artist_search_browser.replace_text(text),
-            BrowserVariant::Song => self.song_search_browser.replace_text(text),
-            BrowserVariant::Playlist => self.playlist_search_browser.replace_text(text),
-        }
-    }
     fn clear_text(&mut self) -> bool {
         match self.variant {
             BrowserVariant::Artist => self.artist_search_browser.clear_text(),

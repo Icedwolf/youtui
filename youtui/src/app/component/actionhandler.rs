@@ -7,7 +7,6 @@ use crate::keybind::Keybind;
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 use std::borrow::Cow;
 use tracing::trace;
-use ytmapi_rs::common::SearchSuggestion;
 
 pub trait Component: Sized + 'static {}
 
@@ -118,7 +117,6 @@ pub fn get_global_keybinds_as_readable_iter<'a, A: Action + 'static>(
 pub trait TextHandler: Component {
     fn get_text(&self) -> Option<&str>;
     fn clear_text(&mut self) -> bool;
-    fn replace_text(&mut self, text: impl Into<String>);
     fn is_text_handling(&self) -> bool;
     fn handle_text_event_impl(
         &mut self,
@@ -135,11 +133,6 @@ pub trait TextHandler: Component {
         }
         self.handle_text_event_impl(event)
     }
-}
-
-pub trait Suggestable: TextHandler {
-    fn get_search_suggestions(&self) -> &[SearchSuggestion];
-    fn has_search_suggestions(&self) -> bool;
 }
 
 #[derive(Debug)]

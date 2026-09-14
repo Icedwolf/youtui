@@ -6,6 +6,13 @@
 
 ## Completed
 
+### Session 2026-09-14 — Dead search-suggestion surface removed (−483 lines)
+
+- **Root cause of the dead weight:** `SearchBlock::fetch_search_suggestions` was a stub that updated a debounce field (`last_fetched_text`) and returned `Effects::none()` unconditionally — the `search_suggestions` `Vec` was never populated by any code path. The suggestion dropdown therefore never rendered (`has_search_suggestions()` always false), and the Up/Down suggestion-navigation (`increment_list`) early-returned on the empty `Vec`. The whole feature — dropdown rendering, navigation, keybinds, trait — was structurally dead.
+- **Removed:** the `Suggestable` trait + its 3 impls (`SearchBlock`, `SearchPanel`, `SongSearchBrowser`); `draw_search_suggestions` (~75 lines) + its 3 call sites; `SearchBlock::{search_suggestions, suggestions_cur, last_fetched_text}` fields; `fetch_search_suggestions`; `SearchBlock::increment_list`; `TextHandler::replace_text` (trait method + 9 impls — its only caller was the suggestion-selection path); and the two now-orphaned `drawutils` helpers `below_left_rect`/`bottom_of_rect` + their 9 tests.
+- **Retained for config compat:** `BrowserSearchAction` enum + `AppAction::BrowserSearch` + the `[keybinds.browser_search]` keymap category (the user's `config.toml` has `down`/`up` bound there, and the keymap IR is `deny_unknown_fields` — removing the category would fail startup). The two `ActionHandler<BrowserSearchAction>` impls became no-ops, matching the prior effective behavior (nav already no-op'd on the empty `Vec`).
+- Verified: 367 youtui bins green (−9 drawutils tests), clippy 0 warnings, `cargo build --release` clean.
+
 ### Session 2026-09-14 — Pipeline fallback dedup; bg-task arg struct; threshold/ M4A docs
 
 - **The duplicated full-download fallback is now one helper.** The ALAC (`ffmpeg`) and M4A (`yt-dlp`) branches each carried a ~54-line "streaming init failed → wait out the full download → reap → classify → decode" block that was ~80% identical. The shared arms — cancel (kill+reap), writer panic, and the `DOWNLOAD_TIMEOUT_S` deadline — are extracted into `await_full_download(cfg, child, yt_child, stdout_handle, label) -> Result<ExitStatus>`; the branches keep only their genuinely-different parts (the ALAC-only throttle/client retry ladder, `byte_len`, decoder pipeline label). Centralizes the orphan-prevention arms so a change to kill/timeout/panic semantics can't drift between the two paths. Behavior-preserving (376 green incl. the fake-binary E2E pipeline tests).

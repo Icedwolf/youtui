@@ -5,7 +5,7 @@ use super::shared_components::{
     play_song_impl, play_songs_impl,
 };
 use crate::app::component::actionhandler::{
-    Action, ActionHandler, Component, KeyRouter, Scrollable, Suggestable, TextHandler,
+    Action, ActionHandler, Component, KeyRouter, Scrollable, TextHandler,
     YoutuiEffect,
 };
 use crate::app::effect::Effects;
@@ -29,7 +29,6 @@ use ratatui::text::Line;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use tracing::{debug, warn};
-use ytmapi_rs::common::SearchSuggestion;
 use ytmapi_rs::parse::SearchResultSong;
 
 pub struct SongSearchBrowser {
@@ -56,15 +55,6 @@ pub enum InputRouting {
     Search,
     Filter,
     Sort,
-}
-
-impl Suggestable for SongSearchBrowser {
-    fn get_search_suggestions(&self) -> &[SearchSuggestion] {
-        self.search.get_search_suggestions()
-    }
-    fn has_search_suggestions(&self) -> bool {
-        self.search.has_search_suggestions()
-    }
 }
 
 impl Scrollable for SongSearchBrowser {
@@ -103,14 +93,6 @@ impl TextHandler for SongSearchBrowser {
             InputRouting::Filter => self.filter.get_text(),
             InputRouting::Search => self.search.get_text(),
             InputRouting::List | InputRouting::Sort => None,
-        }
-    }
-    fn replace_text(&mut self, text: impl Into<String>) {
-        match self.input_routing {
-            InputRouting::Search => self.search.replace_text(text),
-            InputRouting::Filter => self.filter.replace_text(text),
-            InputRouting::List => (),
-            InputRouting::Sort => (),
         }
     }
     fn clear_text(&mut self) -> bool {
@@ -161,11 +143,8 @@ impl ActionHandler<SortAction> for SongSearchBrowser {
     }
 }
 impl ActionHandler<BrowserSearchAction> for SongSearchBrowser {
-    fn apply_action(&mut self, action: BrowserSearchAction) -> impl Into<YoutuiEffect<Self>> {
-        match action {
-            BrowserSearchAction::PrevSearchSuggestion => self.search.increment_list(-1),
-            BrowserSearchAction::NextSearchSuggestion => self.search.increment_list(1),
-        }
+    fn apply_action(&mut self, _action: BrowserSearchAction) -> impl Into<YoutuiEffect<Self>> {
+        // Search suggestions were removed (never fetched) — see AGENTS.md scope.
         Effects::none()
     }
 }
@@ -630,7 +609,7 @@ mod tests {
     #[test]
     fn search_triggers_loading_state() {
         let mut browser = SongSearchBrowser::new();
-        browser.search.replace_text("some query");
+        browser.search.search_contents.set_text("some query");
         let _effects = browser.search();
         assert_eq!(browser.song_list.state, ListStatus::Loading);
     }

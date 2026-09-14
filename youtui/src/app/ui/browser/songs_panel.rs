@@ -236,9 +236,6 @@ impl<C: SongsPanelConfig> TextHandler for SongsPanel<C> {
     fn get_text(&self) -> Option<&str> {
         self.filter.get_text()
     }
-    fn replace_text(&mut self, text: impl Into<String>) {
-        self.filter.replace_text(text)
-    }
     fn is_text_handling(&self) -> bool {
         self.route == SongsInputRouting::Filter
     }

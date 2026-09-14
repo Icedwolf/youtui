@@ -1,6 +1,6 @@
 use crate::app::AppCallback;
 use crate::app::component::actionhandler::{
-    Action, Component, Suggestable, TextHandler,
+    Action, Component, TextHandler,
 };
 use crate::app::effect::Effects;
 use crate::app::structures::ListSong;
@@ -8,7 +8,6 @@ use crate::app::view::{TableFilterCommand, TableSortCommand};
 use rat_text::text_input::{TextInputState, handle_events};
 use ratatui::widgets::ListState;
 use serde::{Deserialize, Serialize};
-use ytmapi_rs::common::SearchSuggestion;
 
 // --- Song playback helpers (shared by songsearch, artistsearch, playlistsearch) ---
 
@@ -59,9 +58,6 @@ pub(crate) fn add_songs_to_playlist_impl<C: Component>(
 #[derive(Default)]
 pub struct SearchBlock {
     pub search_contents: TextInputState,
-    search_suggestions: Vec<SearchSuggestion>,
-    pub suggestions_cur: Option<usize>,
-    last_fetched_text: Option<String>,
 }
 impl Component for SearchBlock {}
 
@@ -184,9 +180,6 @@ impl TextHandler for FilterManager {
     fn get_text(&self) -> std::option::Option<&str> {
         Some(self.filter_text.text())
     }
-    fn replace_text(&mut self, text: impl Into<String>) {
-        self.filter_text.set_text(text)
-    }
     fn clear_text(&mut self) -> bool {
         self.filter_text.clear()
     }
@@ -210,12 +203,7 @@ impl TextHandler for SearchBlock {
     fn get_text(&self) -> std::option::Option<&str> {
         Some(self.search_contents.text())
     }
-    fn replace_text(&mut self, text: impl Into<String>) {
-        self.search_contents.set_text(text);
-        self.search_contents.move_to_line_end(false);
-    }
     fn clear_text(&mut self) -> bool {
-        self.search_suggestions.clear();
         self.search_contents.clear()
     }
     fn handle_text_event_impl(
@@ -226,17 +214,8 @@ impl TextHandler for SearchBlock {
             rat_text::event::TextOutcome::Continue => None,
             rat_text::event::TextOutcome::Unchanged => Some(Effects::none()),
             rat_text::event::TextOutcome::Changed => Some(Effects::none()),
-            rat_text::event::TextOutcome::TextChanged => Some(self.fetch_search_suggestions()),
+            rat_text::event::TextOutcome::TextChanged => Some(Effects::none()),
         }
-    }
-}
-
-impl Suggestable for SearchBlock {
-    fn get_search_suggestions(&self) -> &[SearchSuggestion] {
-        self.search_suggestions.as_slice()
-    }
-    fn has_search_suggestions(&self) -> bool {
-        !self.search_suggestions.is_empty()
     }
 }
 
@@ -244,40 +223,6 @@ impl SearchBlock {
     pub fn delete_word(&mut self) {
         if !self.search_contents.is_empty() {
             let _ = self.search_contents.delete_prev_word();
-        }
-    }
-
-    // Ask the UI for search suggestions for the current query
-    fn fetch_search_suggestions(&mut self) -> Effects<Self> {
-        // No need to fetch search suggestions if contents is empty.
-        if self.search_contents.is_empty() {
-            self.search_suggestions.clear();
-            self.last_fetched_text = None;
-            return Effects::none();
-        }
-        let text = self.search_contents.text().to_owned();
-        // Skip if text hasn't changed since last fetch (debounce).
-        if self.last_fetched_text.as_deref() == Some(&text) {
-            return Effects::none();
-        }
-        self.last_fetched_text = Some(text.clone());
-        Effects::none()
-    }
-    pub fn increment_list(&mut self, amount: isize) {
-        if !self.search_suggestions.is_empty() {
-            let cur = self
-                .suggestions_cur
-                .map(|cur| {
-                    cur.saturating_add_signed(amount)
-                        .min(self.search_suggestions.len() - 1)
-                })
-                .unwrap_or_default();
-            self.suggestions_cur = Some(cur);
-            // Bounds-checked via get(): a desync must not panic the event loop.
-            if let Some(value) = self.search_suggestions.get(cur) {
-                // Clone is ok here as we want to duplicate the search suggestion.
-                self.replace_text(value.get_text());
-            }
         }
     }
 }
@@ -375,13 +320,6 @@ macro_rules! define_search_results_browser {
                     SearchBrowserSide::Songs => self.songs_panel.get_text(),
                 }
             }
-            fn replace_text(&mut self, text: impl Into<String>) {
-                use $crate::app::ui::browser::shared_components::SearchBrowserSide;
-                match self.side {
-                    SearchBrowserSide::Search => self.search_panel.replace_text(text),
-                    SearchBrowserSide::Songs => self.songs_panel.replace_text(text),
-                }
-            }
             fn clear_text(&mut self) -> bool {
                 use $crate::app::ui::browser::shared_components::SearchBrowserSide;
                 match self.side {
@@ -457,17 +395,12 @@ macro_rules! define_search_results_browser {
         {
             fn apply_action(
                 &mut self,
-                action: $crate::app::ui::browser::shared_components::BrowserSearchAction,
+                _action: $crate::app::ui::browser::shared_components::BrowserSearchAction,
             ) -> impl Into<$crate::app::component::actionhandler::YoutuiEffect<Self>> {
-                use $crate::app::ui::browser::shared_components::BrowserSearchAction;
-                match action {
-                    BrowserSearchAction::PrevSearchSuggestion => {
-                        self.search_panel.search.increment_list(-1)
-                    }
-                    BrowserSearchAction::NextSearchSuggestion => {
-                        self.search_panel.search.increment_list(1)
-                    }
-                }
+                // Search suggestions were removed (the fetch was never wired and
+                // the list never populated — see AGENTS.md scope). The keybinds
+                // remain as no-ops solely so existing config.toml
+                // `[keybinds.browser_search]` sections keep parsing.
                 Effects::none()
             }
         }

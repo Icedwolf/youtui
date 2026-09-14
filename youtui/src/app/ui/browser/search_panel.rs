@@ -1,5 +1,5 @@
 use crate::app::component::actionhandler::{
-    Action, KeyRouter, Scrollable, Suggestable, TextHandler,
+    Action, KeyRouter, Scrollable, TextHandler,
 };
 use crate::app::effect::Effects;
 use crate::app::structures::ListStatus;
@@ -13,7 +13,6 @@ use ratatui::text::Line;
 use std::borrow::Cow;
 use std::iter::ExactSizeIterator;
 use std::marker::PhantomData;
-use ytmapi_rs::common::SearchSuggestion;
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub enum SearchPanelInputRouting {
@@ -78,9 +77,6 @@ impl<C: SearchPanelConfig> TextHandler for SearchPanel<C> {
     fn get_text(&self) -> Option<&str> {
         self.search.get_text()
     }
-    fn replace_text(&mut self, text: impl Into<String>) {
-        self.search.replace_text(text)
-    }
     fn clear_text(&mut self) -> bool {
         self.search.clear_text()
     }
@@ -91,15 +87,6 @@ impl<C: SearchPanelConfig> TextHandler for SearchPanel<C> {
         self.search
             .handle_text_event_impl(event)
             .map(|effect| effect.map(|this: &mut SearchPanel<C>| &mut this.search))
-    }
-}
-
-impl<C: SearchPanelConfig> Suggestable for SearchPanel<C> {
-    fn get_search_suggestions(&self) -> &[SearchSuggestion] {
-        self.search.get_search_suggestions()
-    }
-    fn has_search_suggestions(&self) -> bool {
-        self.search.has_search_suggestions()
     }
 }
 

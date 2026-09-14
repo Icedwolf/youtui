@@ -312,12 +312,6 @@ impl TextHandler for Playlist {
         }
     }
 
-    fn replace_text(&mut self, text: impl Into<String>) {
-        self.search_text = text.into();
-        self.update_search_indices();
-        self.cached_title.borrow_mut().take();
-    }
-
     fn clear_text(&mut self) -> bool {
         if !self.search_text.is_empty() {
             self.search_text.clear();

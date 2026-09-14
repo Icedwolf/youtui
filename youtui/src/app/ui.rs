@@ -178,12 +178,6 @@ impl TextHandler for YoutuiWindow {
             WindowContext::Playlist => self.playlist.get_text(),
         }
     }
-    fn replace_text(&mut self, text: impl Into<String>) {
-        match self.context {
-            WindowContext::Browser => self.browser.replace_text(text),
-            WindowContext::Playlist => self.playlist.replace_text(text),
-        }
-    }
     fn clear_text(&mut self) -> bool {
         match self.context {
             WindowContext::Browser => self.browser.clear_text(),
