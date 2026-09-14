@@ -306,11 +306,8 @@ impl ListSong {
         duration_string: String,
     ) -> Self {
         let list_artists: Vec<ListSongArtist> = artists
-            .iter()
-            .map(|name| ListSongArtist {
-                name: name.clone(),
-                id: None,
-            })
+            .into_iter()
+            .map(|name| ListSongArtist { name, id: None })
             .collect();
         let list_album = album.map(|name| {
             MaybeRc::Owned(ListSongAlbum {

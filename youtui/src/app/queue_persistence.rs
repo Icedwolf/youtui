@@ -131,14 +131,14 @@ fn load_compact_queue(
         playlist.set_loaded_from_autosave(true);
         let songs: Vec<ListSong> = saved
             .songs
-            .iter()
+            .into_iter()
             .map(|ref_| {
                 ListSong::create_with_metadata(
-                    ref_.video_id.clone(),
-                    ref_.title.clone(),
-                    ref_.artists.clone(),
-                    ref_.album.clone(),
-                    ref_.duration_string.clone(),
+                    ref_.video_id,
+                    ref_.title,
+                    ref_.artists,
+                    ref_.album,
+                    ref_.duration_string,
                 )
             })
             .collect();
