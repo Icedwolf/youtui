@@ -604,9 +604,11 @@ Re-log into your browser, or check your cookie file / PO-token provider, then re
                 crate::app::server::song_downloader::RESOLVE_SETTLE_MS,
             )
         });
-        crate::app::server::song_downloader::settle_window_ms(
-            has_live_download || recent_trigger,
-        )
+        if has_live_download || recent_trigger {
+            crate::app::server::song_downloader::RESOLVE_SETTLE_MS
+        } else {
+            0
+        }
     }
 
     pub fn download_song(&mut self, id: ListSongID) -> Effects<Self> {

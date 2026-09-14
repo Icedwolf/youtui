@@ -44,27 +44,17 @@ const M4A_TOTAL_LEN_TIMEOUT_S: u64 = 15;
 /// it; a leak at a sub-100ms deliberate-mash cadence is a mint-free extraction
 /// killed on the next press — cheap next to the pre-flip mint flood.
 ///
-/// The window is *conditional*: `settle_window_ms` is 0 when no download is
-/// live at selection time. An isolated select (idle -> chosen song, or a
-/// fresh choice after the previous fill finished) has nothing to coalesce, so
-/// it skips the window entirely (~100ms off the hot path). A live download
-/// (current song still filling, a prebuffer, a burst predecessor) means a
-/// rapid switch may be in progress, so the full window engages and the burst
-/// coalesces to its final song. A next/prev burst keeps each press's download
-/// in-scope for the following press, so every press after the first observes
-/// a live download and settles — only a truly idle selection skips.
+/// The window is *conditional*: `DownloadConfig.settle_window_ms` is 0 when no
+/// burst signal is present at selection time. An isolated select (idle ->
+/// chosen song, or a fresh choice after the previous fill finished) has nothing
+/// to coalesce, so it skips the window entirely (~100ms off the hot path). The
+/// decision lives in `Playlist::settle_window_for` and reads two signals — a
+/// live download in `active_downloads` OR a selection fired within the window
+/// (`last_download_trigger`) — because a held next/prev burst drops each press's
+/// entry before the following press decides (`play_song` ->
+/// `prepare_playback_id` -> `drop_unscoped_from_id`), so "a live download" alone
+/// would miss every press past the first.
 pub(crate) const RESOLVE_SETTLE_MS: u64 = 100;
-
-/// Decide the settle window for a download: engage the full coalescing window
-/// only when a rapid-switch burst might be in progress (a download is already
-/// live); an isolated selection with nothing live pays zero.
-pub(crate) fn settle_window_ms(has_live_download: bool) -> u64 {
-    if has_live_download {
-        RESOLVE_SETTLE_MS
-    } else {
-        0
-    }
-}
 /// Shared tail of the ffmpeg invocation for ALAC-in-fragmented-mp4 streaming.
 /// The `-i pipe:0` input precedes these mux flags (see DECISIONS.md:10).
 const ALAC_FFMPEG_ARGS: [&str; 13] = [
@@ -92,8 +82,9 @@ pub(crate) struct DownloadConfig {
     pub js_runtime: Option<String>,
     pub cancel_token: tokio_util::sync::CancellationToken,
     /// Settle window in ms before the semaphore/spawn (0 = skip; see
-    /// `settle_window_ms`). Set at selection time by the UI from the live
-    /// download count; explicitly injectable in tests.
+    /// `RESOLVE_SETTLE_MS`). Set at selection time by `Playlist::settle_window_for`
+    /// from the two burst signals (live download or recent trigger); explicitly
+    /// injectable in tests.
     pub settle_window_ms: u64,
 }
 
@@ -1163,13 +1154,13 @@ pub async fn download_and_decode(cfg: DownloadConfig) -> anyhow::Result<Symphoni
     // Rapid song switches (a held next/prev key) enqueue one download per
     // press, and each download spawns its own yt-dlp extraction — a burst fires
     // a burst of extractions at YouTube, the bot-signal/throttle trigger. When
-    // a download is already live (`settle_window_ms > 0`, a rapid switch may be
-    // in progress) settle briefly before the semaphore so the burst coalesces
-    // to its final song: presses superseded within this window cancel here and
-    // never spawn yt-dlp. An isolated selection with nothing live skips the
-    // window (0ms) — there is no burst to coalesce, and decoder-cache hits
-    // return above this point. The biased `select!` keeps a pre-spawn cancel
-    // absorbing at the settle even when the window is zero.
+    // the UI decided a burst may be in progress (`settle_window_ms > 0`, a live
+    // download or a recent selection) settle briefly before the semaphore so
+    // the burst coalesces to its final song: presses superseded within this
+    // window cancel here and never spawn yt-dlp. An isolated selection pays 0ms
+    // — there is no burst to coalesce, and decoder-cache hits return above this
+    // point. The biased `select!` keeps a pre-spawn cancel absorbing at the
+    // settle even when the window is zero.
     tokio::select! {
         biased;
         _ = cfg.cancel_token.cancelled() => {
@@ -1980,15 +1971,6 @@ cat\n",
             RESOLVE_SETTLE_MS > 50,
             "settle window {RESOLVE_SETTLE_MS}ms must stay above the ~40ms key-repeat cadence"
         );
-    }
-
-    #[test]
-    fn settle_window_ms_decides_on_live_downloads() {
-        // The window is conditional: a live download means a rapid switch may
-        // be in progress (settle full window), an isolated selection with
-        // nothing live pays zero.
-        assert_eq!(settle_window_ms(true), RESOLVE_SETTLE_MS);
-        assert_eq!(settle_window_ms(false), 0);
     }
 
     #[test]
