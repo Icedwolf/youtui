@@ -537,6 +537,18 @@ mod tests {
         b.apply_action(BrowserArtistSongsAction::Filter);
         assert!(b.artist_search_browser.songs_panel.filter.shown);
     }
+    #[test]
+    fn songs_panel_sort_route_navigation_targets_sort_cursor() {
+        let mut b = Browser::new();
+        let panel = &mut b.artist_search_browser.songs_panel;
+        panel.route = super::songs_panel::SongsInputRouting::Sort;
+        // ArtistSongsConfig sortable columns are &[1, 4], so the last index is 1.
+        panel.sort.cur = 1;
+        panel.go_to_first();
+        assert_eq!(panel.sort.cur, 0);
+        panel.go_to_last();
+        assert_eq!(panel.sort.cur, 1);
+    }
     #[tokio::test]
     async fn artist_search_panel_search_suggestions_has_correct_keybinds() {
         let cfg = Config::default();

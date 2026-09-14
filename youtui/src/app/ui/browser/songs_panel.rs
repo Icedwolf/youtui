@@ -146,8 +146,7 @@ impl<C: SongsPanelConfig> SongsPanel<C> {
     pub fn clear_filter(&mut self) {
         self.filter.shown = false;
         self.route = SongsInputRouting::List;
-        self.filter.filter_commands.clear();
-        self.rebuild_filtered_indices();
+        self.clear_filter_commands();
     }
     fn open_sort(&mut self) {
         self.sort.shown = true;
@@ -207,7 +206,7 @@ impl<C: SongsPanelConfig> SongsPanel<C> {
     pub fn go_to_first(&mut self) {
         match self.route {
             SongsInputRouting::List => self.cur_selected = 0,
-            SongsInputRouting::Sort => self.cur_selected = 0,
+            SongsInputRouting::Sort => self.sort.cur = 0,
             SongsInputRouting::Filter => debug!("go_to_first called while in filter mode"),
         }
     }
@@ -217,7 +216,7 @@ impl<C: SongsPanelConfig> SongsPanel<C> {
                 self.cur_selected = self.filtered_indices.len().saturating_sub(1);
             }
             SongsInputRouting::Sort => {
-                self.cur_selected = self.get_sortable_columns().len().saturating_sub(1);
+                self.sort.cur = self.get_sortable_columns().len().saturating_sub(1);
             }
             SongsInputRouting::Filter => debug!("go_to_last called while in filter mode"),
         }
