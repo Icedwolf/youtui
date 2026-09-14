@@ -1,7 +1,7 @@
 use super::{DownloadTask, Playlist, QueueState};
 use crate::app::queue_persistence::{CompactSavedQueue, CompactSongRef};
 use crate::app::structures::{
-    DownloadStatus, ListSong, ListSongDisplayableField, ListSongID, ListStatus,
+    ListSong, ListSongDisplayableField, ListSongID, ListStatus,
     Percentage, PlayState,
 };
 use pretty_assertions::assert_eq;
@@ -48,25 +48,27 @@ fn get_dummy_playlist() -> Playlist {
 }
 
 #[test]
-fn downloaded_song_plays_if_buffered() {
+fn completed_download_does_not_advance_play_status() {
     let mut p = get_dummy_playlist();
-    p.play_status = PlayState::Buffering(ListSongID(1));
-    p.list.get_list_iter_mut().nth(1).unwrap().download_status = DownloadStatus::Downloaded;
-    let _effect = p.handle_song_downloaded(ListSongID(1));
-    assert_eq!(p.play_status, PlayState::Buffering(ListSongID(1)));
-}
-
-#[test]
-fn queued_song_plays_if_not_already_playing() {
-    let mut p = get_dummy_playlist();
-    p.play_status = PlayState::Buffering(ListSongID(0));
-    p.queue_status = QueueState::Queued(ListSongID(0));
-    p.list.get_list_iter_mut().next().unwrap().download_status = DownloadStatus::Downloaded;
-    let _effect = p.handle_song_downloaded(ListSongID(0));
-    assert_eq!(p.play_status, PlayState::Buffering(ListSongID(0)));
-    // handle_song_downloaded no longer calls autoplay_song_id;
-    // PlaySong/AutoplaySong creation happens in handle_song_download_progress_update
-    assert_eq!(p.queue_status, QueueState::Queued(ListSongID(0)));
+    let id = ListSongID(0);
+    p.play_status = PlayState::Buffering(id);
+    p.queue_status = QueueState::Queued(id);
+    // Download completion must not advance playback: play_status and the
+    // queued-status stay put — the actual playback is a separate effect spawned
+    // here but never run in a unit test, and auto-advance happens elsewhere
+    // (play_next_or_stop / autoplay), not on download completion.
+    let _effect = p.handle_song_download_progress_update(
+        crate::app::ui::playlist::DownloadProgressUpdate::Completed(Box::new(
+            rodio::buffer::SamplesBuffer::new(
+                std::num::NonZeroU16::new(1).unwrap(),
+                std::num::NonZeroU32::new(44100).unwrap(),
+                vec![0.0f32; 4410],
+            ),
+        )),
+        id,
+    );
+    assert_eq!(p.play_status, PlayState::Buffering(id));
+    assert_eq!(p.queue_status, QueueState::Queued(id));
 }
 
 #[test]

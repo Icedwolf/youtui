@@ -6,6 +6,12 @@
 
 ## Completed
 
+### Session 2026-09-14 — `handle_song_downloaded` collapse; default volume 50→100
+
+- **`handle_song_downloaded` collapsed into its caller.** The method returned `Effects::none()` on *both* branches (pure logging) while the real work (spawn `playback_stream`, insert `preloaded_sources`) was already inline in `handle_song_download_progress_update`'s `Completed` arm — which *also* re-checked the same `Buffering` condition. The debug logs (`play_attempt`/`autoplay_started`/`play_started`/`download_handled_not_playing`) are now inline in the caller's single `Buffering` branch; the method + redundant check removed. Its 2 tests (`downloaded_song_plays_if_buffered`, `queued_song_plays_if_not_already_playing` — they tested the gone method) became `completed_download_does_not_advance_play_status`, driving the real `handle_song_download_progress_update(Completed(...))` with a `SamplesBuffer` dummy decoder and pinning "download completion does not auto-advance play_status/queue_status". Net −16 lines.
+- **Default volume 50 → 100.** Confirmed the user's `config.toml` had no `volume` key — the 50% was `default_volume()`, the single source feeding both `Config::default()` and `ConfigIR`'s serde default. Changed to 100; README table updated. Startup already keyed off `config.volume` (`ui.rs:261` `Playlist::new(Percentage(config.volume))`), so no other change needed.
+- Verified: 366 youtui bins green, clippy 0 warnings, `cargo build --release` clean.
+
 ### Session 2026-09-14 — Dead search-suggestion surface removed (−483 lines)
 
 - **Root cause of the dead weight:** `SearchBlock::fetch_search_suggestions` was a stub that updated a debounce field (`last_fetched_text`) and returned `Effects::none()` unconditionally — the `search_suggestions` `Vec` was never populated by any code path. The suggestion dropdown therefore never rendered (`has_search_suggestions()` always false), and the Up/Down suggestion-navigation (`increment_list`) early-returned on the empty `Vec`. The whole feature — dropdown rendering, navigation, keybinds, trait — was structurally dead.

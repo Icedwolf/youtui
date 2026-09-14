@@ -334,38 +334,6 @@ Re-log into your browser, or check your cookie file / PO-token provider, then re
         }
     }
 
-    pub fn handle_song_downloaded(&mut self, id: ListSongID) -> Effects<Self> {
-        let start = std::time::Instant::now();
-        if let PlayState::Buffering(target_id) = self.play_status
-            && target_id == id
-        {
-            debug!(
-                "play_attempt: song_id={:?}, state=Buffering, ms_since_download={}",
-                id,
-                start.elapsed().as_millis()
-            );
-            if matches!(self.queue_status, QueueState::Queued(_)) {
-                debug!(
-                    "autoplay_started: song_id={:?}, ms_to_start={}",
-                    id,
-                    start.elapsed().as_millis()
-                );
-            } else {
-                debug!(
-                    "play_started: song_id={:?}, ms_to_start={}",
-                    id,
-                    start.elapsed().as_millis()
-                );
-            }
-            return Effects::none();
-        }
-        debug!(
-            "download_handled_not_playing: song_id={:?}, state={:?}",
-            id, self.play_status
-        );
-        Effects::none()
-    }
-
     pub fn increase_volume(&mut self, inc: i8) {
         self.volume.0 = self.volume.0.saturating_add_signed(inc).clamp(0, 100);
     }
@@ -1474,11 +1442,29 @@ fn cancel_song_download(&self, id: ListSongID) {
                     .unwrap_or_warn()
                     .retain(|(song_id, _)| *song_id != id);
 
-                let mut effect = self.handle_song_downloaded(id);
-
+                let start = std::time::Instant::now();
+                let mut effect = Effects::none();
                 if let PlayState::Buffering(target_id) = self.play_status
                     && target_id == id
                 {
+                    debug!(
+                        "play_attempt: song_id={:?}, state=Buffering, ms_since_download={}",
+                        id,
+                        start.elapsed().as_millis()
+                    );
+                    if matches!(self.queue_status, QueueState::Queued(_)) {
+                        debug!(
+                            "autoplay_started: song_id={:?}, ms_to_start={}",
+                            id,
+                            start.elapsed().as_millis()
+                        );
+                    } else {
+                        debug!(
+                            "play_started: song_id={:?}, ms_to_start={}",
+                            id,
+                            start.elapsed().as_millis()
+                        );
+                    }
                     let task = Effects::new_stream(
                         move |server: &crate::app::server::ArcServer| {
                             playback_stream(Arc::clone(server), id, decoder)
@@ -1486,6 +1472,10 @@ fn cancel_song_download(&self, id: ListSongID) {
                     );
                     effect = effect.push(task);
                 } else {
+                    debug!(
+                        "download_handled_not_playing: song_id={:?}, state={:?}",
+                        id, self.play_status
+                    );
                     self.preloaded_sources.insert(id, decoder);
                 }
 
