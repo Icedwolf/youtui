@@ -35,7 +35,7 @@ pub enum AuthType {
 }
 
 fn default_volume() -> u8 {
-    50
+    100
 }
 
 fn default_yt_dlp_command() -> String {

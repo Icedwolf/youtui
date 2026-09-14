@@ -71,7 +71,7 @@ An example with all defaults is shipped in [`youtui/config/config.toml`](youtui/
 |-----|---------|---------|
 | `auth_type` | `"Browser"` | `"Browser"` (use your YouTube cookies) or `"Unauthenticated"` |
 | `yt_dlp_command` | `"yt-dlp"` | the `yt-dlp` executable to invoke |
-| `volume` | `50` | initial volume, applied at startup |
+| `volume` | `100` | initial volume, applied at startup |
 | `notifications_enabled` | `true` | desktop notifications for song changes and errors |
 | `download_cache_size` | `1` | in-memory cached songs (1 ≈ 32 MB: one playing + one cached) |
 | `keybinds` | see example | keybind overrides per context; also `mode_names` |
