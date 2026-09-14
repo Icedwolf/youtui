@@ -124,21 +124,6 @@ impl Youtui {
                 );
             }
         }));
-        let js_runtime = {
-            let mut cmd = std::process::Command::new("node");
-            song_downloader::apply_child_env(&mut cmd);
-            if cmd
-                .arg("--version")
-                .stdout(std::process::Stdio::null())
-                .stderr(std::process::Stdio::null())
-                .status()
-                .is_ok()
-            {
-                Some("node".to_string())
-            } else {
-                None
-            }
-        };
         let (cookie_path, did_export) = if let Some(browser) = detect_browser_source() {
             let mut cp = get_config_dir()?;
             cp.push(COOKIE_NETSCAPE_FILENAME);
@@ -165,8 +150,14 @@ impl Youtui {
 
         // Setup components
         let task_manager = effect::TaskManager::<YoutuiWindow>::new();
+        // Warm the ffmpeg-presence probe on the blocking pool so its ~50-100ms
+        // `ffmpeg -version` spawn overlaps the rest of startup (server build,
+        // terminal, media controls, autosave load) instead of blocking the
+        // async thread serially. `check_ffmpeg` is a LazyLock, so the warm only
+        // pays once and the first download still gets a sub-ns cache hit.
+        let ffmpeg_warm = tokio::task::spawn_blocking(song_downloader::check_ffmpeg);
         let t_server = std::time::Instant::now();
-        let server = Arc::new(server::Server::new(api_key, pot_provider, &config, cookie_path, js_runtime)?);
+        let server = Arc::new(server::Server::new(api_key, pot_provider, &config, cookie_path)?);
         debug!(
             "startup_timing: Server::new() = {}ms",
             t_server.elapsed().as_millis()
@@ -215,6 +206,10 @@ impl Youtui {
                 debug!("Auto-load failed ({}). Starting with empty playlist.", e);
             }
         }
+
+        // Ensure the ffmpeg probe finished before the first download decides its
+        // pipeline (ALAC vs M4A), so the warm isn't a cache miss on a fast select.
+        let _ = ffmpeg_warm.await;
 
         Ok(Youtui {
             status: AppStatus::Running,

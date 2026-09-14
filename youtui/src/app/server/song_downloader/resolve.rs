@@ -59,7 +59,6 @@ pub fn apply_ytdlp_auth_args(
     cmd: &mut tokio::process::Command,
     pot_provider: Option<&PotProvider>,
     cookie_header: Option<&str>,
-    js_runtime: Option<&str>,
     video_id: &str,
     web_music_fallback: bool,
 ) {
@@ -99,10 +98,6 @@ pub fn apply_ytdlp_auth_args(
     if let Some(ch) = cookie_header {
         cmd.arg("--add-header");
         cmd.arg(format!("Cookie: {ch}"));
-    }
-    if let Some(jr) = js_runtime {
-        cmd.arg("--js-runtimes");
-        cmd.arg(jr);
     }
     cmd.arg(format!("https://music.youtube.com/watch?v={video_id}"));
 }
@@ -153,7 +148,6 @@ mod tests {
             &mut cmd,
             None,
             Some("SID=manual-signed-in; x=y"),
-            None,
             "dQw4w9WgXcQ",
             false,
         );
@@ -193,7 +187,6 @@ mod tests {
             &mut cmd,
             None,
             Some("SID=manual-header"),
-            None,
             "dQw4w9WgXcQ",
             false,
         );
@@ -222,7 +215,6 @@ mod tests {
             &mut cmd,
             None,
             Some("cookie=header"),
-            None,
             "dQw4w9WgXcQ",
             false,
         );
@@ -256,7 +248,6 @@ mod tests {
             &mut cmd,
             Some(&provider),
             None,
-            None,
             "web-music-vid",
             false,
         );
@@ -289,7 +280,7 @@ mod tests {
         // Without both installed provider assets, do not force web_music,
         // which requires a GVS token.
         let mut cmd = Command::new("yt-dlp");
-        apply_ytdlp_auth_args(&mut cmd, None, None, None, "dQw4w9WgXcQ", false);
+        apply_ytdlp_auth_args(&mut cmd, None, None, "dQw4w9WgXcQ", false);
         let args: Vec<String> = cmd
             .as_std()
             .get_args()
@@ -327,7 +318,6 @@ mod tests {
             &mut cmd,
             Some(&provider),
             Some("SID=manual-signed-in"),
-            None,
             "fb-vid",
             true,
         );

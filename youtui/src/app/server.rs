@@ -19,7 +19,6 @@ pub struct Server {
     pub pot_provider: Option<PotProvider>,
     pub cookie_path: Option<PathBuf>,
     pub cookie_header: Option<String>,
-    pub js_runtime: Option<String>,
 }
 
 impl Server {
@@ -28,14 +27,8 @@ impl Server {
         pot_provider: Option<PotProvider>,
         config: &Config,
         cookie_path: Option<PathBuf>,
-        js_runtime: Option<String>,
     ) -> anyhow::Result<Server> {
         let cookie_header = resolve_cookie_header(cookie_path.as_deref(), &api_key);
-        // Warm the ffmpeg-presence probe at startup. `check_ffmpeg` is a
-        // LazyLock, so its one-time `ffmpeg -version` spawn (~50-100ms) lands
-        // on the first download's critical path otherwise; running it here
-        // turns the first song's `check_ffmpeg()` into a sub-ns cache hit.
-        song_downloader::check_ffmpeg();
         let downloader_client = {
             use reqwest::header::{COOKIE, HeaderMap, HeaderValue};
             if let Some(ref cookie) = cookie_header {
@@ -66,7 +59,6 @@ impl Server {
             pot_provider,
             cookie_path,
             cookie_header,
-            js_runtime,
         })
     }
 }

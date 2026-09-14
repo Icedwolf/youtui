@@ -684,7 +684,6 @@ Re-log into your browser, or check your cookie file / PO-token provider, then re
                 let pot_provider = server.pot_provider.clone();
                 let cp = server.cookie_path.clone();
                 let ch = server.cookie_header.clone();
-                let jr = server.js_runtime.clone();
                 let vid = video_id.clone();
                 let song_id = id;
 
@@ -703,7 +702,6 @@ Re-log into your browser, or check your cookie file / PO-token provider, then re
                             pot_provider,
                             cookie_path: cp,
                             cookie_header: ch,
-                            js_runtime: jr,
                             cancel_token: (*cancel_token_for_stream).clone(),
                             settle_window_ms,
                         }),

@@ -86,7 +86,6 @@ pub(crate) struct DownloadConfig {
     pub pot_provider: Option<resolve::PotProvider>,
     pub cookie_path: Option<std::path::PathBuf>,
     pub cookie_header: Option<String>,
-    pub js_runtime: Option<String>,
     pub cancel_token: tokio_util::sync::CancellationToken,
     /// Settle window in ms before the semaphore/spawn (0 = skip; see
     /// `RESOLVE_SETTLE_MS`). Set at selection time by `Playlist::settle_window_for`
@@ -753,11 +752,10 @@ fn build_ytdlp_command(
         &mut cmd,
         cfg.pot_provider.as_ref(),
         cfg.cookie_header.as_deref(),
-        cfg.js_runtime.as_deref(),
         &cfg.video_id,
         web_music_fallback,
     );
-    debug!(%cfg.video_id, format, js_runtime = ?cfg.js_runtime, cookie_path = ?cfg.cookie_path, "build_ytdlp_command: spawning yt-dlp");
+    debug!(%cfg.video_id, format, cookie_path = ?cfg.cookie_path, "build_ytdlp_command: spawning yt-dlp");
     cmd
 }
 
@@ -1731,7 +1729,6 @@ cat\n",
                 pot_provider: None,
                 cookie_path: None,
                 cookie_header: None,
-                js_runtime: None,
                 cancel_token: tokio_util::sync::CancellationToken::new(),
                 settle_window_ms: RESOLVE_SETTLE_MS,
             };
@@ -1795,7 +1792,6 @@ cat\n",
                 pot_provider: None,
                 cookie_path: None,
                 cookie_header: None,
-                js_runtime: None,
                 cancel_token: tokio_util::sync::CancellationToken::new(),
                 settle_window_ms: RESOLVE_SETTLE_MS,
             };
@@ -1842,7 +1838,6 @@ cat\n",
                 pot_provider: None,
                 cookie_path: None,
                 cookie_header: None,
-                js_runtime: None,
                 cancel_token: tokio_util::sync::CancellationToken::new(),
                 settle_window_ms: RESOLVE_SETTLE_MS,
             };
@@ -1907,7 +1902,6 @@ cat\n",
                 pot_provider: None,
                 cookie_path: None,
                 cookie_header: None,
-                js_runtime: None,
                 cancel_token: token.clone(),
                 settle_window_ms: RESOLVE_SETTLE_MS,
             };
@@ -1960,7 +1954,6 @@ cat\n",
                 pot_provider: None,
                 cookie_path: None,
                 cookie_header: None,
-                js_runtime: None,
                 cancel_token: token,
                 settle_window_ms: RESOLVE_SETTLE_MS,
             };
@@ -2037,7 +2030,6 @@ cat\n",
                 pot_provider: None,
                 cookie_path: None,
                 cookie_header: None,
-                js_runtime: None,
                 cancel_token: tokio_util::sync::CancellationToken::new(),
                 // The whole point: an isolated selection injects 0ms.
                 settle_window_ms: 0,
@@ -2110,7 +2102,6 @@ cat\n",
                 }),
                 cookie_path: None,
                 cookie_header: None,
-                js_runtime: None,
                 cancel_token: tokio_util::sync::CancellationToken::new(),
                 settle_window_ms: RESOLVE_SETTLE_MS,
             };
@@ -2164,7 +2155,6 @@ cat\n",
                 }),
                 cookie_path: None,
                 cookie_header: None,
-                js_runtime: None,
                 cancel_token: tokio_util::sync::CancellationToken::new(),
                 settle_window_ms: RESOLVE_SETTLE_MS,
             };
