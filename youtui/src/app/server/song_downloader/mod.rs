@@ -17,6 +17,13 @@ use crate::decoder::read_seek_source::ReadSeekSource;
 
 const MAX_CONCURRENT_DOWNLOADS: usize = 1;
 const READ_BUF_SIZE: usize = 64 * 1024;
+/// Minimum buffered bytes before the streaming decoder init is *attempted*. The
+/// fragmented-MP4 ALAC header (`ftyp` + `moov`, with the ALAC sample entry) is
+/// ~700 bytes and is ffmpeg's first atomic output write (one flush), so the
+/// first flush (≥~700B) always satisfies a threshold this small and init
+/// observes a complete `moov`. Init is attempted once; a failed init falls back
+/// to a full download, so the threshold is only a wake-up gate, not a guarantee
+/// of decodability — it stays well under the first flush by design.
 const STREAM_INIT_THRESHOLD: usize = 512;
 const DOWNLOAD_TIMEOUT_S: u64 = 120;
 const DECODER_INIT_DEADLINE_S: u64 = 5;
@@ -307,18 +314,32 @@ fn empty_pipe_verdict(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-async fn spawn_bg_cache_task(
+/// Bundled inputs for the background cache fill task (owns the semaphore permit
+/// for the whole fill, so no second download can start until it finishes/cancels).
+struct BgCacheTask {
     vid: String,
-    ct: tokio_util::sync::CancellationToken,
-    mut child: tokio::process::Child,
-    mut yt_child: Option<tokio::process::Child>,
-    mut write_handle: tokio::task::JoinHandle<()>,
-    buf: Arc<SharedBuffer>,
+    cancel_token: tokio_util::sync::CancellationToken,
+    child: tokio::process::Child,
+    yt_child: Option<tokio::process::Child>,
+    write_handle: tokio::task::JoinHandle<()>,
+    buffer: Arc<SharedBuffer>,
     log_prefix: &'static str,
     t0: Option<tokio::time::Instant>,
-    _permit: tokio::sync::SemaphorePermit<'static>,
-) {
+    permit: tokio::sync::SemaphorePermit<'static>,
+}
+
+async fn spawn_bg_cache_task(task: BgCacheTask) {
+    let BgCacheTask {
+        vid,
+        cancel_token: ct,
+        mut child,
+        mut yt_child,
+        mut write_handle,
+        buffer: buf,
+        log_prefix,
+        t0,
+        permit: _permit,
+    } = task;
     let stall = std::time::Duration::from_secs(BG_STALL_TIMEOUT_S);
     let mut last_len = buf.len();
     let mut last_progress = std::time::Instant::now();
@@ -783,6 +804,46 @@ fn spawn_ytdlp(
     })
 }
 
+/// Wait for a streaming child to finish a full download after streaming init
+/// failed, then reap it. Shared by the ALAC (ffmpeg) and M4A (yt-dlp) fallback
+/// paths, which differ only in the retry ladder and the decoder construction
+/// the caller runs on the returned status. Handles the three failure arms —
+/// cancel (kill + reap), writer panic, and the `DOWNLOAD_TIMEOUT_S` deadline —
+/// in one place so the child is never left orphaned on any of them.
+async fn await_full_download(
+    cfg: &DownloadConfig,
+    child: &mut tokio::process::Child,
+    yt_child: &mut Option<tokio::process::Child>,
+    stdout_handle: tokio::task::JoinHandle<()>,
+    label: &str,
+) -> anyhow::Result<std::process::ExitStatus> {
+    let wait_result = tokio::select! {
+        biased;
+        _ = cfg.cancel_token.cancelled() => {
+            kill_and_reap(child, yt_child).await;
+            bail!("{label} download cancelled during fallback wait");
+        }
+        res = tokio::time::timeout(
+            std::time::Duration::from_secs(DOWNLOAD_TIMEOUT_S),
+            stdout_handle,
+        ) => res,
+    };
+    match wait_result {
+        Ok(Ok(())) => {}
+        Ok(Err(join_err)) => {
+            bail!("{label} writer task panicked: {join_err}");
+        }
+        Err(_elapsed) => {
+            kill_and_reap(child, yt_child).await;
+            bail!("{label} download timed out ({}s)", DOWNLOAD_TIMEOUT_S);
+        }
+    }
+    child
+        .wait()
+        .await
+        .with_context(|| format!("wait {label}"))
+}
+
 async fn ytdlp_pipeline(
     cfg: &DownloadConfig,
     ffmpeg_avail: bool,
@@ -961,45 +1022,23 @@ async fn ytdlp_pipeline(
                 Ok(decoder) => {
                     debug!(%cfg.video_id, buf_len = buffer.len(), elapsed = ?t0.elapsed(),
                         "Streaming decoder init succeeded");
-                    let _cache_task = tokio::spawn(spawn_bg_cache_task(
-                        cfg.video_id.clone(),
-                        cfg.cancel_token.clone(),
+                    let _cache_task = tokio::spawn(spawn_bg_cache_task(BgCacheTask {
+                        vid: cfg.video_id.clone(),
+                        cancel_token: cfg.cancel_token.clone(),
                         child,
                         yt_child,
-                        stdout_handle,
-                        buffer.clone(),
-                        "ffmpeg",
-                        Some(t0),
-                        _permit,
-                    ));
+                        write_handle: stdout_handle,
+                        buffer: buffer.clone(),
+                        log_prefix: "ffmpeg",
+                        t0: Some(t0),
+                        permit: _permit,
+                    }));
                     (decoder, false)
                 }
                 Err(stream_err) => {
                     debug!(%cfg.video_id, error = %stream_err,
                         "Streaming decoder init failed, waiting for ffmpeg relay stream to complete");
-                    let wait_result = tokio::select! {
-                        biased;
-                        _ = cfg.cancel_token.cancelled() => {
-                            kill_and_reap(&mut child, &mut yt_child).await;
-                            bail!("ffmpeg download cancelled during fallback wait");
-                        }
-                        res = tokio::time::timeout(
-                            std::time::Duration::from_secs(DOWNLOAD_TIMEOUT_S),
-                            stdout_handle,
-                        ) => res,
-                    };
-                    match wait_result {
-                        Ok(Ok(())) => {}
-                        Ok(Err(join_err)) => {
-                            bail!("ffmpeg writer task panicked: {join_err}");
-                        }
-                        Err(_elapsed) => {
-                            kill_and_reap(&mut child, &mut yt_child).await;
-                            bail!("ffmpeg download timed out ({}s)", DOWNLOAD_TIMEOUT_S);
-                        }
-                    }
-
-                    let status = child.wait().await.with_context(|| "wait ffmpeg".to_string())?;
+                    let status = await_full_download(cfg, &mut child, &mut yt_child, stdout_handle, "ffmpeg").await?;
                     if !status.success() {
                         let code = exit_code_string(&status);
                         // The 403 throttle mark can still be in flight when the
@@ -1073,50 +1112,31 @@ async fn ytdlp_pipeline(
                     debug!(%cfg.video_id, buf_len = buffer.len(), elapsed = ?t0.elapsed(),
                     "Streaming decoder init succeeded (M4A)");
 
-                    let pipe_name: &str = "yt-dlp";
-                    let _handle = tokio::spawn(spawn_bg_cache_task(
-                        cfg.video_id.clone(),
-                        cfg.cancel_token.clone(),
+                    let _handle = tokio::spawn(spawn_bg_cache_task(BgCacheTask {
+                        vid: cfg.video_id.clone(),
+                        cancel_token: cfg.cancel_token.clone(),
                         child,
-                        None,
-                        stdout_handle,
-                        buffer.clone(),
-                        pipe_name,
-                        None,
-                        _permit,
-                    ));
+                        yt_child: None,
+                        write_handle: stdout_handle,
+                        buffer: buffer.clone(),
+                        log_prefix: "yt-dlp",
+                        t0: None,
+                        permit: _permit,
+                    }));
 
                     (decoder, false)
                 }
                 Err(stream_err) => {
                     debug!(%cfg.video_id, error = %stream_err,
                     "Streaming decoder init failed, waiting for yt-dlp stream to complete");
-                    let wait_result = tokio::select! {
-                        biased;
-                        _ = cfg.cancel_token.cancelled() => {
-                            kill_and_reap(&mut child, &mut yt_child).await;
-                            bail!("yt-dlp download cancelled during fallback wait");
-                        }
-                        res = tokio::time::timeout(
-                            std::time::Duration::from_secs(DOWNLOAD_TIMEOUT_S),
-                            stdout_handle,
-                        ) => res,
-                    };
-                    match wait_result {
-                        Ok(Ok(())) => {}
-                        Ok(Err(join_err)) => {
-                            bail!("yt-dlp writer task panicked: {join_err}");
-                        }
-                        Err(_elapsed) => {
-                            kill_and_reap(&mut child, &mut yt_child).await;
-                            bail!("yt-dlp download timed out ({}s)", DOWNLOAD_TIMEOUT_S);
-                        }
-                    }
-
-                    let status = child
-                        .wait()
-                        .await
-                        .with_context(|| "wait yt-dlp".to_string())?;
+                    // No retry ladder here: the M4A path is the no-ffmpeg
+                    // fallback and the throttle/client-fallback retries are
+                    // ALAC-relay-specific (see DECISIONS.md:40-42). On a
+                    // no-ffmpeg host a throttle or format-refusal skips the song
+                    // rather than retrying — degraded by design, and unreachable
+                    // here because `ffmpeg_avail` is true whenever ffmpeg is
+                    // installed.
+                    let status = await_full_download(cfg, &mut child, &mut yt_child, stdout_handle, "yt-dlp").await?;
                     if !status.success() {
                         let code = exit_code_string(&status);
                         bail!("yt-dlp exited with code {code}");
@@ -2805,17 +2825,17 @@ cat\n",
             let buf = SharedBuffer::new();
             let done = tokio::task::spawn(std::future::pending::<()>());
             let permit = DOWNLOAD_SEMAPHORE.acquire().await.expect("test permit");
-            let task = tokio::spawn(spawn_bg_cache_task(
-                "test-vid".to_string(),
-                ct.clone(),
-                ff_child,
-                Some(yt_child),
-                done,
-                buf,
-                "test",
-                None,
+            let task = tokio::spawn(spawn_bg_cache_task(BgCacheTask {
+                vid: "test-vid".to_string(),
+                cancel_token: ct.clone(),
+                child: ff_child,
+                yt_child: Some(yt_child),
+                write_handle: done,
+                buffer: buf,
+                log_prefix: "test",
+                t0: None,
                 permit,
-            ));
+            }));
 
             tokio::time::sleep(Duration::from_millis(150)).await;
             ct.cancel();
@@ -2859,17 +2879,17 @@ cat\n",
             let done = tokio::task::spawn(std::future::pending::<()>());
             let permit = DOWNLOAD_SEMAPHORE.acquire().await.expect("test permit");
 
-            let task = tokio::spawn(spawn_bg_cache_task(
-                "test-vid".to_string(),
-                ct.clone(),
-                ff_child,
-                Some(yt_child),
-                done,
-                buf,
-                "test",
-                None,
+            let task = tokio::spawn(spawn_bg_cache_task(BgCacheTask {
+                vid: "test-vid".to_string(),
+                cancel_token: ct.clone(),
+                child: ff_child,
+                yt_child: Some(yt_child),
+                write_handle: done,
+                buffer: buf,
+                log_prefix: "test",
+                t0: None,
                 permit,
-            ));
+            }));
 
             assert!(
                 DOWNLOAD_SEMAPHORE.try_acquire().is_err(),
@@ -2913,17 +2933,17 @@ cat\n",
             let done = tokio::task::spawn(std::future::pending::<()>());
             let permit = DOWNLOAD_SEMAPHORE.acquire().await.expect("test permit");
 
-            let task = tokio::spawn(spawn_bg_cache_task(
-                "test-vid".to_string(),
-                ct.clone(),
-                ff_child,
-                Some(yt_child),
-                done,
-                buf,
-                "test",
-                None,
+            let task = tokio::spawn(spawn_bg_cache_task(BgCacheTask {
+                vid: "test-vid".to_string(),
+                cancel_token: ct.clone(),
+                child: ff_child,
+                yt_child: Some(yt_child),
+                write_handle: done,
+                buffer: buf,
+                log_prefix: "test",
+                t0: None,
                 permit,
-            ));
+            }));
 
             ct.cancel();
             assert!(
