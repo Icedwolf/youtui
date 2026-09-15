@@ -62,8 +62,11 @@ pub fn get_queue_dir() -> Result<PathBuf, Box<dyn std::error::Error>> {
 }
 
 pub fn save_queue(playlist: &Playlist, name: &str) -> Result<(), Box<dyn std::error::Error>> {
-    let raw_songs: Vec<ListSong> = playlist.list.get_list_iter().cloned().collect();
-    let songs: Vec<CompactSongRef> = raw_songs.iter().map(CompactSongRef::from).collect();
+    let songs: Vec<CompactSongRef> = playlist
+        .list
+        .get_list_iter()
+        .map(CompactSongRef::from)
+        .collect();
 
     let current_idx = playlist.get_cur_playing_index();
     let saved = CompactSavedQueue {
@@ -77,9 +80,10 @@ pub fn save_queue(playlist: &Playlist, name: &str) -> Result<(), Box<dyn std::er
     let path = queue_dir.join(format!("{}.json", name));
     let temp_path = queue_dir.join(format!("{}.json.tmp", name));
 
-    let json = serde_json::to_string(&saved)?;
+    let mut buf = Vec::with_capacity(saved.songs.len() * 200);
+    serde_json::to_writer(&mut buf, &saved)?;
     let mut temp_file = fs::File::create(&temp_path)?;
-    temp_file.write_all(json.as_bytes())?;
+    temp_file.write_all(&buf)?;
     temp_file.sync_all()?;
     drop(temp_file);
 
@@ -203,6 +207,72 @@ fn normalize_and_load(
 pub fn auto_save(playlist: &Playlist) -> Result<(), Box<dyn std::error::Error>> {
     debug!("Auto-saving queue");
     save_queue(playlist, AUTO_SAVE)
+}
+
+#[cfg(all(test, not(debug_assertions)))]
+mod criterion_benches {
+    use super::*;
+    use crate::app::structures::ListSong;
+    use criterion::Criterion;
+    use std::hint::black_box;
+use ytmapi_rs::common::{VideoID, YoutubeID};
+
+    fn big_playlist(count: usize) -> Vec<ListSong> {
+        (0..count)
+            .map(|i| {
+                ListSong::create_with_metadata(
+                    VideoID::from_raw(format!("video_id_{i}")),
+                    format!("Song {i}"),
+                    vec!["Artist A".into(), "Artist B".into()],
+                    Some(format!("Album {}", i % 50)),
+                    "3:30".into(),
+                )
+            })
+            .collect()
+    }
+
+    fn into_compact_two_pass(songs: &[ListSong]) -> Vec<CompactSongRef> {
+        let raw: Vec<ListSong> = songs.iter().cloned().collect();
+        raw.iter().map(CompactSongRef::from).collect()
+    }
+
+    fn into_compact_single_pass(songs: &[ListSong]) -> Vec<CompactSongRef> {
+        songs.iter().map(CompactSongRef::from).collect()
+    }
+
+    fn serialize_to_string(saved: &CompactSavedQueue) -> Vec<u8> {
+        serde_json::to_string(saved).unwrap().into_bytes()
+    }
+
+    fn serialize_to_writer(saved: &CompactSavedQueue) -> Vec<u8> {
+        let mut buf = Vec::with_capacity(saved.songs.len() * 200);
+        serde_json::to_writer(&mut buf, saved).unwrap();
+        buf
+    }
+
+    #[test]
+    fn criterion_save_queue_serialization() {
+        let songs = big_playlist(135_000);
+        let saved = CompactSavedQueue {
+            songs: into_compact_single_pass(&songs),
+            current_index: Some(135_000 / 2),
+            shuffle_enabled: false,
+            shuffle_seed: 0,
+        };
+        let mut c = Criterion::default();
+        c.bench_function("save/current_two_pass", |b| {
+            b.iter(|| black_box(into_compact_two_pass(black_box(&songs))))
+        });
+        c.bench_function("save/single_pass", |b| {
+            b.iter(|| black_box(into_compact_single_pass(black_box(&songs))))
+        });
+        c.bench_function("save/serialize_to_string", |b| {
+            b.iter(|| black_box(serialize_to_string(&saved)))
+        });
+        c.bench_function("save/serialize_to_writer", |b| {
+            b.iter(|| black_box(serialize_to_writer(&saved)))
+        });
+    }
 }
 
 pub fn auto_load(
