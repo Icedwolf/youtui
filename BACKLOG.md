@@ -1,15 +1,26 @@
 # Youtui Backlog
 
 **Build:** 0 errors, 0 warnings, 0 clippy
-**Tests:** 358 youtui bins green (2 ignored)
-**Last updated:** 2026-09-14
+**Tests:** 360 youtui bins green (2 ignored)
+**Last updated:** 2026-09-15
 
 This file is a working backlog only — no changelog, no session archaeology. Past work
 and its rationale live in git history and in the code comments / `DECISIONS.md`.
 
 ## Open
 
-_None._
+- **Sort/filter shell duplication** (complexity) — `SongsPanel` and `SongSearchBrowser`
+  each carry ~15 near-identical sort/filter methods (~270 duplicated lines total) plus
+  ~53 lines of duplicated `AdvancedTableView` one-liners. The bodies differ only by field
+  name (`list` vs `song_list`), the route enum (`SongsInputRouting` vs `InputRouting`,
+  the latter adds a `Search` arm), and two error-message strings. Moving the shared
+  bodies into `AdvancedTableView` default impls (~10 new one-line accessors/struct:
+  `get_songs`/`get_mut_songs`, `set_route_list/sort/filter`, `route_is_list`,
+  `set_cur_selected`, sort/filter-manager getters, static `get_subcolumns`) nets ~-90
+  lines and removes the second copy of every method. No perf delta; covered by the
+  existing filter/sort-route tests (`songs_panel_sort_route_navigation_targets_sort_cursor`).
+
+## Current state
 
 The codebase is at a local optimum across the areas this project optimizes:
 
@@ -24,7 +35,10 @@ The codebase is at a local optimum across the areas this project optimizes:
 - **RAM** — in-memory ALAC buffers are duration/source-dependent (5.5–77MB, median ~45MB);
   cache max = 1 by design.
 - **Render/CPU** — per-frame caches (title, row numbers, artist string, lowercased fields)
-  are in place; no per-frame allocation on the hot path.
+  are in place; no per-frame allocation on the hot path. Landing 2026-09-15: footer
+  `bar`/`vol` strings and all four `HasTitle` impls cached (footer + playlist + songs
+  panel + songsearch + search panel); `create_with_metadata` avoids the double artists-join
+  (bench 535 → ~310ns/song, ~2× faster 135k-song autosave apply).
 
 ## Rejected / not planned
 
