@@ -436,6 +436,9 @@ impl SongSearchBrowser {
 mod tests {
     use super::*;
     use crate::app::structures::ListSong;
+    use crate::app::view::{
+        Filter, FilterString, SortDirection, TableFilterCommand, TableSortCommand,
+    };
 
     #[test]
     fn replace_song_list_marks_results_loaded() {
@@ -464,11 +467,11 @@ mod tests {
         assert_eq!(browser.sort.cur, 2);
     }
 
-    fn song(id: &str, album: &str) -> ListSong {
+    fn song(id: &str, title: &str, album: &str) -> ListSong {
         use ytmapi_rs::common::{VideoID, YoutubeID};
         ListSong::create_with_metadata(
             VideoID::from_raw(id.to_owned()),
-            "Title".into(),
+            title.to_owned(),
             vec!["Artist".into()],
             Some(album.to_owned()),
             "3:00".into(),
@@ -479,17 +482,86 @@ mod tests {
     fn filtered_selection_targets_filtered_song() {
         let mut browser = SongSearchBrowser::new();
         browser.song_list.push_song_list(vec![
-            song("a", "Alpha"),
-            song("b", "Beta"),
-            song("c", "Alpha"),
-            song("d", "Gamma"),
+            song("a", "ta", "Alpha"),
+            song("b", "tb", "Beta"),
+            song("c", "tc", "Alpha"),
+            song("d", "td", "Gamma"),
         ]);
         browser.cur_selected = 1;
         browser.filter.filter_text.set_text("Alpha");
         browser.apply_filter();
         assert_eq!(browser.filtered_indices, vec![0, 2]);
         // Visible row 1 (the second Alpha song) must NOT resolve as song_list[1].
-        assert_eq!(browser.get_song_from_idx(1).unwrap().title, "Title");
+        assert_eq!(browser.get_song_from_idx(1).unwrap().title, "tc");
+    }
+
+    #[test]
+    fn apply_filter_clamps_selection_to_shrunk_filtered_list() {
+        let mut browser = SongSearchBrowser::new();
+        browser.song_list.push_song_list(vec![
+            song("a", "ta", "Alpha"),
+            song("b", "tb", "Alpha"),
+            song("c", "tc", "Beta"),
+            song("d", "td", "Beta"),
+        ]);
+        browser.cur_selected = 3;
+        *browser.widget_state.offset_mut() = 1;
+        browser.filter.filter_text.set_text("Alpha");
+        browser.apply_filter();
+        assert_eq!(browser.filtered_indices, vec![0, 1]);
+        assert_eq!(browser.cur_selected, 1);
+        assert!(matches!(browser.input_routing, InputRouting::List));
+        assert!(!browser.filter.shown);
+        assert_eq!(browser.widget_state.offset(), 0);
+    }
+
+    #[test]
+    fn push_sort_command_dedups_same_column() {
+        let mut browser = SongSearchBrowser::new();
+        browser.song_list.push_song_list(vec![
+            song("a", "tC", "album"),
+            song("b", "tA", "album"),
+            song("c", "tB", "album"),
+        ]);
+        browser
+            .push_sort_command(TableSortCommand {
+                column: 0,
+                direction: SortDirection::Asc,
+            })
+            .unwrap();
+        assert_eq!(browser.song_list.get_song_from_idx(0).unwrap().title, "tA");
+        assert_eq!(browser.get_sort_commands().len(), 1);
+        browser
+            .push_sort_command(TableSortCommand {
+                column: 0,
+                direction: SortDirection::Desc,
+            })
+            .unwrap();
+        assert_eq!(browser.get_sort_commands().len(), 1);
+        assert_eq!(browser.song_list.get_song_from_idx(0).unwrap().title, "tC");
+    }
+
+    #[test]
+    fn rebuild_filtered_indices_intersects_commands_and_clear_restores() {
+        let mut browser = SongSearchBrowser::new();
+        browser.song_list.push_song_list(vec![
+            song("a", "ta", "Alpha"),
+            song("b", "tb", "Alpha"),
+            song("c", "tc", "Beta"),
+            song("d", "td", "Beta"),
+        ]);
+        browser.filter.filter_commands = vec![
+            TableFilterCommand::All(Filter::Contains(FilterString::case_insensitive(
+                "Alpha".into(),
+            ))),
+            TableFilterCommand::All(Filter::Contains(FilterString::case_insensitive(
+                "tb".into(),
+            ))),
+        ];
+        browser.rebuild_filtered_indices();
+        assert_eq!(browser.filtered_indices, vec![1]);
+        browser.clear_filter_commands();
+        assert_eq!(browser.filtered_indices, vec![0, 1, 2, 3]);
     }
 
     #[test]
