@@ -11,6 +11,7 @@ use crate::config::keymap::Keymap;
 use crate::widgets::ScrollingListState;
 use ratatui::text::Line;
 use std::borrow::Cow;
+use std::cell::RefCell;
 use std::iter::ExactSizeIterator;
 use std::marker::PhantomData;
 
@@ -36,6 +37,7 @@ pub struct SearchPanel<C: SearchPanelConfig> {
     pub search_popped: bool,
     pub search: SearchBlock,
     pub widget_state: ScrollingListState,
+    cached_title: RefCell<Option<(ListStatus, usize, Line<'static>)>>,
     _cfg: PhantomData<C>,
 }
 
@@ -49,6 +51,7 @@ impl<C: SearchPanelConfig> SearchPanel<C> {
             search_popped: true,
             search: SearchBlock::default(),
             widget_state: Default::default(),
+            cached_title: RefCell::new(None),
             _cfg: PhantomData,
         }
     }
@@ -138,13 +141,22 @@ impl<C: SearchPanelConfig> ListView for SearchPanel<C> {
 
 impl<C: SearchPanelConfig> HasTitle for SearchPanel<C> {
     fn get_title(&self) -> Line<'static> {
-        match self.status {
+        let len = self.list.len();
+        {
+            let cached = self.cached_title.borrow();
+            if let Some((cached_status, cached_len, title)) = cached.as_ref()
+                && cached_status == &self.status
+                && *cached_len == len
+            {
+                return title.clone();
+            }
+        }
+        let title = match self.status {
             ListStatus::New => Line::from(C::title()),
             ListStatus::Loading | ListStatus::InProgress => {
                 Line::from(format!("{} - loading", C::title()))
             }
             ListStatus::Loaded => {
-                let len = self.list.len();
                 if len == 0 {
                     Line::from(format!("{} - nothing found", C::title()))
                 } else {
@@ -152,7 +164,9 @@ impl<C: SearchPanelConfig> HasTitle for SearchPanel<C> {
                 }
             }
             ListStatus::Error => Line::from(format!("{} - Error received", C::title())),
-        }
+        };
+        *self.cached_title.borrow_mut() = Some((self.status.clone(), len, title.clone()));
+        title
     }
 }
 
