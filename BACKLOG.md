@@ -1,7 +1,7 @@
 # Youtui Backlog
 
 **Build:** 0 errors, 0 warnings, 0 clippy
-**Tests:** 360 youtui bins green (2 ignored)
+**Tests:** 361 youtui bins green (2 ignored)
 **Last updated:** 2026-09-15
 
 This file is a working backlog only — no changelog, no session archaeology. Past work
@@ -9,16 +9,11 @@ and its rationale live in git history and in the code comments / `DECISIONS.md`.
 
 ## Open
 
-- **Sort/filter shell duplication** (complexity) — `SongsPanel` and `SongSearchBrowser`
-  each carry ~15 near-identical sort/filter methods (~270 duplicated lines total) plus
-  ~53 lines of duplicated `AdvancedTableView` one-liners. The bodies differ only by field
-  name (`list` vs `song_list`), the route enum (`SongsInputRouting` vs `InputRouting`,
-  the latter adds a `Search` arm), and two error-message strings. Moving the shared
-  bodies into `AdvancedTableView` default impls (~10 new one-line accessors/struct:
-  `get_songs`/`get_mut_songs`, `set_route_list/sort/filter`, `route_is_list`,
-  `set_cur_selected`, sort/filter-manager getters, static `get_subcolumns`) nets ~-90
-  lines and removes the second copy of every method. No perf delta; covered by the
-  existing filter/sort-route tests (`songs_panel_sort_route_navigation_targets_sort_cursor`).
+Part of this file is a working backlog only — no changelog, no session archaeology. The
+sort/filter shell duplication item is closed: `SongsPanel` and `SongSearchBrowser` now
+share a single canonical body via the `SortFilterTable` trait in `shared_components.rs`
+(defaults + 14 accessors), with `go_to_first`/`go_to_last` routing abstracted through
+`route_is_list`/`route_is_sort` (preserving the `Search`-arm divergence).
 
 ## Current state
 
