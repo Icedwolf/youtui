@@ -238,11 +238,11 @@ fn compute_artists_string(artists: &[ListSongArtist]) -> String {
 fn compute_lowercached(
     title: &str,
     album: Option<&str>,
-    artists: &[ListSongArtist],
+    artists_string: &str,
 ) -> (String, String, String) {
     let title_lower = title.to_lowercase();
     let album_lower = album.unwrap_or_default().to_lowercase();
-    let artists_lower = compute_artists_string(artists).to_lowercase();
+    let artists_lower = artists_string.to_lowercase();
     (title_lower, album_lower, artists_lower)
 }
 
@@ -318,7 +318,7 @@ impl ListSong {
         let album_ref = list_album.as_ref().map(|a| a.as_ref().name.as_str());
         let artists_string = compute_artists_string(&list_artists);
         let (title_lower, album_lower, artists_lower) =
-            compute_lowercached(&title, album_ref, &list_artists);
+            compute_lowercached(&title, album_ref, &artists_string);
         ListSong {
             video_id,
             track_no: None,
@@ -479,7 +479,7 @@ impl BrowserSongsList {
         let artists_string = compute_artists_string(&artists);
         let track_no_string = track_no.to_string();
         let (title_lower, album_lower, artists_lower) =
-            compute_lowercached(&title, Some(&album.name), &artists);
+            compute_lowercached(&title, Some(&album.name), &artists_string);
         self.list.push(ListSong {
             download_status: DownloadStatus::None,
             id,
@@ -525,7 +525,7 @@ impl BrowserSongsList {
         let (title_lower, album_lower, artists_lower) = compute_lowercached(
             &title,
             search_album.as_ref().map(|a| a.as_ref().name.as_str()),
-            &search_artists,
+            &artists_string,
         );
         self.list.push(ListSong {
             download_status: DownloadStatus::None,
@@ -615,7 +615,7 @@ impl BrowserSongsList {
         let (title_lower, album_lower, artists_lower) = compute_lowercached(
             &title,
             album.as_ref().map(|a: &ListSongAlbum| a.name.as_str()),
-            &artists,
+            &artists_string,
         );
         self.list.push(ListSong {
             download_status: DownloadStatus::None,
@@ -925,9 +925,11 @@ mod bench {
                 id: None,
             },
         ];
+        let artists_string = compute_artists_string(&artists);
         let start = std::time::Instant::now();
         for _ in 0..ITERATIONS {
-            let result = compute_lowercached("Song Title", Some("Album Name"), &artists);
+            let result =
+                compute_lowercached("Song Title", Some("Album Name"), &artists_string);
             std::hint::black_box(&result);
         }
         let elapsed = start.elapsed();
