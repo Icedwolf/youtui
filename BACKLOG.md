@@ -1,7 +1,7 @@
 # Youtui Backlog
 
 **Build:** 0 errors, 0 warnings, 0 clippy
-**Tests:** 364 youtui bins green (2 ignored)
+**Tests:** 369 youtui bins green (2 ignored)
 **Last updated:** 2026-09-15
 
 This file is a working backlog only — no changelog, no session archaeology. Past work
@@ -31,6 +31,10 @@ The codebase is at a local optimum across the areas this project optimizes:
   clone) and serializes with `to_writer` into a capacity-hinted buffer; 135k-song save
   serialization measured ~218ms → ~89ms (`criterion_save_queue_serialization`). `sync_all`
   kept (save is user-triggered, infrequent).
+- **Filtered selection resolves correctly** — play/add on a filtered SongsPanel/SongSearchBrowser
+  now maps the visible (filtered) row to the real song. The shadowing inherent `get_song_from_idx`
+  (unfiltered) that preempted the `SongListComponent` filtered mapping is gone; the trait method
+  is the single definition and underlying access is explicit via `list.get_song_from_idx`.
 - **RAM** — in-memory ALAC buffers are duration/source-dependent (5.5–77MB, median ~45MB);
   cache max = 1 by design.
 - **Render/CPU** — per-frame caches (title, row numbers, artist string, lowercased fields)
