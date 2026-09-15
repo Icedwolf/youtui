@@ -351,3 +351,89 @@ define_browser_songs_action!(
     BrowserPlaylistSongsAction,
     PlaylistSongsConfig::context_name()
 );
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::app::structures::ListSong;
+    use crate::app::view::{Filter, FilterString, SortDirection, TableFilterCommand, TableSortCommand};
+    use ytmapi_rs::common::{VideoID, YoutubeID};
+
+    fn song_for(video_id: &str, title: &str, album: &str) -> ListSong {
+        ListSong::create_with_metadata(
+            VideoID::from_raw(video_id.to_owned()),
+            title.to_owned(),
+            vec!["Artist".into()],
+            Some(album.to_owned()),
+            "3:00".into(),
+        )
+    }
+
+    fn panel_with(songs: Vec<ListSong>) -> SongsPanel<ArtistSongsConfig> {
+        let mut panel = SongsPanel::new();
+        panel.list.push_song_list(songs);
+        panel
+    }
+
+    fn album_filter(text: &str) -> TableFilterCommand {
+        // ArtistSongsConfig filterable_columns are &[1, 2, 4] -> Album/Song/Year.
+        TableFilterCommand::All(Filter::Contains(FilterString::case_insensitive(text.into())))
+    }
+
+    #[test]
+    fn apply_filter_clamps_selection_to_shrunk_filtered_list() {
+        let mut panel = panel_with(vec![
+            song_for("a", "ta", "Alpha"),
+            song_for("b", "tb", "Alpha"),
+            song_for("c", "tc", "Beta"),
+            song_for("d", "td", "Beta"),
+        ]);
+        panel.cur_selected = 3;
+        panel.filter.filter_text.set_text("Alpha");
+        panel.apply_filter();
+        assert_eq!(panel.filtered_indices, vec![0, 1]);
+        assert_eq!(panel.cur_selected, 1);
+        assert_eq!(panel.route, SongsInputRouting::List);
+        assert!(!panel.filter.shown);
+        assert_eq!(panel.widget_state.offset(), 0);
+    }
+
+    #[test]
+    fn push_sort_command_dedups_same_column() {
+        let mut panel = panel_with(vec![
+            song_for("a", "ta", "C"),
+            song_for("b", "tb", "A"),
+            song_for("c", "tc", "B"),
+        ]);
+        panel
+            .push_sort_command(TableSortCommand {
+                column: 1,
+                direction: SortDirection::Asc,
+            })
+            .unwrap();
+        assert_eq!(panel.get_song_from_idx(0).unwrap().title, "tb");
+        panel
+            .push_sort_command(TableSortCommand {
+                column: 1,
+                direction: SortDirection::Desc,
+            })
+            .unwrap();
+        assert_eq!(panel.get_sort_commands().len(), 1);
+        assert_eq!(panel.get_song_from_idx(0).unwrap().title, "ta");
+    }
+
+    #[test]
+    fn rebuild_filtered_indices_intersects_commands_and_clear_restores() {
+        let mut panel = panel_with(vec![
+            song_for("a", "ta", "Alpha"),
+            song_for("b", "tb", "Alpha"),
+            song_for("c", "tc", "Beta"),
+            song_for("d", "td", "Beta"),
+        ]);
+        panel.filter.filter_commands = vec![album_filter("Alpha"), album_filter("tb")];
+        panel.rebuild_filtered_indices();
+        assert_eq!(panel.filtered_indices, vec![1]);
+        panel.clear_filter_commands();
+        assert_eq!(panel.filtered_indices, vec![0, 1, 2, 3]);
+    }
+}
