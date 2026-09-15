@@ -3,11 +3,16 @@ use crate::app::component::actionhandler::{
     Action, Component, TextHandler,
 };
 use crate::app::effect::Effects;
-use crate::app::structures::ListSong;
-use crate::app::view::{TableFilterCommand, TableSortCommand};
+use crate::app::structures::{BrowserSongsList, ListSong, ListSongDisplayableField};
+use crate::app::view::{
+    AdvancedTableView, Filter, FilterString, SortDirection, TableFilterCommand, TableSortCommand,
+};
+use crate::drawutils::get_offset_after_list_resize;
+use anyhow::{anyhow, bail};
 use rat_text::text_input::{TextInputState, handle_events};
 use ratatui::widgets::ListState;
 use serde::{Deserialize, Serialize};
+use tracing::debug;
 
 // --- Song playback helpers (shared by songsearch, artistsearch, playlistsearch) ---
 
@@ -634,5 +639,189 @@ pub fn get_adjusted_list_column<T: Copy, const N: usize>(
     adjusted_cols: [T; N],
 ) -> Option<T> {
     adjusted_cols.get(target_col).copied()
+}
+
+/// Shared filter/sort/route behavior for `SongsPanel` and `SongSearchBrowser`.
+///
+/// Callers dispatch through the concrete types; Rust resolves these methods
+/// automatically via the trait whenever the trait is in scope.
+pub(crate) trait SortFilterTable: AdvancedTableView {
+    // ---- accessors (one-liners per implementor) ----
+    fn get_songs(&self) -> &BrowserSongsList;
+    fn get_mut_songs(&mut self) -> &mut BrowserSongsList;
+    fn set_route_list(&mut self);
+    fn set_route_sort(&mut self);
+    fn set_route_filter(&mut self);
+    fn route_is_list(&self) -> bool;
+    fn route_is_sort(&self) -> bool;
+    fn set_cur_selected(&mut self, idx: usize);
+    fn set_filtered_indices(&mut self, indices: Vec<usize>);
+    fn get_filter_manager(&self) -> &FilterManager;
+    fn get_mut_filter_manager(&mut self) -> &mut FilterManager;
+    fn get_sort_manager(&self) -> &SortManager;
+    fn get_mut_sort_manager(&mut self) -> &mut SortManager;
+    fn get_subcolumns() -> [ListSongDisplayableField; 5];
+
+    // ---- defaults (canonical duplicated body) ----
+
+    fn apply_all_sort_commands(&mut self) -> anyhow::Result<()> {
+        let sort_commands = self.get_sort_commands().to_vec();
+        for c in sort_commands.iter() {
+            if !self.get_sortable_columns().contains(&c.column) {
+                bail!(format!("Unable to sort column {}", c.column,));
+            }
+            let col = get_adjusted_list_column(c.column, Self::get_subcolumns()).ok_or_else(
+                || anyhow!("Unable to sort column {}, doesn't match underlying list", c.column),
+            )?;
+            self.get_mut_songs().sort(col, c.direction);
+        }
+        Ok(())
+    }
+
+    fn get_filtered_list_iter(&self) -> impl Iterator<Item = &ListSong> + '_ {
+        self.get_songs().get_list_iter().filter(move |ls| {
+            self.get_filter_commands()
+                .iter()
+                .fold(true, |acc, command| {
+                    let match_found = command.matches_row(
+                        ls,
+                        Self::get_subcolumns(),
+                        self.get_filterable_columns(),
+                    );
+                    acc && match_found
+                })
+        })
+    }
+
+    fn rebuild_filtered_indices(&mut self) {
+        let songs = self.get_songs();
+        let cmds = self.get_filter_commands();
+        let cols = self.get_filterable_columns();
+        let sub = Self::get_subcolumns();
+        let indices: Vec<usize> = songs
+            .get_list_iter()
+            .enumerate()
+            .filter(|(_, ls)| {
+                cmds.iter()
+                    .all(|command| command.matches_row(ls, sub, cols))
+            })
+            .map(|(actual_idx, _)| actual_idx)
+            .collect();
+        self.set_filtered_indices(indices);
+    }
+
+    fn apply_filter(&mut self) {
+        self.get_mut_filter_manager().shown = false;
+        self.set_route_list();
+        let Some(filter) = self.get_filter_manager().get_text().map(|s| s.to_string()) else {
+            return;
+        };
+        let cmd = TableFilterCommand::All(Filter::Contains(FilterString::case_insensitive(
+            filter,
+        )));
+        let prev_max_cur = self.get_filtered_count().saturating_sub(1);
+        let prev_cur = self.get_selected_item();
+        let prev_offset = self.get_state().offset();
+        self.get_mut_filter_manager().filter_commands.push(cmd);
+        self.rebuild_filtered_indices();
+        let new_max_cur = self.get_filtered_count().saturating_sub(1);
+        let new_cur = self.get_selected_item().min(new_max_cur);
+        self.set_cur_selected(new_cur);
+        *self.get_mut_state().offset_mut() = get_offset_after_list_resize(
+            prev_offset,
+            prev_cur,
+            prev_max_cur,
+            new_cur,
+            new_max_cur,
+        );
+    }
+
+    fn clear_filter(&mut self) {
+        self.get_mut_filter_manager().shown = false;
+        self.set_route_list();
+        self.clear_filter_commands();
+    }
+
+    fn open_sort(&mut self) {
+        self.get_mut_sort_manager().shown = true;
+        self.set_route_sort();
+    }
+
+    fn toggle_filter(&mut self) {
+        let shown = self.filter_popup_shown();
+        if !shown {
+            self.get_mut_filter_manager().filter_text.clear();
+            self.set_route_filter();
+        } else {
+            self.set_route_list();
+        }
+        self.get_mut_filter_manager().shown = !shown;
+    }
+
+    fn close_sort(&mut self) {
+        self.get_mut_sort_manager().shown = false;
+        self.set_route_list();
+    }
+
+    fn handle_pop_sort(&mut self) {
+        self.get_mut_sort_manager().cur = 0;
+        self.open_sort();
+    }
+
+    fn handle_clear_sort(&mut self) {
+        self.close_sort();
+        self.clear_sort_commands();
+    }
+
+    fn handle_sort_cur_asc(&mut self) {
+        let Some(column) = self.get_sortable_columns().get(self.get_sort_manager().cur).copied()
+        else {
+            debug!("Tried to index sortable columns but was out of range");
+            return;
+        };
+        if let Err(e) = self.push_sort_command(TableSortCommand {
+            column,
+            direction: SortDirection::Asc,
+        }) {
+            debug!("Tried to sort a column that is not sortable - error {e}")
+        };
+        self.close_sort();
+    }
+
+    fn handle_sort_cur_desc(&mut self) {
+        let Some(column) = self.get_sortable_columns().get(self.get_sort_manager().cur).copied()
+        else {
+            debug!("Tried to index sortable columns but was out of range");
+            return;
+        };
+        if let Err(e) = self.push_sort_command(TableSortCommand {
+            column,
+            direction: SortDirection::Desc,
+        }) {
+            debug!("Tried to sort a column that is not sortable - error {e}")
+        };
+        self.close_sort();
+    }
+
+    fn go_to_first(&mut self) {
+        if self.route_is_sort() {
+            self.get_mut_sort_manager().cur = 0;
+        } else if self.route_is_list() {
+            self.set_cur_selected(0);
+        } else {
+            debug!("go_to_first called while in filter/search mode");
+        }
+    }
+
+    fn go_to_last(&mut self) {
+        if self.route_is_sort() {
+            self.get_mut_sort_manager().cur =
+                self.get_sortable_columns().len().saturating_sub(1);
+        } else if self.route_is_list() {
+            self.set_cur_selected(self.get_filtered_count().saturating_sub(1));
+        } else {
+            debug!("go_to_last called while in filter/search mode");
+        }
+    }
 }
 

@@ -16,6 +16,7 @@ use ytmapi_rs::parse::SearchResultArtist;
 pub mod search_panel;
 pub mod songs_panel;
 
+use crate::app::ui::browser::shared_components::SortFilterTable;
 use crate::define_search_results_browser;
 
 define_search_results_browser!(

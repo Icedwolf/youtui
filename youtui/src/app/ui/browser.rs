@@ -17,7 +17,7 @@ use artistsearch::search_panel::BrowserArtistsAction;
 use artistsearch::songs_panel::BrowserArtistSongsAction;
 use itertools::Either;
 use serde::{Deserialize, Serialize};
-use shared_components::{BrowserSearchAction, FilterAction, SortAction};
+use shared_components::{BrowserSearchAction, FilterAction, SortAction, SortFilterTable};
 use songsearch::{BrowserSongsAction, SongSearchBrowser};
 use std::borrow::Cow;
 use std::convert::Into;
@@ -526,6 +526,7 @@ mod tests {
     use crate::app::ui::action::AppAction;
     use crate::app::ui::browser::BrowserAction;
     use crate::app::ui::browser::shared_components::BrowserSearchAction;
+    use crate::app::ui::browser::shared_components::SortFilterTable;
     use crate::config::Config;
     use crate::config::keymap::KeyActionTree;
     use crate::keyaction::KeyActionVisibility;
