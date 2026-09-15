@@ -1,11 +1,9 @@
 /// Traits related to viewable application components.
 use super::structures::{ListSong, ListSongDisplayableField, Percentage};
 use crate::widgets::{ScrollingListState, ScrollingTableState};
-use rat_text::text_input::TextInputState;
 use ratatui::Frame;
 use ratatui::prelude::{Constraint, Rect};
 use ratatui::text::Line;
-use ratatui::widgets::ListState;
 use std::borrow::Cow;
 
 pub(crate) mod draw;
@@ -138,30 +136,8 @@ pub(crate) trait TableView {
 }
 /// TableView with built in filtering and sorting.
 pub(crate) trait AdvancedTableView: TableView {
-    fn get_mut_filter_state(&mut self) -> &mut TextInputState;
-    fn filter_popup_shown(&self) -> bool;
     fn get_filterable_columns(&self) -> &[usize];
-    // This can't be ExactSized as return type may be Filter<T>
-    fn get_filtered_items(&self) -> impl Iterator<Item = impl Iterator<Item = Cow<'_, str>> + '_>;
-    /// Returns the number of rows after filtering. Override this in impls that
-    /// have a cheaper path (e.g. iterating &ListSong without field extraction).
-    fn get_filtered_count(&self) -> usize {
-        self.get_filtered_items().count()
-    }
-    fn get_filter_commands(&self) -> &[TableFilterCommand];
-    fn clear_filter_commands(&mut self);
-    // SortableTableView should maintain it's own popup state.
-    fn get_sort_popup_cur(&self) -> usize;
-    fn sort_popup_shown(&self) -> bool;
-    fn get_sort_state(&self) -> &ListState;
-    fn get_mut_sort_state(&mut self) -> &mut ListState;
-    /// Add a new TableSortCommand and sort the table.
-    /// This can fail if the TableSortCommand is not within the range of
-    /// sortable columns.
-    fn push_sort_command(&mut self, sort_command: TableSortCommand) -> anyhow::Result<()>;
-    fn clear_sort_commands(&mut self);
     fn get_sortable_columns(&self) -> &[usize];
-    fn get_sort_commands(&self) -> &[TableSortCommand];
 }
 // A struct that we are able to draw a list from using the underlying data.
 pub(crate) trait ListView {

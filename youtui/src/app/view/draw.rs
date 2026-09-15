@@ -1,6 +1,5 @@
-use super::{
-    AdvancedTableView, TableSortCommand, TableView, basic_constraints_to_table_constraints,
-};
+use super::{TableSortCommand, TableView, basic_constraints_to_table_constraints};
+use crate::app::ui::browser::shared_components::SortFilterTable;
 use crate::app::view::{BasicConstraint, HasTitle, ListView, Loadable};
 use crate::drawutils::centered_rect;
 use crate::drawutils::draw_text_box;
@@ -269,7 +268,7 @@ where
 /// panel.
 pub fn draw_advanced_table(
     f: &mut Frame,
-    table: &mut impl AdvancedTableView,
+    table: &mut impl SortFilterTable,
     chunk: Rect,
     cur_tick: u64,
 ) -> PanelEffect<'static> {
@@ -338,7 +337,7 @@ pub fn draw_advanced_table(
 }
 
 /// Returns a new ListState for the sort popup.
-fn draw_sort_popup(f: &mut Frame, table: &mut impl AdvancedTableView, chunk: Rect) {
+fn draw_sort_popup(f: &mut Frame, table: &mut impl SortFilterTable, chunk: Rect) {
     let title = "Sort";
     let sortable_columns = table.get_sortable_columns();
     let headers: Vec<_> = table
@@ -375,7 +374,7 @@ fn draw_sort_popup(f: &mut Frame, table: &mut impl AdvancedTableView, chunk: Rec
     *table.get_mut_sort_state() = new_state;
 }
 
-fn draw_filter_popup(f: &mut Frame, table: &mut impl AdvancedTableView, chunk: Rect) {
+fn draw_filter_popup(f: &mut Frame, table: &mut impl SortFilterTable, chunk: Rect) {
     let title = "Filter";
     // Hardocde dimensions of filter input.
     let popup_chunk = crate::drawutils::centered_rect(3, 22, chunk);

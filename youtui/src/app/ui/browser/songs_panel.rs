@@ -8,16 +8,12 @@ use crate::app::structures::{
 use crate::app::ui::action::AppAction;
 use crate::app::ui::browser::get_sort_keybinds;
 use crate::app::ui::browser::shared_components::{
-    FilterManager, SortFilterTable, SortManager, get_adjusted_list_column,
+    FilterManager, SortFilterTable, SortManager,
 };
-use crate::app::view::{
-    AdvancedTableView, BasicConstraint, HasTitle, Loadable, TableFilterCommand, TableSortCommand,
-    TableView,
-};
+use crate::app::view::{AdvancedTableView, BasicConstraint, HasTitle, Loadable, TableView};
 use crate::config::Config;
 use crate::config::keymap::Keymap;
 use crate::widgets::ScrollingTableState;
-use anyhow::{Result, bail};
 use itertools::Either;
 use ratatui::text::Line;
 use serde::{Deserialize, Serialize};
@@ -179,66 +175,11 @@ impl<C: SongsPanelConfig> TableView for SongsPanel<C> {
 }
 
 impl<C: SongsPanelConfig> AdvancedTableView for SongsPanel<C> {
-    fn get_filtered_count(&self) -> usize {
-        self.filtered_indices.len()
-    }
     fn get_sortable_columns(&self) -> &[usize] {
         C::sortable_columns()
     }
-    fn push_sort_command(&mut self, sort_command: TableSortCommand) -> Result<()> {
-        if !self.get_sortable_columns().contains(&sort_command.column) {
-            bail!(format!("Unable to sort column {}", sort_command.column,));
-        }
-        self.list.sort(
-            get_adjusted_list_column(sort_command.column, Self::subcolumns_of_vec())
-                .expect("column was validated against sortable_columns"),
-            sort_command.direction,
-        );
-        self.sort
-            .sort_commands
-            .retain(|cmd| cmd.column != sort_command.column);
-        self.sort.sort_commands.push(sort_command);
-        Ok(())
-    }
-    fn clear_sort_commands(&mut self) {
-        self.sort.sort_commands.clear();
-    }
-    fn get_sort_commands(&self) -> &[TableSortCommand] {
-        &self.sort.sort_commands
-    }
-    fn get_filtered_items(&self) -> impl Iterator<Item = impl Iterator<Item = Cow<'_, str>> + '_> {
-        self.filtered_indices
-            .iter()
-            .filter_map(|&idx| self.list.get_song_from_idx(idx))
-            .map(|ls| ls.get_fields(Self::subcolumns_of_vec()).into_iter())
-    }
     fn get_filterable_columns(&self) -> &[usize] {
         C::filterable_columns()
-    }
-    fn get_filter_commands(&self) -> &[TableFilterCommand] {
-        &self.filter.filter_commands
-    }
-    fn clear_filter_commands(&mut self) {
-        self.filter.filter_commands.clear();
-        self.rebuild_filtered_indices();
-    }
-    fn get_sort_popup_cur(&self) -> usize {
-        self.sort.cur
-    }
-    fn sort_popup_shown(&self) -> bool {
-        self.sort.shown
-    }
-    fn filter_popup_shown(&self) -> bool {
-        self.filter.shown
-    }
-    fn get_sort_state(&self) -> &ratatui::widgets::ListState {
-        &self.sort.state
-    }
-    fn get_mut_sort_state(&mut self) -> &mut ratatui::widgets::ListState {
-        &mut self.sort.state
-    }
-    fn get_mut_filter_state(&mut self) -> &mut rat_text::text_input::TextInputState {
-        &mut self.filter.filter_text
     }
 }
 
@@ -269,6 +210,9 @@ impl<C: SongsPanelConfig> SortFilterTable for SongsPanel<C> {
     }
     fn set_filtered_indices(&mut self, indices: Vec<usize>) {
         self.filtered_indices = indices;
+    }
+    fn get_filtered_indices(&self) -> &[usize] {
+        &self.filtered_indices
     }
     fn get_filter_manager(&self) -> &FilterManager {
         &self.filter

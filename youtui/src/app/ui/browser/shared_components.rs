@@ -12,6 +12,7 @@ use anyhow::{anyhow, bail};
 use rat_text::text_input::{TextInputState, handle_events};
 use ratatui::widgets::ListState;
 use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
 use tracing::debug;
 
 // --- Song playback helpers (shared by songsearch, artistsearch, playlistsearch) ---
@@ -656,6 +657,7 @@ pub(crate) trait SortFilterTable: AdvancedTableView {
     fn route_is_sort(&self) -> bool;
     fn set_cur_selected(&mut self, idx: usize);
     fn set_filtered_indices(&mut self, indices: Vec<usize>);
+    fn get_filtered_indices(&self) -> &[usize];
     fn get_filter_manager(&self) -> &FilterManager;
     fn get_mut_filter_manager(&mut self) -> &mut FilterManager;
     fn get_sort_manager(&self) -> &SortManager;
@@ -708,6 +710,74 @@ pub(crate) trait SortFilterTable: AdvancedTableView {
             .map(|(actual_idx, _)| actual_idx)
             .collect();
         self.set_filtered_indices(indices);
+    }
+
+    fn get_filtered_count(&self) -> usize {
+        self.get_filtered_indices().len()
+    }
+
+    fn get_filtered_items(&self) -> impl Iterator<Item = impl Iterator<Item = Cow<'_, str>> + '_> {
+        self.get_filtered_indices()
+            .iter()
+            .filter_map(|&idx| self.get_songs().get_song_from_idx(idx))
+            .map(|ls| ls.get_fields(Self::get_subcolumns()).into_iter())
+    }
+
+    fn get_sort_commands(&self) -> &[TableSortCommand] {
+        &self.get_sort_manager().sort_commands
+    }
+
+    fn push_sort_command(&mut self, sort_command: TableSortCommand) -> anyhow::Result<()> {
+        if !self.get_sortable_columns().contains(&sort_command.column) {
+            bail!(format!("Unable to sort column {}", sort_command.column,));
+        }
+        self.get_mut_songs().sort(
+            get_adjusted_list_column(sort_command.column, Self::get_subcolumns())
+                .expect("column was validated against sortable_columns"),
+            sort_command.direction,
+        );
+        self.get_mut_sort_manager()
+            .sort_commands
+            .retain(|cmd| cmd.column != sort_command.column);
+        self.get_mut_sort_manager().sort_commands.push(sort_command);
+        Ok(())
+    }
+
+    fn clear_sort_commands(&mut self) {
+        self.get_mut_sort_manager().sort_commands.clear();
+    }
+
+    fn get_filter_commands(&self) -> &[TableFilterCommand] {
+        &self.get_filter_manager().filter_commands
+    }
+
+    fn clear_filter_commands(&mut self) {
+        self.get_mut_filter_manager().filter_commands.clear();
+        self.rebuild_filtered_indices();
+    }
+
+    fn get_sort_popup_cur(&self) -> usize {
+        self.get_sort_manager().cur
+    }
+
+    fn sort_popup_shown(&self) -> bool {
+        self.get_sort_manager().shown
+    }
+
+    fn filter_popup_shown(&self) -> bool {
+        self.get_filter_manager().shown
+    }
+
+    fn get_sort_state(&self) -> &ratatui::widgets::ListState {
+        &self.get_sort_manager().state
+    }
+
+    fn get_mut_sort_state(&mut self) -> &mut ratatui::widgets::ListState {
+        &mut self.get_mut_sort_manager().state
+    }
+
+    fn get_mut_filter_state(&mut self) -> &mut rat_text::text_input::TextInputState {
+        &mut self.get_mut_filter_manager().filter_text
     }
 
     fn apply_filter(&mut self) {
