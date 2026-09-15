@@ -28,6 +28,7 @@ use itertools::Either;
 use ratatui::text::Line;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
+use std::cell::RefCell;
 use tracing::{debug, warn};
 use ytmapi_rs::parse::SearchResultSong;
 
@@ -41,6 +42,7 @@ pub struct SongSearchBrowser {
     pub sort: SortManager,
     pub     filter: FilterManager,
     filtered_indices: Vec<usize>,
+    cached_title: RefCell<Option<(ListStatus, usize, Line<'static>)>>,
 }
 impl Component for SongSearchBrowser {}
 
@@ -298,15 +300,24 @@ impl AdvancedTableView for SongSearchBrowser {
 }
 impl HasTitle for SongSearchBrowser {
     fn get_title(&self) -> Line<'static> {
-        match self.song_list.state {
+        let len = self.song_list.get_list_iter().len();
+        {
+            let cached = self.cached_title.borrow();
+            if let Some((cached_state, cached_len, title)) = cached.as_ref()
+                && cached_state == &self.song_list.state
+                && *cached_len == len
+            {
+                return title.clone();
+            }
+        }
+        let title = match &self.song_list.state {
             ListStatus::New => Line::from("Songs"),
             ListStatus::Loading => Line::from("Songs - loading"),
             ListStatus::InProgress => Line::from(format!(
                 "Songs - {} results - loading",
-                self.song_list.get_list_iter().len()
+                len
             )),
             ListStatus::Loaded => {
-                let len = self.song_list.get_list_iter().len();
                 if len == 0 {
                     Line::from("Songs - no songs found")
                 } else {
@@ -314,7 +325,9 @@ impl HasTitle for SongSearchBrowser {
                 }
             }
             ListStatus::Error => Line::from("Songs - Error received"),
-        }
+        };
+        *self.cached_title.borrow_mut() = Some((self.song_list.state.clone(), len, title.clone()));
+        title
     }
 }
 impl SongSearchBrowser {
@@ -329,6 +342,7 @@ impl SongSearchBrowser {
             filter: Default::default(),
             cur_selected: Default::default(),
             filtered_indices: Vec::new(),
+            cached_title: RefCell::new(None),
         }
     }
     pub fn subcolumns_of_vec() -> [ListSongDisplayableField; 5] {
@@ -612,6 +626,30 @@ mod tests {
         browser.search.search_contents.set_text("some query");
         let _effects = browser.search();
         assert_eq!(browser.song_list.state, ListStatus::Loading);
+    }
+
+    #[test]
+    fn title_cache_tracks_state_and_len() {
+        use ytmapi_rs::common::VideoID;
+        use ytmapi_rs::common::YoutubeID;
+        let mut browser = SongSearchBrowser::new();
+        assert_eq!(browser.get_title().to_string(), "Songs");
+        // Same call twice returns the cached clone.
+        assert_eq!(browser.get_title().to_string(), "Songs");
+        // State change invalidates the cached title.
+        browser.song_list.state = ListStatus::Loaded;
+        assert_eq!(browser.get_title().to_string(), "Songs - no songs found");
+        // Push a song; length change invalidates the cached title.
+        let song = ListSong::create_with_metadata(
+            VideoID::from_raw("testvid".to_owned()),
+            "Title".into(),
+            vec!["Artist".into()],
+            None,
+            "3:00".into(),
+        );
+        browser.song_list.state = ListStatus::Loaded;
+        browser.song_list.push_song_list(vec![song]);
+        assert_eq!(browser.get_title().to_string(), "Songs - 1 results");
     }
 }
 
