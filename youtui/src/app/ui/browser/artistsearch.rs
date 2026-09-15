@@ -6,7 +6,7 @@ use crate::app::effect::Effects;
 use crate::app::server::api::{AlbumSongsData, GetArtistSongsProgressUpdate};
 use futures::StreamExt;
 use crate::app::server::ArcServer;
-use crate::app::structures::{ListSongAlbum, ListStatus, MaybeRc};
+use crate::app::structures::{ListSongAlbum, ListStatus, MaybeRc, SongListComponent};
 use crate::app::view::{ListView, TableView};
 use std::sync::Arc;
 use tracing::{debug, error, warn};

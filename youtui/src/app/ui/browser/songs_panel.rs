@@ -70,9 +70,6 @@ impl<C: SongsPanelConfig> SongsPanel<C> {
     pub fn subcolumns_of_vec() -> [ListSongDisplayableField; 5] {
         C::subcolumns()
     }
-    pub fn get_song_from_idx(&self, idx: usize) -> Option<&ListSong> {
-        self.list.get_song_from_idx(idx)
-    }
 }
 
 impl<C: SongsPanelConfig> SongListComponent for SongsPanel<C> {
@@ -411,7 +408,7 @@ mod tests {
                 direction: SortDirection::Asc,
             })
             .unwrap();
-        assert_eq!(panel.get_song_from_idx(0).unwrap().title, "tb");
+        assert_eq!(panel.list.get_song_from_idx(0).unwrap().title, "tb");
         panel
             .push_sort_command(TableSortCommand {
                 column: 1,
@@ -419,7 +416,7 @@ mod tests {
             })
             .unwrap();
         assert_eq!(panel.get_sort_commands().len(), 1);
-        assert_eq!(panel.get_song_from_idx(0).unwrap().title, "ta");
+        assert_eq!(panel.list.get_song_from_idx(0).unwrap().title, "ta");
     }
 
     #[test]
@@ -435,5 +432,21 @@ mod tests {
         assert_eq!(panel.filtered_indices, vec![1]);
         panel.clear_filter_commands();
         assert_eq!(panel.filtered_indices, vec![0, 1, 2, 3]);
+    }
+
+    #[test]
+    fn filtered_selection_targets_filtered_song() {
+        let mut panel = panel_with(vec![
+            song_for("a", "ta", "Alpha"),
+            song_for("b", "tb", "Beta"),
+            song_for("c", "tc", "Alpha"),
+            song_for("d", "td", "Gamma"),
+        ]);
+        panel.cur_selected = 1;
+        panel.filter.filter_text.set_text("Alpha");
+        panel.apply_filter();
+        assert_eq!(panel.filtered_indices, vec![0, 2]);
+        // Visible row 1 (the second Alpha song) must NOT resolve as list[1] ("tb").
+        assert_eq!(panel.get_song_from_idx(1).unwrap().title, "tc");
     }
 }

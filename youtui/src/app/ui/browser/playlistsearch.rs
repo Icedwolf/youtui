@@ -5,7 +5,7 @@ use crate::app::effect::Effects;
 use crate::app::server::api::GetPlaylistSongsProgressUpdate;
 use crate::app::server::ArcServer;
 use futures::StreamExt;
-use crate::app::structures::ListStatus;
+use crate::app::structures::{ListStatus, SongListComponent};
 use crate::app::view::{ListView, TableView};
 use search_panel::NonPodcastSearchResultPlaylist;
 use std::sync::Arc;

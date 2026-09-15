@@ -12,7 +12,7 @@ use crate::app::effect::Effects;
 use crate::app::server::ArcServer;
 use std::sync::Arc;
 use crate::app::structures::{
-    BrowserSongsList, ListSong, ListSongDisplayableField, ListStatus, Percentage, SongListComponent,
+    BrowserSongsList, ListSongDisplayableField, ListStatus, Percentage, SongListComponent,
 };
 use crate::app::ui::action::{AppAction, TextEntryAction};
 use crate::app::view::{AdvancedTableView, BasicConstraint, HasTitle, Loadable, TableView};
@@ -430,14 +430,12 @@ impl SongSearchBrowser {
             debug!("Tried to sort a column that is not sortable - error {e}")
         };
     }
-    pub fn get_song_from_idx(&self, idx: usize) -> Option<&ListSong> {
-        self.song_list.get_song_from_idx(idx)
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::app::structures::ListSong;
 
     #[test]
     fn replace_song_list_marks_results_loaded() {
@@ -464,6 +462,34 @@ mod tests {
         assert_eq!(browser.sort.cur, 0);
         browser.go_to_last();
         assert_eq!(browser.sort.cur, 2);
+    }
+
+    fn song(id: &str, album: &str) -> ListSong {
+        use ytmapi_rs::common::{VideoID, YoutubeID};
+        ListSong::create_with_metadata(
+            VideoID::from_raw(id.to_owned()),
+            "Title".into(),
+            vec!["Artist".into()],
+            Some(album.to_owned()),
+            "3:00".into(),
+        )
+    }
+
+    #[test]
+    fn filtered_selection_targets_filtered_song() {
+        let mut browser = SongSearchBrowser::new();
+        browser.song_list.push_song_list(vec![
+            song("a", "Alpha"),
+            song("b", "Beta"),
+            song("c", "Alpha"),
+            song("d", "Gamma"),
+        ]);
+        browser.cur_selected = 1;
+        browser.filter.filter_text.set_text("Alpha");
+        browser.apply_filter();
+        assert_eq!(browser.filtered_indices, vec![0, 2]);
+        // Visible row 1 (the second Alpha song) must NOT resolve as song_list[1].
+        assert_eq!(browser.get_song_from_idx(1).unwrap().title, "Title");
     }
 
     #[test]
