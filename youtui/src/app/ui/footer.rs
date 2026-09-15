@@ -17,6 +17,8 @@ pub struct FooterCache {
     pub album_title: String,
     pub progress_str: String,
     pub duration_str: String,
+    pub bar_str: String,
+    pub vol_str: String,
     pub last_song_id: Option<ListSongID>,
     pub last_duration: usize,
     pub last_progress_secs: usize,
@@ -30,6 +32,8 @@ impl FooterCache {
             album_title: String::new(),
             progress_str: String::new(),
             duration_str: String::new(),
+            bar_str: String::new(),
+            vol_str: String::new(),
             last_song_id: None,
             last_duration: usize::MAX,
             last_progress_secs: usize::MAX,
@@ -78,6 +82,7 @@ fn refresh_footer_cache(
     resolved_duration: usize,
     progress_secs: usize,
 ) {
+    let mut bar_dirty = false;
     if cache.last_song_id != cur_active_id {
         cache.last_song_id = cur_active_id;
         match song_meta {
@@ -91,6 +96,7 @@ fn refresh_footer_cache(
                 cache.album_title.clear();
                 cache.duration_str.clear();
                 cache.last_duration = resolved_duration;
+                bar_dirty = true;
             }
         }
         cache.progress_str.clear();
@@ -99,10 +105,15 @@ fn refresh_footer_cache(
     if cache.last_duration != resolved_duration {
         cache.last_duration = resolved_duration;
         cache.duration_str = secs_to_time_string(resolved_duration);
+        bar_dirty = true;
     }
     if cache.last_progress_secs != progress_secs {
         cache.last_progress_secs = progress_secs;
         cache.progress_str = secs_to_time_string(progress_secs);
+        bar_dirty = true;
+    }
+    if bar_dirty {
+        cache.bar_str = format!("{}/{}", cache.progress_str, cache.duration_str);
     }
 }
 
@@ -162,10 +173,6 @@ pub fn draw_footer(f: &mut Frame, w: &mut super::YoutuiWindow, chunk: Rect) {
         duration,
         progress_secs,
     );
-    let bar_str = format!(
-        "{}/{}",
-        w.footer_cache.progress_str, w.footer_cache.duration_str
-    );
 
     let block = Block::default()
         .title("Status")
@@ -186,8 +193,16 @@ pub fn draw_footer(f: &mut Frame, w: &mut super::YoutuiWindow, chunk: Rect) {
     let song_line = truncate(&w.footer_cache.song_and_artists, max_text_width);
     let album_line = truncate(&w.footer_cache.album_title, max_text_width);
     let footer = Paragraph::new(vec![Line::from(song_line), Line::from(album_line)]);
+// The volume label is cached and only rebuilt when the value changes;
+    // update it before building the widgets so nothing borrows the cache
+    // mutably mid-frame.
+    let vol = w.playlist.volume().0;
+    if w.footer_cache.last_vol != vol {
+        w.footer_cache.last_vol = vol;
+        w.footer_cache.vol_str = format!("{vol:>3}");
+    }
     let bar = Gauge::default()
-        .label(bar_str)
+        .label(w.footer_cache.bar_str.as_str())
         .gauge_style(
             Style::default()
                 .fg(PROGRESS_FG_COLOUR)
@@ -214,10 +229,6 @@ pub fn draw_footer(f: &mut Frame, w: &mut super::YoutuiWindow, chunk: Rect) {
                 .add_modifier(Modifier::BOLD),
         ),
     ]));
-    let vol = w.playlist.volume().0;
-    if w.footer_cache.last_vol != vol {
-        w.footer_cache.last_vol = vol;
-    }
     let vol_bar_spans = vec![
         Line::from(Span::styled(
             " + ",
@@ -226,7 +237,7 @@ pub fn draw_footer(f: &mut Frame, w: &mut super::YoutuiWindow, chunk: Rect) {
                 .bg(BUTTON_BG_COLOUR)
                 .add_modifier(Modifier::BOLD),
         )),
-        Line::from(Span::raw(format!("{vol:>3}"))),
+        Line::from(Span::raw(w.footer_cache.vol_str.as_str())),
         Line::from(Span::styled(
             " - ",
             Style::new()
@@ -337,5 +348,23 @@ mod tests {
         // Next sec: update.
         refresh_footer_cache(&mut cache, Some(id), None, 185, 66);
         assert_eq!(cache.progress_str, "01:06");
+    }
+
+    #[test]
+    fn bar_string_tracks_progress_and_duration() {
+        let id = ListSongID(7);
+        let mut cache = FooterCache::new();
+        buffering_frame(&mut cache, id);
+        assert_eq!(cache.bar_str, "00:00/00:00");
+        refresh_footer_cache(&mut cache, Some(id), None, 185, 0);
+        assert_eq!(cache.bar_str, "00:00/03:05");
+        // No churn on an unchanged frame.
+        refresh_footer_cache(&mut cache, Some(id), None, 185, 0);
+        assert_eq!(cache.bar_str, "00:00/03:05");
+        refresh_footer_cache(&mut cache, Some(id), None, 185, 66);
+        assert_eq!(cache.bar_str, "01:06/03:05");
+        // Stop clears the duration side, progress resets to 00:00.
+        refresh_footer_cache(&mut cache, None, None, 0, 0);
+        assert_eq!(cache.bar_str, "00:00/");
     }
 }
