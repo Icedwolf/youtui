@@ -1,7 +1,7 @@
 # Youtui Backlog
 
 **Build:** 0 errors, 0 warnings, 0 clippy
-**Tests:** 361 youtui bins green (2 ignored)
+**Tests:** 364 youtui bins green (2 ignored)
 **Last updated:** 2026-09-15
 
 This file is a working backlog only — no changelog, no session archaeology. Past work
@@ -27,6 +27,10 @@ The codebase is at a local optimum across the areas this project optimizes:
 - **Song-start latency** — measured headless 1:1: ~2.0–2.6s is yt-dlp bootstrap + resolve +
   CDN first byte (external); the in-app cost after the first byte is ~6ms (ffmpeg transcode)
   plus sub-ms decoder init. No in-app lever remains without daemonizing yt-dlp (rejected).
+- **Save-queue latency** — `save_queue` converts in one pass (no intermediate `Vec<ListSong>`
+  clone) and serializes with `to_writer` into a capacity-hinted buffer; 135k-song save
+  serialization measured ~218ms → ~89ms (`criterion_save_queue_serialization`). `sync_all`
+  kept (save is user-triggered, infrequent).
 - **RAM** — in-memory ALAC buffers are duration/source-dependent (5.5–77MB, median ~45MB);
   cache max = 1 by design.
 - **Render/CPU** — per-frame caches (title, row numbers, artist string, lowercased fields)
