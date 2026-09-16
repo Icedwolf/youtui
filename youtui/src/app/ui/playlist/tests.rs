@@ -324,7 +324,7 @@ fn download_scope_max_2_songs() {
 
 #[cfg(test)]
 mod state_transitions {
-    use crate::app::component::actionhandler::ActionHandler;
+    use crate::app::component::actionhandler::{ActionHandler, TextHandler};
     use crate::app::structures::{
         DownloadStatus, ListSong, ListSongID, ListStatus, Percentage, PlayState, SongListComponent,
     };
@@ -333,6 +333,7 @@ mod state_transitions {
         QueueState, is_auth_error, is_dead_video_error,
     };
     use crate::app::view::HasTitle;
+    use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
     use pretty_assertions::assert_eq;
     use ratatui::style::Color;
     use std::sync::Arc;
@@ -1448,6 +1449,107 @@ mod state_transitions {
             3,
             "extra whitespace should still match"
         );
+    }
+
+    // ---------------------------------------------------------------------------
+    // Search text event handling (TextHandler::handle_text_event_impl +
+    // clear_search)
+    // ---------------------------------------------------------------------------
+
+    #[test]
+    fn text_char_appends_and_refreshes_search_view() {
+        let mut p = downloaded_songs(3);
+        p.search_enabled = true;
+        let _ = p.get_title();
+        assert!(
+            p.cached_title.borrow().is_some(),
+            "precondition: title cache must be warm"
+        );
+
+        let event = Event::Key(KeyEvent::new(KeyCode::Char('S'), KeyModifiers::NONE));
+        assert!(
+            p.handle_text_event_impl(&event).is_some(),
+            "char while searching must be consumed"
+        );
+        assert_eq!(p.search_text, "S");
+        assert_eq!(p.search_indices.len(), 3, "S matches all 3 songs");
+        assert!(
+            p.cached_title.borrow().is_none(),
+            "cached title must be invalidated after a text edit"
+        );
+    }
+
+    #[test]
+    fn text_char_ignored_when_search_disabled() {
+        let mut p = downloaded_songs(3);
+        p.search_enabled = false;
+        let event = Event::Key(KeyEvent::new(KeyCode::Char('S'), KeyModifiers::NONE));
+        assert!(p.handle_text_event_impl(&event).is_none());
+        assert!(p.search_text.is_empty(), "search text must stay empty");
+    }
+
+    #[test]
+    fn text_backspace_pops_and_refreshes_search_view() {
+        let mut p = downloaded_songs(3);
+        p.search_enabled = true;
+        p.search_text = "S".to_string();
+        p.update_search_indices();
+        let _ = p.get_title();
+        assert!(p.cached_title.borrow().is_some());
+
+        let event = Event::Key(KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE));
+        assert!(p.handle_text_event_impl(&event).is_some());
+        assert_eq!(p.search_text, "");
+        assert_eq!(p.search_indices.len(), 3, "empty search restores all songs");
+        assert!(p.cached_title.borrow().is_none());
+    }
+
+    #[test]
+    fn text_backspace_returns_none_when_empty() {
+        let mut p = downloaded_songs(3);
+        p.search_enabled = true;
+        let event = Event::Key(KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE));
+        assert!(p.handle_text_event_impl(&event).is_none());
+    }
+
+    #[test]
+    fn text_ctrl_w_truncates_word_and_refreshes() {
+        let mut p = downloaded_songs(3);
+        p.search_enabled = true;
+        p.search_text = "Song 0".to_string();
+        p.update_search_indices();
+        let _ = p.get_title();
+        assert!(p.cached_title.borrow().is_some());
+        assert_eq!(p.search_indices.len(), 1, "Song 0 matches only song 0");
+
+        let event = Event::Key(KeyEvent::new(KeyCode::Char('w'), KeyModifiers::CONTROL));
+        assert!(p.handle_text_event_impl(&event).is_some());
+        assert_eq!(
+            p.search_text, "Song ",
+            "Ctrl+W truncates to last word start"
+        );
+        assert_eq!(p.search_indices.len(), 3, "Song matches all 3 songs again");
+        assert!(p.cached_title.borrow().is_none());
+    }
+
+    #[test]
+    fn clear_search_clears_and_refreshes() {
+        let mut p = downloaded_songs(3);
+        p.search_enabled = true;
+        p.search_text = "Song 0".to_string();
+        p.update_search_indices();
+        let _ = p.get_title();
+        assert!(p.cached_title.borrow().is_some());
+        assert_eq!(p.search_indices.len(), 1);
+
+        let _ = p.clear_search();
+        assert!(p.search_text.is_empty());
+        assert_eq!(
+            p.search_indices.len(),
+            3,
+            "cleared search restores all songs"
+        );
+        assert!(p.cached_title.borrow().is_none());
     }
 
     // ---------------------------------------------------------------------------

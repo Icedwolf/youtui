@@ -339,9 +339,7 @@ impl TextHandler for Playlist {
                             .map(|i| i + 1)
                             .unwrap_or(0);
                         self.search_text.truncate(last_word_start);
-                        self.update_search_indices();
-                        self.cached_title.borrow_mut().take();
-                        self.cur_selected = self.cur_selected.min(self.get_max_visual_index());
+                        self.refresh_search_view();
                         Some(Effects::none())
                     } else {
                         None
@@ -349,17 +347,13 @@ impl TextHandler for Playlist {
                 }
                 KeyCode::Char(c) => {
                     self.search_text.push(c);
-                    self.update_search_indices();
-                    self.cached_title.borrow_mut().take();
-                    self.cur_selected = self.cur_selected.min(self.get_max_visual_index());
+                    self.refresh_search_view();
                     Some(Effects::none())
                 }
                 KeyCode::Backspace => {
                     if !self.search_text.is_empty() {
                         self.search_text.pop();
-                        self.update_search_indices();
-                        self.cached_title.borrow_mut().take();
-                        self.cur_selected = self.cur_selected.min(self.get_max_visual_index());
+                        self.refresh_search_view();
                         return Some(Effects::none());
                     }
                     None

@@ -1074,9 +1074,7 @@ impl Playlist {
 
     pub fn clear_search(&mut self) -> Effects<Self> {
         self.search_text.clear();
-        self.cached_title.borrow_mut().take();
-        self.update_search_indices();
-        self.cur_selected = self.cur_selected.min(self.get_max_visual_index());
+        self.refresh_search_view();
         Effects::none()
     }
 
@@ -1109,6 +1107,16 @@ impl Playlist {
             })
             .collect();
         self.search_visual_map = build_visual_map(&self.search_indices, list_len);
+    }
+
+    /// Rebuild search indices, invalidate the cached title, and clamp the
+    /// selection after any search-text mutation. Consolidates the identical
+    /// trio that was repeated after every Char/Backspace/Ctrl-W and in
+    /// `clear_search`.
+    pub(super) fn refresh_search_view(&mut self) {
+        self.update_search_indices();
+        self.cached_title.borrow_mut().take();
+        self.cur_selected = self.cur_selected.min(self.get_max_visual_index());
     }
 
     pub(super) fn visual_to_actual_index(&self, visual_index: usize) -> usize {
