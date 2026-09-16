@@ -1,8 +1,8 @@
 # Youtui Backlog
 
 **Build:** 0 errors, 0 warnings, 0 clippy
-**Tests:** 371 youtui bins green (2 ignored)
-**Last updated:** 2026-09-15
+**Tests:** 372 youtui bins green (2 ignored)
+**Last updated:** 2026-09-16
 
 This file is a working backlog only — no changelog, no session archaeology. Past work
 and its rationale live in git history and in the code comments / `DECISIONS.md`.
@@ -44,6 +44,12 @@ The codebase is at a local optimum across the areas this project optimizes:
   `StatefulWidget` render surfaces). Both reports: **0 collisions**. The `6863e05` shadow class
   is closed tree-wide; `Playlist::get_song_from_idx` is trait-only (the "dual method" was a
   misread — its 3 call sites in playback.rs all resolve to the trait impl).
+- **Playlist lookups use the canonical accessor everywhere** — the trait impl and
+  `get_song_from_id`/`get_id_from_index`/buffer-scope lookups now call
+  `BrowserSongsList::get_song_from_idx` instead of re-deriving via `get_list_iter().nth(idx)`
+  (4 sites). Measured cost-neutral (`criterion_playlist_get_song_from_idx`: 1.50 → 1.10ns,
+  p=0.78) — `slice::Iter::nth` is already O(1) via pointer arithmetic, so this is a pure
+  duplication cut, locked by a parity test (`get_song_from_idx_matches_underlying_list`).
 - **RAM** — in-memory ALAC buffers are duration/source-dependent (5.5–77MB, median ~45MB);
   cache max = 1 by design.
 - **Render/CPU** — per-frame caches (title, row numbers, artist string, lowercased fields)
