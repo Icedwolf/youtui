@@ -56,6 +56,12 @@ The codebase is at a local optimum across the areas this project optimizes:
   the fallback existed only to mask test helpers writing `p.list` directly. Red-first test
   `direct_list_mutation_does_not_populate_cache` locks the invariant: tests must push via
   `Playlist::push_song_list`. Dead O(n) fallback removed, same correctness.
+- **Test-side `get_dummy_playlist`/`get_dummy_album`/`DUMMY_ALBUM` scaffolding deleted**
+  (2026-09-16) — ~40 lines + `include_str` album JSON fixture + 6 imports, all for one test
+  that only asserted `play_status` and never needed album data. Its call site now uses the
+  inline warm-cache construction (still 373 tests, no behavior change). The last
+  direct-write test helper is gone; `append_raw_album_songs` remains a browser-panel-only
+  path.
 - **RAM** — in-memory ALAC buffers are duration/source-dependent (5.5–77MB, median ~45MB);
   cache max = 1 by design.
 - **Render/CPU** — per-frame caches (title, row numbers, artist string, lowercased fields)
