@@ -265,19 +265,10 @@ Re-log into your browser, or check your cookie file / PO-token provider, then re
     }
 
     pub fn play_prev(&mut self) -> Effects<Self> {
-        let cur = &self.play_status;
-        match cur {
+        match &self.play_status {
             PlayState::NotPlaying => {
                 debug!("play_prev: stopped, jumping to last song");
-                let last_visual = self.get_max_visual_index();
-                let last_actual = self.visual_to_actual_index(last_visual);
-                if let Some(last_id) = self.get_id_from_index(last_actual) {
-                    self.cur_selected = last_visual;
-                    self.play_song(last_id)
-                } else {
-                    debug!("play_prev: queue is empty");
-                    Effects::none()
-                }
+                self.play_last()
             }
             PlayState::Paused(_)
             | PlayState::Playing(_)
@@ -287,16 +278,20 @@ Re-log into your browser, or check your cookie file / PO-token provider, then re
                     self.play_song(prev_song_id)
                 } else {
                     debug!("play_prev: at first song, wrapping to last");
-                    let last_visual = self.get_max_visual_index();
-                    let last_actual = self.visual_to_actual_index(last_visual);
-                    if let Some(last_id) = self.get_id_from_index(last_actual) {
-                        self.cur_selected = last_visual;
-                        self.play_song(last_id)
-                    } else {
-                        Effects::none()
-                    }
+                    self.play_last()
                 }
             }
+        }
+    }
+
+    fn play_last(&mut self) -> Effects<Self> {
+        let last_visual = self.get_max_visual_index();
+        let last_actual = self.visual_to_actual_index(last_visual);
+        if let Some(last_id) = self.get_id_from_index(last_actual) {
+            self.cur_selected = last_visual;
+            self.play_song(last_id)
+        } else {
+            Effects::none()
         }
     }
 
