@@ -109,6 +109,14 @@ The codebase is at a local optimum across the areas this project optimizes:
   Also `handle_song_download_progress_update`, `download_upcoming_from_id`,
   `handle_set_to_error`, `apply_fired_shuffle_regen` all re-audited — reachable
   branches, kept.
+- **`apply_ytdlp_auth_args` duplicate skip-only branch collapsed** — the inner
+  `else` (fallback requested but no pot provider) and the outer `else` (no
+  fallback) emitted the byte-identical
+  `--extractor-args youtube:skip=hls,translated_subs` line. Nested if/else
+  pair → single `if web_music_fallback && let Some(pp) = pot_provider` guard;
+  all four fallback/provider rows emit identical args (state table verified).
+  New lock `fallback_without_provider_degrades_to_default_clients` covers the
+  previously-untested `(true, None)` row. (Net −4 lines in production.)
 - **RAM** — in-memory ALAC buffers are duration/source-dependent (5.5–77MB, median ~45MB);
   cache max = 1 by design.
 - **Render/CPU** — per-frame caches (title, row numbers, artist string, lowercased fields)
