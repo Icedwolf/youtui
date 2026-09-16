@@ -46,6 +46,27 @@ fn get_dummy_playlist() -> Playlist {
     playlist
 }
 
+/// Documents the cache invariant: writing to `Playlist.list` directly
+/// (bypassing `Playlist::push_song_list`) does NOT populate the id-to-index
+/// cache.  Tests must always push through the Playlist API.
+#[test]
+fn direct_list_mutation_does_not_populate_cache() {
+    let (mut p, _) = Playlist::new(Percentage(50));
+    p.list.state = ListStatus::Loaded;
+    let songs = vec![ListSong::create_with_metadata(
+        VideoID::from_raw("v0"),
+        "Song 0".into(),
+        vec!["A".into()],
+        None,
+        "3:00".into(),
+    )];
+    p.list.push_song_list(songs);
+    assert!(
+        p.get_index_from_id(ListSongID(0)).is_none(),
+        "direct list write must not populate the id cache"
+    );
+}
+
 #[test]
 fn completed_download_does_not_advance_play_status() {
     let mut p = get_dummy_playlist();
@@ -211,7 +232,7 @@ mod render_tests {
     fn render_playlist(songs: Vec<ListSong>) -> String {
         let (mut playlist, _) = Playlist::new(Percentage(50));
         playlist.list.state = ListStatus::Loaded;
-        playlist.list.push_song_list(songs);
+        let _ = playlist.push_song_list(songs);
         let backend = TestBackend::new(120, 20);
         let mut terminal = Terminal::new(backend).unwrap();
         terminal
@@ -364,7 +385,7 @@ mod state_transitions {
                 song
             })
             .collect();
-        p.list.push_song_list(songs);
+        let _ = p.push_song_list(songs);
         p
     }
 
@@ -420,7 +441,7 @@ mod state_transitions {
                 song
             })
             .collect();
-        p.list.push_song_list(songs);
+        let _ = p.push_song_list(songs);
         p
     }
 
@@ -1120,7 +1141,7 @@ mod state_transitions {
                 )
             })
             .collect();
-        p.list.push_song_list(songs);
+        let _ = p.push_song_list(songs);
 
         let id = p.get_id_from_index(0).expect("song at index 0");
         let _ = p.play_song(id);
@@ -1162,7 +1183,7 @@ mod state_transitions {
                 )
             })
             .collect();
-        p.list.push_song_list(songs);
+        let _ = p.push_song_list(songs);
 
         let id = p.get_id_from_index(0).expect("song at index 0");
         // Mark song as Failed (as if it previously failed to download)
@@ -1199,7 +1220,7 @@ mod state_transitions {
                 )
             })
             .collect();
-        p.list.push_song_list(songs);
+        let _ = p.push_song_list(songs);
 
         let id = p.get_id_from_index(0).expect("song at index 0");
         // Mark song as Failed (as if it previously failed to download)

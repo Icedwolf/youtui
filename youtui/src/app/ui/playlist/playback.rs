@@ -820,10 +820,7 @@ Re-log into your browser, or check your cookie file / PO-token provider, then re
     }
 
     pub fn get_index_from_id(&self, id: ListSongID) -> Option<usize> {
-        self.id_to_index_cache
-            .get(&id)
-            .copied()
-            .or_else(|| self.list.get_list_iter().position(|s| s.id == id))
+        self.id_to_index_cache.get(&id).copied()
     }
 
     pub fn get_id_from_index(&self, index: usize) -> Option<ListSongID> {
