@@ -62,6 +62,11 @@ The codebase is at a local optimum across the areas this project optimizes:
   inline warm-cache construction (still 373 tests, no behavior change). The last
   direct-write test helper is gone; `append_raw_album_songs` remains a browser-panel-only
   path.
+- **`get_song_from_id`/`get_mut_song_from_id` are the only song lookups** — 7 two-step
+  `get_index_from_id` + `nth`/`get_song_from_idx` sites collapsed onto the existing
+  accessors (`play_song` ×2, `download_upcoming` ×2, download-progress handler ×3).
+  Remaining `get_index_from_id` uses are genuine index consumers (visual-mapping, scope
+  windows, OOB diagnostics). Net −15 lines, behavior-neutral.
 - **RAM** — in-memory ALAC buffers are duration/source-dependent (5.5–77MB, median ~45MB);
   cache max = 1 by design.
 - **Render/CPU** — per-frame caches (title, row numbers, artist string, lowercased fields)
