@@ -408,6 +408,6 @@ impl Scrollable for Playlist {
 
 impl SongListComponent for Playlist {
     fn get_song_from_idx(&self, idx: usize) -> Option<&ListSong> {
-        self.list.get_list_iter().nth(idx)
+        self.list.get_song_from_idx(idx)
     }
 }

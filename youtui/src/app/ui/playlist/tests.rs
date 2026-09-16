@@ -336,7 +336,7 @@ fn download_scope_max_2_songs() {
 mod state_transitions {
     use crate::app::component::actionhandler::ActionHandler;
     use crate::app::structures::{
-        DownloadStatus, ListSong, ListSongID, ListStatus, Percentage, PlayState,
+        DownloadStatus, ListSong, ListSongID, ListStatus, Percentage, PlayState, SongListComponent,
     };
     use crate::app::ui::playlist::{
         DownloadProgressUpdate, HALT_AFTER_CONSECUTIVE_FAILURES, Playlist, PlaylistAction,
@@ -366,6 +366,42 @@ mod state_transitions {
             .collect();
         p.list.push_song_list(songs);
         p
+    }
+
+    /// Locks `Playlist::get_song_from_idx` (trait) to the underlying
+    /// `BrowserSongsList::get_song_from_idx` (inherent) — same result, so the
+    /// trait impl can safely delegate and drop its O(n) `.nth()` walk.
+    #[test]
+    fn get_song_from_idx_matches_underlying_list() {
+        let p = undownloaded_songs(64);
+        for i in 0..64 {
+            assert_eq!(
+                p.get_song_from_idx(i).map(|s| s.id),
+                p.list.get_song_from_idx(i).map(|s| s.id),
+                "index {i}"
+            );
+        }
+        // Out-of-range behaves identically on both accessors.
+        assert_eq!(p.get_song_from_idx(64), None);
+        assert_eq!(p.list.get_song_from_idx(64), None);
+    }
+
+    #[cfg(all(test, not(debug_assertions)))]
+    mod index_benches {
+        use super::*;
+        use criterion::Criterion;
+        use std::hint::black_box;
+
+        #[test]
+        fn criterion_playlist_get_song_from_idx() {
+            const N: usize = 135_000;
+            let p = undownloaded_songs(N);
+            let last = N - 1;
+            let mut c = Criterion::default();
+            c.bench_function("playlist/get_song_from_idx_last", |b| {
+                b.iter(|| black_box(p.get_song_from_idx(black_box(last))))
+            });
+        }
     }
 
     fn downloaded_songs(n: usize) -> Playlist {

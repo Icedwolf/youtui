@@ -459,7 +459,7 @@ Re-log into your browser, or check your cookie file / PO-token provider, then re
 
         for &sid in &song_ids {
             if let Some(idx) = self.get_index_from_id(sid)
-                && let Some(s) = self.list.get_list_iter().nth(idx)
+                && let Some(s) = self.list.get_song_from_idx(idx)
             {
                 debug!(
                     "  scope_song: id={:?}, video_id={}, status={:?}",
@@ -827,7 +827,7 @@ Re-log into your browser, or check your cookie file / PO-token provider, then re
     }
 
     pub fn get_id_from_index(&self, index: usize) -> Option<ListSongID> {
-        self.get_song_from_idx(index).map(|s| s.id)
+        self.list.get_song_from_idx(index).map(|s| s.id)
     }
 
     pub fn get_mut_song_from_id(&mut self, id: ListSongID) -> Option<&mut ListSong> {
@@ -837,7 +837,7 @@ Re-log into your browser, or check your cookie file / PO-token provider, then re
 
     pub fn get_song_from_id(&self, id: ListSongID) -> Option<&ListSong> {
         let idx = self.get_index_from_id(id)?;
-        self.list.get_list_iter().nth(idx)
+        self.list.get_song_from_idx(idx)
     }
 
     pub fn check_id_is_cur(&self, check_id: ListSongID) -> bool {
