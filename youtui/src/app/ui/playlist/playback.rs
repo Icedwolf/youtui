@@ -632,11 +632,6 @@ Re-log into your browser, or check your cookie file / PO-token provider, then re
                 video_id
             );
         }
-        let idx = downloads.iter().position(|(sid, _)| *sid == id);
-        if let Some(i) = idx {
-            downloads[i].1.cancel_token.cancel();
-            downloads.swap_remove(i);
-        }
 
         debug!("download_song: starting download for {}", video_id);
 
