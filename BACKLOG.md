@@ -1,7 +1,7 @@
 # Youtui Backlog
 
 **Build:** 0 errors, 0 warnings, 0 clippy
-**Tests:** 369 youtui bins green (2 ignored)
+**Tests:** 371 youtui bins green (2 ignored)
 **Last updated:** 2026-09-15
 
 This file is a working backlog only — no changelog, no session archaeology. Past work
@@ -35,6 +35,9 @@ The codebase is at a local optimum across the areas this project optimizes:
   now maps the visible (filtered) row to the real song. The shadowing inherent `get_song_from_idx`
   (unfiltered) that preempted the `SongListComponent` filtered mapping is gone; the trait method
   is the single definition and underlying access is explicit via `list.get_song_from_idx`.
+- **Sort reindexes the filtered list** — `push_sort_command`/`apply_all_sort_commands` rebuild
+  `filtered_indices` after reordering the underlying list, so filter-then-sort keeps the visible
+  rows and play-on-selected correct (previously the stale mapping pointed at wrong songs).
 - **RAM** — in-memory ALAC buffers are duration/source-dependent (5.5–77MB, median ~45MB);
   cache max = 1 by design.
 - **Render/CPU** — per-frame caches (title, row numbers, artist string, lowercased fields)
