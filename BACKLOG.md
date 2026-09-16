@@ -1,7 +1,7 @@
 # Youtui Backlog
 
 **Build:** 0 errors, 0 warnings, 0 clippy
-**Tests:** 373 youtui bins green (2 ignored)
+**Tests:** 379 youtui bins green (2 ignored)
 **Last updated:** 2026-09-16
 
 This file is a working backlog only — no changelog, no session archaeology. Past work
@@ -59,7 +59,7 @@ The codebase is at a local optimum across the areas this project optimizes:
 - **Test-side `get_dummy_playlist`/`get_dummy_album`/`DUMMY_ALBUM` scaffolding deleted**
   (2026-09-16) — ~40 lines + `include_str` album JSON fixture + 6 imports, all for one test
   that only asserted `play_status` and never needed album data. Its call site now uses the
-  inline warm-cache construction (still 373 tests, no behavior change). The last
+  inline warm-cache construction (373 tests at the time; now 379, no behavior change). The last
   direct-write test helper is gone; `append_raw_album_songs` remains a browser-panel-only
   path.
 - **`get_song_from_id`/`get_mut_song_from_id` are the only song lookups** — 7 two-step
@@ -72,6 +72,13 @@ The codebase is at a local optimum across the areas this project optimizes:
   onto `p.get_mut_song_from_id`, and the dead cancelled-entry cleanup (`position` +
   `swap_remove`) cut: every cancel site removes its `active_downloads` entry in the same
   locked scope, so the `:619` guard already covers every reachable state.
+- **Shuffle refocus blocks collapsed** — `enable_shuffle`, `push_song_list`, and
+  `toggle_shuffle` all called `generate_shuffle_indices()` then searched the shuffle
+  order for the playing song. After the pin at position 0 (`indices.swap(0, pos)`
+  in generate), both the `position()` lookup and the `0.min(max)` fallback resolve
+  to 0; the `was_playing` pre-push binding and the `get_cur_playing_id()` call in
+  the tuple were dead. Three 8–10-line blocks → one-liners. 6 parity-lock tests
+  pin the invariant (would go red if the pin contract ever regressed).
 - **RAM** — in-memory ALAC buffers are duration/source-dependent (5.5–77MB, median ~45MB);
   cache max = 1 by design.
 - **Render/CPU** — per-frame caches (title, row numbers, artist string, lowercased fields)
