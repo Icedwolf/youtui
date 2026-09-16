@@ -1,7 +1,7 @@
 # Youtui Backlog
 
 **Build:** 0 errors, 0 warnings, 0 clippy
-**Tests:** 372 youtui bins green (2 ignored)
+**Tests:** 373 youtui bins green (2 ignored)
 **Last updated:** 2026-09-16
 
 This file is a working backlog only — no changelog, no session archaeology. Past work
@@ -50,6 +50,12 @@ The codebase is at a local optimum across the areas this project optimizes:
   (4 sites). Measured cost-neutral (`criterion_playlist_get_song_from_idx`: 1.50 → 1.10ns,
   p=0.78) — `slice::Iter::nth` is already O(1) via pointer arithmetic, so this is a pure
   duplication cut, locked by a parity test (`get_song_from_idx_matches_underlying_list`).
+- **`id_to_index_cache` is the single source of truth for id→index** — the `.position()`
+  fallback in `get_index_from_id` is gone (landing 2026-09-16). Production mutations are
+  exactly three (`clear`, `push_song_list`, `delete_selected`) and all refresh the cache;
+  the fallback existed only to mask test helpers writing `p.list` directly. Red-first test
+  `direct_list_mutation_does_not_populate_cache` locks the invariant: tests must push via
+  `Playlist::push_song_list`. Dead O(n) fallback removed, same correctness.
 - **RAM** — in-memory ALAC buffers are duration/source-dependent (5.5–77MB, median ~45MB);
   cache max = 1 by design.
 - **Render/CPU** — per-frame caches (title, row numbers, artist string, lowercased fields)
