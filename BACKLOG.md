@@ -82,6 +82,11 @@ The codebase is at a local optimum across the areas this project optimizes:
 - **`handle_playing` promotion arms merged** — the `Paused` and `Buffering` arms of the
   `play_status` match did identical work (both promote the same id to `Playing`); now a
   single or-pattern with a bound guard. 2 parity-lock tests cover all state rows.
+- **`play_next_inner` dead else branch** — inside the `Paused|Playing|Buffering|Error`
+  arm, `current_id` is `Some` (the match only fires for the variants
+  `get_cur_playing_id()` maps to `Some`), so the `let Some(id) = current_id else
+  { return Effects::none(); }` else is unreachable. Replaced with invariant
+  `.expect()` (same class as the `download_song` OOB arm).
 - **RAM** — in-memory ALAC buffers are duration/source-dependent (5.5–77MB, median ~45MB);
   cache max = 1 by design.
 - **Render/CPU** — per-frame caches (title, row numbers, artist string, lowercased fields)
