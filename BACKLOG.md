@@ -87,6 +87,11 @@ The codebase is at a local optimum across the areas this project optimizes:
   `get_cur_playing_id()` maps to `Some`), so the `let Some(id) = current_id else
   { return Effects::none(); }` else is unreachable. Replaced with invariant
   `.expect()` (same class as the `download_song` OOB arm).
+- **`play_prev` duplicate block extracted** — the "jump to last song" block (compute last
+  visual, map to actual, look up, select + play) was identical in the `NotPlaying` and
+  wrap arms. Extracted into a private `play_last` helper — both arms now call it. The
+  `let cur = &self.play_status;` intermediate binding is gone too (`match &self.play_status`
+  directly). Net −5. Locked by the existing play_prev tests across all play states.
 - **RAM** — in-memory ALAC buffers are duration/source-dependent (5.5–77MB, median ~45MB);
   cache max = 1 by design.
 - **Render/CPU** — per-frame caches (title, row numbers, artist string, lowercased fields)
