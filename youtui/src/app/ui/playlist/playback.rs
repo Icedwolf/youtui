@@ -336,7 +336,7 @@ Re-log into your browser, or check your cookie file / PO-token provider, then re
         self.play_next_inner(prev_id, "resetting play status")
     }
 
-    fn reshuffle_or_wrap(&mut self) -> usize {
+    fn reshuffle_or_wrap(&mut self) {
         if self.shuffle_enabled {
             self.shuffle_seed = SystemTime::now()
                 .duration_since(SystemTime::UNIX_EPOCH)
@@ -344,7 +344,6 @@ Re-log into your browser, or check your cookie file / PO-token provider, then re
                 .as_secs();
             self.generate_shuffle_indices();
         }
-        0
     }
 
     fn play_next_inner(&mut self, prev_id: ListSongID, no_next_msg: &str) -> Effects<Self> {
