@@ -1938,6 +1938,66 @@ mod state_transitions {
         );
     }
 
+    // --- handle_playing state-transition locks -------------------------
+    // `handle_playing` promotes both Paused and Buffering (for the same id)
+    // to Playing, via a two-arm match / or-pattern. These lock every state
+    // table row so the promotion semantics cannot silently regress.
+
+    #[test]
+    fn handle_playing_promotes_paused_and_buffering() {
+        let mut p = undownloaded_songs(3);
+        p.set_notifications_enabled(false);
+
+        p.play_status = PlayState::Paused(ListSongID(1));
+        let _effect = p.handle_playing(Some(std::time::Duration::from_secs(180)), ListSongID(1));
+        assert_eq!(
+            p.play_status,
+            PlayState::Playing(ListSongID(1)),
+            "Paused(id) -> Playing(id)"
+        );
+
+        p.play_status = PlayState::Buffering(ListSongID(2));
+        let _effect = p.handle_playing(Some(std::time::Duration::from_secs(180)), ListSongID(2));
+        assert_eq!(
+            p.play_status,
+            PlayState::Playing(ListSongID(2)),
+            "Buffering(id) -> Playing(id)"
+        );
+    }
+
+    #[test]
+    fn handle_playing_stale_other_state_is_noop() {
+        let mut p = undownloaded_songs(3);
+        p.set_notifications_enabled(false);
+
+        // Wrong id while Paused: must not flip to Playing.
+        p.play_status = PlayState::Paused(ListSongID(0));
+        let _effect = p.handle_playing(Some(std::time::Duration::from_secs(180)), ListSongID(2));
+        assert_eq!(
+            p.play_status,
+            PlayState::Paused(ListSongID(0)),
+            "Paused(other_id) must be untouched"
+        );
+
+        // Already Playing: must not change state.
+        p.play_status = PlayState::Playing(ListSongID(1));
+        let _effect = p.handle_playing(Some(std::time::Duration::from_secs(180)), ListSongID(1));
+        assert_eq!(
+            p.play_status,
+            PlayState::Playing(ListSongID(1)),
+            "Playing(id) must stay Playing"
+        );
+
+        // Idle: must stay idle.
+        p.play_status = PlayState::NotPlaying;
+        let _effect = p.handle_playing(Some(std::time::Duration::from_secs(180)), ListSongID(0));
+        assert_eq!(
+            p.play_status,
+            PlayState::NotPlaying,
+            "NotPlaying must remain NotPlaying"
+        );
+    }
+
     #[test]
     fn debounce_fire_clears_own_token_not_a_newer_one() {
         let mut p = undownloaded_songs(3);

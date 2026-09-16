@@ -1523,14 +1523,8 @@ impl Playlist {
             song.actual_duration = duration;
         }
 
-        match self.play_status {
-            PlayState::Paused(p_id) if p_id == id => {
-                self.play_status = PlayState::Playing(id);
-            }
-            PlayState::Buffering(b_id) if b_id == id => {
-                self.play_status = PlayState::Playing(id);
-            }
-            _ => {}
+        if matches!(self.play_status, PlayState::Paused(p) | PlayState::Buffering(p) if p == id) {
+            self.play_status = PlayState::Playing(id);
         }
         // Calling regenerate_downloads_for_current immediately below applies
         // the current shuffle order right now. Cancel any still-pending
