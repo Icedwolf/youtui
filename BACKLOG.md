@@ -68,14 +68,10 @@ The codebase is at a local optimum across the areas this project optimizes:
   Remaining `get_index_from_id` uses are genuine index consumers (visual-mapping, scope
   windows, OOB diagnostics). Net −15 lines, behavior-neutral.
 - **Per-frame `nth` sweep complete (2026-09-16)** — `download_song`'s dead OOB arm
-  (`index out of bounds after getting index`) removed via an invariant `.expect()`:
-  `song_index` comes from `id_to_index_cache`, rebuilt on every list mutation (locked by
-  `direct_list_mutation_does_not_populate_cache`), so the arm was unreachable. The inline
-  `nth` there is load-bearing (field-disjoint borrow across `active_downloads`/queue
-  access — an `&mut self`-tied accessor would not compile). 5 test two-step lookups
-  (`prebuffer_failed`, `play_song_clears_failed`, `status_bar_icon_*` ×3) collapsed onto
-  `p.get_mut_song_from_id`. Net −14 lines; only accessor bodies + the one documented
-  field-disjoint site now use `nth`.
+  removed via an invariant `.expect()` (see below note), 5 test two-step lookups collapsed
+  onto `p.get_mut_song_from_id`, and the dead cancelled-entry cleanup (`position` +
+  `swap_remove`) cut: every cancel site removes its `active_downloads` entry in the same
+  locked scope, so the `:619` guard already covers every reachable state.
 - **RAM** — in-memory ALAC buffers are duration/source-dependent (5.5–77MB, median ~45MB);
   cache max = 1 by design.
 - **Render/CPU** — per-frame caches (title, row numbers, artist string, lowercased fields)
