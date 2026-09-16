@@ -168,22 +168,19 @@ Re-log into your browser, or check your cookie file / PO-token provider, then re
     }
 
     pub fn play_song(&mut self, id: ListSongID) -> Effects<Self> {
-        if let Some(idx) = self.get_index_from_id(id)
-            && let Some(song) = self.list.get_list_iter_mut().nth(idx)
+        if let Some(song) = self.get_mut_song_from_id(id)
             && matches!(song.download_status, DownloadStatus::Failed)
         {
             song.download_status = DownloadStatus::None;
         }
         let mut effect = self.prepare_playback_id(id);
 
-        if let Some(song_index) = self.get_index_from_id(id) {
+        if self.get_song_from_id(id).is_some() {
             let stop_song_id = self.get_cur_playing_id();
             effect = self.start_buffering(id, stop_song_id, effect);
 
             let video_id = self
-                .list
-                .get_list_iter()
-                .nth(song_index)
+                .get_song_from_id(id)
                 .map(|s| s.video_id.get_raw().to_string());
             let cache_decoder = video_id
                 .as_deref()
@@ -458,9 +455,7 @@ Re-log into your browser, or check your cookie file / PO-token provider, then re
         }
 
         for &sid in &song_ids {
-            if let Some(idx) = self.get_index_from_id(sid)
-                && let Some(s) = self.list.get_song_from_idx(idx)
-            {
+            if let Some(s) = self.get_song_from_id(sid) {
                 debug!(
                     "  scope_song: id={:?}, video_id={}, status={:?}",
                     sid,
@@ -481,11 +476,7 @@ Re-log into your browser, or check your cookie file / PO-token provider, then re
 
         self.download_queue.clear();
         for song_id in &song_ids {
-            let status = if let Some(idx) = self.get_index_from_id(*song_id) {
-                self.get_song_from_idx(idx).map(|s| &s.download_status)
-            } else {
-                None
-            };
+            let status = self.get_song_from_id(*song_id).map(|s| &s.download_status);
 
             match status {
                 Some(DownloadStatus::Downloaded) => {
@@ -1388,9 +1379,7 @@ impl Playlist {
         match update {
             DownloadProgressUpdate::Downloading => {
                 debug!("download_started: song_id={}", video_id);
-                if let Some(idx) = self.get_index_from_id(id)
-                    && let Some(song) = self.list.get_list_iter_mut().nth(idx)
-                {
+                if let Some(song) = self.get_mut_song_from_id(id) {
                     song.download_status = DownloadStatus::Downloading(Percentage(0));
                 }
                 Effects::none()
@@ -1398,9 +1387,7 @@ impl Playlist {
             DownloadProgressUpdate::Completed(decoder) => {
                 debug!("download_done: song_id={}", video_id);
                 self.consecutive_download_failures = 0;
-                if let Some(idx) = self.get_index_from_id(id)
-                    && let Some(s) = self.list.get_list_iter_mut().nth(idx)
-                {
+                if let Some(s) = self.get_mut_song_from_id(id) {
                     s.download_status = DownloadStatus::Downloaded;
                 }
                 self.active_downloads
@@ -1456,9 +1443,7 @@ impl Playlist {
                 } else {
                     warn!("download_error: song_id={}, error={:#}", video_id, e);
                 }
-                if let Some(idx) = self.get_index_from_id(id)
-                    && let Some(song) = self.list.get_list_iter_mut().nth(idx)
-                {
+                if let Some(song) = self.get_mut_song_from_id(id) {
                     song.download_status = DownloadStatus::Failed;
                 }
                 self.active_downloads
