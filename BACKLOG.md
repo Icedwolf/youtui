@@ -92,6 +92,14 @@ The codebase is at a local optimum across the areas this project optimizes:
   wrap arms. Extracted into a private `play_last` helper — both arms now call it. The
   `let cur = &self.play_status;` intermediate binding is gone too (`match &self.play_status`
   directly). Net −5. Locked by the existing play_prev tests across all play states.
+- **`refresh_search_view` extraction** — the identical trio `update_search_indices()` +
+  `cached_title.take()` + `cur_selected.min(max)` was repeated at 4 production sites
+  (Ctrl-W/Char/Backspace arms in `handle_text_event_impl` and `clear_search`). A single
+  `pub(super) fn refresh_search_view()` in playback.rs replaces all four. 6 parity-lock
+  tests cover the arms and `clear_search`. (Net −9 lines in production, +6 tests.)
+- **Note: `clear_text` gap** — `Playlist::clear_text` (mod.rs:317) calls
+  `update_search_indices` but skips `cached_title` invalidation + clamp. Appears
+  unreachable for Playlist (no event-loop dispatch found). Flag for future audit.
 - **RAM** — in-memory ALAC buffers are duration/source-dependent (5.5–77MB, median ~45MB);
   cache max = 1 by design.
 - **Render/CPU** — per-frame caches (title, row numbers, artist string, lowercased fields)
