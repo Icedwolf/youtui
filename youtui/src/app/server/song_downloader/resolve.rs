@@ -67,25 +67,20 @@ pub fn apply_ytdlp_auth_args(
     // owns the full argument list and must not inherit broken host config.
     cmd.arg("--ignore-config");
     let skip = "hls,translated_subs";
-    if web_music_fallback {
+    if web_music_fallback && let Some(pp) = pot_provider {
         // Client-fallback attempt: the default clients had no playable formats
         // (SABR experiment / abandoned client), so retry through `web_music`
         // with the GVS PO-token provider — slow (~9.4s first byte) but the most
         // reliably playable client. Only meaningful with a provider present;
         // without one there is nothing to escape to, so degrade to the default
         // clients (the retry guard never requests this combination).
-        if let Some(pp) = pot_provider {
-            cmd.arg("--plugin-dirs").arg(&pp.plugin_dir);
-            cmd.arg("--extractor-args").arg(format!(
-                "youtubepot-bgutilcli:cli_path={}",
-                pp.cli.display()
-            ));
-            cmd.arg("--extractor-args")
-                .arg(format!("youtube:player_client=web_music;skip={skip}"));
-        } else {
-            cmd.arg("--extractor-args")
-                .arg(format!("youtube:skip={skip}"));
-        }
+        cmd.arg("--plugin-dirs").arg(&pp.plugin_dir);
+        cmd.arg("--extractor-args").arg(format!(
+            "youtubepot-bgutilcli:cli_path={}",
+            pp.cli.display()
+        ));
+        cmd.arg("--extractor-args")
+            .arg(format!("youtube:player_client=web_music;skip={skip}"));
     } else {
         cmd.arg("--extractor-args")
             .arg(format!("youtube:skip={skip}"));
@@ -293,6 +288,37 @@ mod tests {
         assert!(
             !extractor.contains("po_token="),
             "must NOT pass a PO token without a provider: {extractor}"
+        );
+    }
+
+    #[test]
+    fn fallback_without_provider_degrades_to_default_clients() {
+        use tokio::process::Command;
+        // A web_music fallback request with no provider present must NOT force
+        // web_music (yt-dlp would skip formats without a GVS token source); it
+        // degrades to the same skip-only default-client args as the primary.
+        let mut cmd = Command::new("yt-dlp");
+        apply_ytdlp_auth_args(&mut cmd, None, None, "dQw4w9WgXcQ", true);
+        let args: Vec<String> = cmd
+            .as_std()
+            .get_args()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect();
+        assert!(
+            !args.windows(2).any(|w| w[0] == "--plugin-dirs"),
+            "must not pass --plugin-dirs without a provider: {args:?}"
+        );
+        assert!(
+            !args.windows(2).any(|w| {
+                w[0] == "--extractor-args" && w[1].contains("player_client=web_music")
+            }),
+            "must not force web_music without a provider: {args:?}"
+        );
+        assert!(
+            args.windows(2).any(|w| {
+                w[0] == "--extractor-args" && w[1] == "youtube:skip=hls,translated_subs"
+            }),
+            "fallback without provider must use skip-only default args: {args:?}"
         );
     }
 
