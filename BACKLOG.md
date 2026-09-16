@@ -1,7 +1,7 @@
 # Youtui Backlog
 
 **Build:** 0 errors, 0 warnings, 0 clippy
-**Tests:** 379 youtui bins green (2 ignored)
+**Tests:** 381 youtui bins green (2 ignored)
 **Last updated:** 2026-09-16
 
 This file is a working backlog only — no changelog, no session archaeology. Past work
@@ -79,6 +79,9 @@ The codebase is at a local optimum across the areas this project optimizes:
   to 0; the `was_playing` pre-push binding and the `get_cur_playing_id()` call in
   the tuple were dead. Three 8–10-line blocks → one-liners. 6 parity-lock tests
   pin the invariant (would go red if the pin contract ever regressed).
+- **`handle_playing` promotion arms merged** — the `Paused` and `Buffering` arms of the
+  `play_status` match did identical work (both promote the same id to `Playing`); now a
+  single or-pattern with a bound guard. 2 parity-lock tests cover all state rows.
 - **RAM** — in-memory ALAC buffers are duration/source-dependent (5.5–77MB, median ~45MB);
   cache max = 1 by design.
 - **Render/CPU** — per-frame caches (title, row numbers, artist string, lowercased fields)
