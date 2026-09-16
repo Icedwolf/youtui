@@ -4,47 +4,8 @@ use crate::app::structures::{
     ListSong, ListSongDisplayableField, ListSongID, ListStatus, Percentage, PlayState,
 };
 use pretty_assertions::assert_eq;
-use std::sync::{Arc, OnceLock};
-use ytmapi_rs::auth::BrowserToken;
-use ytmapi_rs::common::{AlbumID, VideoID, YoutubeID};
-use ytmapi_rs::parse::{GetAlbum, ParsedSongAlbum};
-use ytmapi_rs::query::GetAlbumQuery;
-
-static DUMMY_ALBUM: OnceLock<GetAlbum> = OnceLock::new();
-
-fn get_dummy_album() -> GetAlbum {
-    DUMMY_ALBUM
-        .get_or_init(|| {
-            let json = include_str!("../../../../../ytmapi-rs/test_json/get_album_20240724.json");
-            ytmapi_rs::process_json::<_, BrowserToken>(
-                json.to_owned(),
-                GetAlbumQuery::new(AlbumID::from_raw("")),
-            )
-            .unwrap()
-        })
-        .clone()
-}
-
-fn get_dummy_playlist() -> Playlist {
-    let (mut playlist, _effect) = Playlist::new(Percentage(50));
-    playlist.list.state = ListStatus::Loaded;
-    let GetAlbum {
-        title,
-        year,
-        tracks,
-        ..
-    } = get_dummy_album();
-    playlist.list.append_raw_album_songs(
-        tracks,
-        ParsedSongAlbum {
-            name: title,
-            id: AlbumID::from_raw(""),
-        },
-        year,
-        vec![],
-    );
-    playlist
-}
+use std::sync::Arc;
+use ytmapi_rs::common::{VideoID, YoutubeID};
 
 /// Documents the cache invariant: writing to `Playlist.list` directly
 /// (bypassing `Playlist::push_song_list`) does NOT populate the id-to-index
@@ -69,7 +30,15 @@ fn direct_list_mutation_does_not_populate_cache() {
 
 #[test]
 fn completed_download_does_not_advance_play_status() {
-    let mut p = get_dummy_playlist();
+    let (mut p, _) = Playlist::new(Percentage(50));
+    p.list.state = ListStatus::Loaded;
+    let _ = p.push_song_list(vec![ListSong::create_with_metadata(
+        VideoID::from_raw("v0"),
+        "Song 0".into(),
+        vec!["A".into()],
+        None,
+        "3:00".into(),
+    )]);
     let id = ListSongID(0);
     p.play_status = PlayState::Buffering(id);
     p.queue_status = QueueState::Queued(id);
