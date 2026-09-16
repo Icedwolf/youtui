@@ -1289,17 +1289,16 @@ impl Playlist {
     /// *order* is always applied synchronously in `toggle_shuffle`; only the
     /// network-triggering scope regeneration is delayed.
     fn regenerate_downloads_debounced(&mut self) -> Effects<Self> {
+        // Cancel any stale pending debounce first — whether or not something
+        // is playing, a live token must never outlive the next regen request.
+        if let Some(token) = self.shuffle_regen_token.take() {
+            token.cancel();
+        }
         if self.get_cur_playing_id().is_none() {
             // Nothing is playing, so the eventual regen would no-op anyway.
             // Don't schedule a timer that only wakes to do nothing on every
-            // idle shuffle toggle — and clear any stale pending one.
-            if let Some(token) = self.shuffle_regen_token.take() {
-                token.cancel();
-            }
+            // idle shuffle toggle.
             return Effects::none();
-        }
-        if let Some(token) = self.shuffle_regen_token.take() {
-            token.cancel();
         }
         let token = tokio_util::sync::CancellationToken::new();
         self.shuffle_regen_token = Some(token.clone());
