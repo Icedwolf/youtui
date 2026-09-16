@@ -357,9 +357,11 @@ Re-log into your browser, or check your cookie file / PO-token provider, then re
             | PlayState::Playing(_)
             | PlayState::Buffering(_)
             | PlayState::Error(_) => {
-                let Some(id) = current_id else {
-                    return Effects::none();
-                };
+                let id = current_id.expect(
+                    "current_id is Some for Paused|Playing|Buffering|Error (those are the \
+                     only variants get_cur_playing_id maps to Some, and this arm just \
+                     matched exactly those)",
+                );
                 if id > prev_id {
                     debug!(
                         "play_next_inner: newer song already playing (id={id:?} > prev={prev_id:?})"
