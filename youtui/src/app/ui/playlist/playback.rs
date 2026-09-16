@@ -558,17 +558,13 @@ Re-log into your browser, or check your cookie file / PO-token provider, then re
         let settle_window_ms = self.settle_window_for();
         self.last_download_trigger = Some(std::time::Instant::now());
 
-        let song = match self.list.get_list_iter_mut().nth(song_index) {
-            Some(s) => s,
-            None => {
-                debug!(
-                    "download_song: index {} for id {:?} out of bounds after getting index",
-                    song_index, id
-                );
-                self.play_status = PlayState::NotPlaying;
-                return Effects::none();
-            }
-        };
+        // `song_index` comes from `id_to_index_cache`, which is rebuilt on every
+        // list mutation, so the index is always in bounds (invariant locked by
+        // `direct_list_mutation_does_not_populate_cache`); the OOB arm was dead.
+        let song =
+            self.list.get_list_iter_mut().nth(song_index).expect(
+                "cache-consistent index: id_to_index_cache is rebuilt on every list mutation",
+            );
 
         let video_id = song.video_id.get_raw().to_string();
         debug!("download_song: {}", video_id);

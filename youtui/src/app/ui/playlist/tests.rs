@@ -1156,9 +1156,7 @@ mod state_transitions {
 
         let id = p.get_id_from_index(0).expect("song at index 0");
         // Mark song as Failed (as if it previously failed to download)
-        if let Some(idx) = p.get_index_from_id(id)
-            && let Some(song) = p.list.get_list_iter_mut().nth(idx)
-        {
+        if let Some(song) = p.get_mut_song_from_id(id) {
             song.download_status = DownloadStatus::Failed;
         }
 
@@ -1193,9 +1191,7 @@ mod state_transitions {
 
         let id = p.get_id_from_index(0).expect("song at index 0");
         // Mark song as Failed (as if it previously failed to download)
-        if let Some(idx) = p.get_index_from_id(id)
-            && let Some(song) = p.list.get_list_iter_mut().nth(idx)
-        {
+        if let Some(song) = p.get_mut_song_from_id(id) {
             song.download_status = DownloadStatus::Failed;
         }
 
@@ -1226,9 +1222,7 @@ mod state_transitions {
     fn status_bar_icon_playing_queued_shows_download() {
         let mut p = downloaded_songs(3);
         p.play_status = PlayState::Playing(ListSongID(0));
-        if let Some(idx) = p.get_index_from_id(ListSongID(0))
-            && let Some(song) = p.list.get_list_iter_mut().nth(idx)
-        {
+        if let Some(song) = p.get_mut_song_from_id(ListSongID(0)) {
             song.download_status = DownloadStatus::Queued;
         }
         assert_eq!(
@@ -1242,9 +1236,7 @@ mod state_transitions {
     fn status_bar_icon_playing_downloading_shows_download() {
         let mut p = downloaded_songs(3);
         p.play_status = PlayState::Playing(ListSongID(0));
-        if let Some(idx) = p.get_index_from_id(ListSongID(0))
-            && let Some(song) = p.list.get_list_iter_mut().nth(idx)
-        {
+        if let Some(song) = p.get_mut_song_from_id(ListSongID(0)) {
             song.download_status = DownloadStatus::Downloading(Percentage(50));
         }
         assert_eq!(
@@ -1258,9 +1250,7 @@ mod state_transitions {
     fn status_bar_icon_playing_none_shows_download() {
         let mut p = downloaded_songs(3);
         p.play_status = PlayState::Playing(ListSongID(0));
-        if let Some(idx) = p.get_index_from_id(ListSongID(0))
-            && let Some(song) = p.list.get_list_iter_mut().nth(idx)
-        {
+        if let Some(song) = p.get_mut_song_from_id(ListSongID(0)) {
             song.download_status = DownloadStatus::None;
         }
         assert_eq!(
