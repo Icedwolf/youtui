@@ -117,6 +117,12 @@ The codebase is at a local optimum across the areas this project optimizes:
   all four fallback/provider rows emit identical args (state table verified).
   New lock `fallback_without_provider_degrades_to_default_clients` covers the
   previously-untested `(true, None)` row. (Net −4 lines in production.)
+- **`song_downloader/mod.rs` production block fully re-swept** (lines 1–1255:
+  classifier/`bail_failed_buffer`/retry ladder/`spawn_bg_cache_task`/
+  `ytdlp_pipeline`/`await_full_download`/`download_and_decode`) — clean, no
+  dead branches; `try_streaming_init` vs `_nonseekable` (seekable vs
+  non-seekable source) and `decoder_from_buffer` (sync) are genuinely
+  distinct init paths, kept.
 - **RAM** — in-memory ALAC buffers are duration/source-dependent (5.5–77MB, median ~45MB);
   cache max = 1 by design.
 - **Render/CPU** — per-frame caches (title, row numbers, artist string, lowercased fields)
