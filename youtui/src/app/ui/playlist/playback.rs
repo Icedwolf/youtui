@@ -241,16 +241,10 @@ Re-log into your browser, or check your cookie file / PO-token provider, then re
         self.shuffle_enabled = true;
         self.shuffle_seed = seed;
         self.generate_shuffle_indices();
-        if let (Some(_current_id), Some(playing_idx)) =
-            (self.get_cur_playing_id(), self.get_cur_playing_index())
-        {
-            if let Some(shuffled_pos) = self.shuffle_visual_map.get(playing_idx).copied().flatten()
-            {
-                self.cur_selected = shuffled_pos;
-            }
-        } else {
-            self.cur_selected = 0.min(self.get_max_visual_index());
-        }
+        // `generate_shuffle_indices` pins the current song (when playing and
+        // in-list) at shuffle position 0, so the refocus always lands on the
+        // top row; the idle/stale-id fallback is 0 as well.
+        self.cur_selected = 0;
     }
 
     pub fn clear(&mut self) {
@@ -315,22 +309,14 @@ Re-log into your browser, or check your cookie file / PO-token provider, then re
     }
 
     pub fn push_song_list(&mut self, song_list: Vec<ListSong>) -> (ListSongID, Effects<Self>) {
-        let was_playing = self.get_cur_playing_id();
         let first_id = self.list.push_song_list(song_list);
         self.rebuild_id_cache();
 
         if self.shuffle_enabled {
             self.generate_shuffle_indices();
-
-            if let (_, Some(playing_idx)) = (was_playing, self.get_cur_playing_index()) {
-                if let Some(shuffled_pos) =
-                    self.shuffle_indices.iter().position(|&i| i == playing_idx)
-                {
-                    self.cur_selected = shuffled_pos;
-                }
-            } else {
-                self.cur_selected = 0.min(self.get_max_visual_index());
-            }
+            // Pins the current song (when playing and in-list) at shuffle
+            // position 0; idle/stale fallback lands on 0 too.
+            self.cur_selected = 0;
         }
 
         if !self.search_text.is_empty() {
@@ -1032,18 +1018,9 @@ impl Playlist {
                 .as_secs();
 
             self.generate_shuffle_indices();
-
-            if let (_, Some(playing_idx)) =
-                (self.get_cur_playing_id(), self.get_cur_playing_index())
-            {
-                if let Some(shuffled_pos) =
-                    self.shuffle_indices.iter().position(|&i| i == playing_idx)
-                {
-                    self.cur_selected = shuffled_pos;
-                }
-            } else {
-                self.cur_selected = 0.min(self.get_max_visual_index());
-            }
+            // Pins the current song (when playing and in-list) at shuffle
+            // position 0; idle/stale fallback lands on 0 too.
+            self.cur_selected = 0;
         } else {
             if let Some(playing_idx) = self.get_cur_playing_index() {
                 self.cur_selected =

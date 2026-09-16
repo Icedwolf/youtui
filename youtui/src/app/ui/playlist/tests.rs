@@ -1757,6 +1757,100 @@ mod state_transitions {
         );
     }
 
+    // --- shuffle refocus collapse locks --------------------------------
+    // `generate_shuffle_indices` pins the current song (when playing and
+    // in-list) at shuffle position 0, so the three refocus sites
+    // (`enable_shuffle`, `push_song_list`, `toggle_shuffle`) all converge to
+    // `cur_selected = 0` — the if-branch lookup returns Some(0) (pinned) and
+    // the else-branch `0.min(usize)` is 0. These tests lock that observable
+    // invariant; a regression in the collapse would break them.
+
+    #[test]
+    fn enable_shuffle_pins_playing_song_to_top() {
+        let mut p = downloaded_songs(3);
+        p.play_status = PlayState::Playing(ListSongID(2));
+        p.cur_selected = 2;
+
+        p.enable_shuffle(1234);
+
+        assert!(p.shuffle_enabled);
+        assert_eq!(p.shuffle_indices[0], 2, "playing song pinned to visual 0");
+        assert_eq!(p.shuffle_visual_map[2], Some(0));
+        assert_eq!(p.cur_selected, 0, "selection refocuses to top");
+    }
+
+    #[test]
+    fn enable_shuffle_idle_resets_selection_to_top() {
+        let mut p = downloaded_songs(3);
+        p.cur_selected = 2;
+
+        p.enable_shuffle(1234);
+
+        assert!(p.shuffle_enabled);
+        assert_eq!(p.cur_selected, 0, "idle enable lands on top row");
+    }
+
+    #[test]
+    fn push_song_list_shuffle_pins_playing_song() {
+        let mut p = downloaded_songs(2);
+        p.shuffle_enabled = true;
+        p.play_status = PlayState::Playing(ListSongID(1));
+        let extra = ListSong::create_with_metadata(
+            VideoID::from_raw("video9"),
+            "Extra".to_string(),
+            vec!["A".to_string()],
+            None,
+            "3:00".to_string(),
+        );
+        let _ = p.push_song_list(vec![extra]);
+
+        assert_eq!(p.shuffle_indices[0], 1, "playing song pinned to visual 0");
+        assert_eq!(p.cur_selected, 0, "selection refocuses to top");
+    }
+
+    #[test]
+    fn push_song_list_shuffle_idle_resets_selection() {
+        let mut p = downloaded_songs(2);
+        p.shuffle_enabled = true;
+        p.cur_selected = 1;
+        let extra = ListSong::create_with_metadata(
+            VideoID::from_raw("video9"),
+            "Extra".to_string(),
+            vec!["A".to_string()],
+            None,
+            "3:00".to_string(),
+        );
+        let _ = p.push_song_list(vec![extra]);
+
+        assert_eq!(p.cur_selected, 0, "idle refocus lands on top row");
+    }
+
+    #[test]
+    fn toggle_shuffle_on_pins_playing_song() {
+        let mut p = undownloaded_songs(3);
+        p.set_notifications_enabled(false);
+        p.play_status = PlayState::Buffering(ListSongID(2));
+        p.cur_selected = 2;
+
+        let _effect = p.toggle_shuffle();
+
+        assert!(p.shuffle_enabled);
+        assert_eq!(p.shuffle_indices[0], 2, "playing song pinned to visual 0");
+        assert_eq!(p.cur_selected, 0, "selection refocuses to top");
+    }
+
+    #[test]
+    fn toggle_shuffle_on_idle_resets_selection() {
+        let mut p = undownloaded_songs(2);
+        p.set_notifications_enabled(false);
+        p.cur_selected = 1;
+
+        let _effect = p.toggle_shuffle();
+
+        assert!(p.shuffle_enabled);
+        assert_eq!(p.cur_selected, 0, "idle refocus lands on top row");
+    }
+
     #[test]
     fn handle_playing_cancels_pending_shuffle_regen() {
         let mut p = undownloaded_songs(3);
