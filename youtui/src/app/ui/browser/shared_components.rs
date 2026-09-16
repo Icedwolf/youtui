@@ -1,7 +1,5 @@
 use crate::app::AppCallback;
-use crate::app::component::actionhandler::{
-    Action, Component, TextHandler,
-};
+use crate::app::component::actionhandler::{Action, Component, TextHandler};
 use crate::app::effect::Effects;
 use crate::app::structures::{BrowserSongsList, ListSong, ListSongDisplayableField};
 use crate::app::view::{
@@ -15,7 +13,8 @@ use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use tracing::debug;
 
-// --- Song playback helpers (shared by songsearch, artistsearch, playlistsearch) ---
+// --- Song playback helpers (shared by songsearch, artistsearch,
+// playlistsearch) ---
 
 pub(crate) fn play_song_impl<C: Component>(
     cur_song_idx: usize,
@@ -189,10 +188,7 @@ impl TextHandler for FilterManager {
     fn clear_text(&mut self) -> bool {
         self.filter_text.clear()
     }
-    fn handle_text_event_impl(
-        &mut self,
-        event: &crossterm::event::Event,
-    ) -> Option<Effects<Self>> {
+    fn handle_text_event_impl(&mut self, event: &crossterm::event::Event) -> Option<Effects<Self>> {
         match handle_events(&mut self.filter_text, true, event) {
             rat_text::event::TextOutcome::Continue => None,
             _ => Some(Effects::none()),
@@ -210,10 +206,7 @@ impl TextHandler for SearchBlock {
     fn clear_text(&mut self) -> bool {
         self.search_contents.clear()
     }
-    fn handle_text_event_impl(
-        &mut self,
-        event: &crossterm::event::Event,
-    ) -> Option<Effects<Self>> {
+    fn handle_text_event_impl(&mut self, event: &crossterm::event::Event) -> Option<Effects<Self>> {
         match handle_events(&mut self.search_contents, true, event) {
             rat_text::event::TextOutcome::Continue => None,
             _ => Some(Effects::none()),
@@ -228,8 +221,6 @@ impl SearchBlock {
         }
     }
 }
-
-
 
 #[macro_export]
 macro_rules! define_browser_songs_action {
@@ -332,23 +323,17 @@ macro_rules! define_search_results_browser {
             fn handle_text_event_impl(
                 &mut self,
                 event: &crossterm::event::Event,
-            ) -> std::option::Option<$crate::app::effect::Effects<Self>>
-            {
+            ) -> std::option::Option<$crate::app::effect::Effects<Self>> {
                 use $crate::app::ui::browser::shared_components::SearchBrowserSide;
                 match self.side {
                     SearchBrowserSide::Search => self
                         .search_panel
                         .handle_text_event_impl(event)
-                        .map(|effect| {
-                            effect.map(|this: &mut $name| &mut this.search_panel)
-                        }),
-                    SearchBrowserSide::Songs => {
-                        self.songs_panel
-                            .handle_text_event_impl(event)
-                            .map(|effect| {
-                                effect.map(|this: &mut $name| &mut this.songs_panel)
-                            })
-                    }
+                        .map(|effect| effect.map(|this: &mut $name| &mut this.search_panel)),
+                    SearchBrowserSide::Songs => self
+                        .songs_panel
+                        .handle_text_event_impl(event)
+                        .map(|effect| effect.map(|this: &mut $name| &mut this.songs_panel)),
                 }
             }
         }
@@ -522,9 +507,7 @@ macro_rules! define_search_results_browser {
                 }
                 Effects::none()
             }
-            pub fn search(
-                &mut self,
-            ) -> $crate::app::effect::Effects<Self> {
+            pub fn search(&mut self) -> $crate::app::effect::Effects<Self> {
                 self.search_panel.close_search();
                 let Some(search_query) = self
                     .search_panel
@@ -537,9 +520,7 @@ macro_rules! define_search_results_browser {
                 self.search_panel.clear_text();
                 self.execute_search(search_query)
             }
-            pub fn get_songs(
-                &mut self,
-            ) -> $crate::app::effect::Effects<Self> {
+            pub fn get_songs(&mut self) -> $crate::app::effect::Effects<Self> {
                 let selected = self.search_panel.get_selected_item();
                 self.change_routing(
                     $crate::app::ui::browser::shared_components::SearchBrowserSide::Songs,
@@ -672,9 +653,13 @@ pub(crate) trait SortFilterTable: AdvancedTableView {
             if !self.get_sortable_columns().contains(&c.column) {
                 bail!(format!("Unable to sort column {}", c.column,));
             }
-            let col = get_adjusted_list_column(c.column, Self::get_subcolumns()).ok_or_else(
-                || anyhow!("Unable to sort column {}, doesn't match underlying list", c.column),
-            )?;
+            let col =
+                get_adjusted_list_column(c.column, Self::get_subcolumns()).ok_or_else(|| {
+                    anyhow!(
+                        "Unable to sort column {}, doesn't match underlying list",
+                        c.column
+                    )
+                })?;
             self.get_mut_songs().sort(col, c.direction);
         }
         self.rebuild_filtered_indices();
@@ -788,9 +773,7 @@ pub(crate) trait SortFilterTable: AdvancedTableView {
         let Some(filter) = self.get_filter_manager().get_text().map(|s| s.to_string()) else {
             return;
         };
-        let cmd = TableFilterCommand::All(Filter::Contains(FilterString::case_insensitive(
-            filter,
-        )));
+        let cmd = TableFilterCommand::All(Filter::Contains(FilterString::case_insensitive(filter)));
         let prev_max_cur = self.get_filtered_count().saturating_sub(1);
         let prev_cur = self.get_selected_item();
         let prev_offset = self.get_state().offset();
@@ -799,13 +782,8 @@ pub(crate) trait SortFilterTable: AdvancedTableView {
         let new_max_cur = self.get_filtered_count().saturating_sub(1);
         let new_cur = self.get_selected_item().min(new_max_cur);
         self.set_cur_selected(new_cur);
-        *self.get_mut_state().offset_mut() = get_offset_after_list_resize(
-            prev_offset,
-            prev_cur,
-            prev_max_cur,
-            new_cur,
-            new_max_cur,
-        );
+        *self.get_mut_state().offset_mut() =
+            get_offset_after_list_resize(prev_offset, prev_cur, prev_max_cur, new_cur, new_max_cur);
     }
 
     fn clear_filter(&mut self) {
@@ -846,7 +824,10 @@ pub(crate) trait SortFilterTable: AdvancedTableView {
     }
 
     fn handle_sort_cur_asc(&mut self) {
-        let Some(column) = self.get_sortable_columns().get(self.get_sort_manager().cur).copied()
+        let Some(column) = self
+            .get_sortable_columns()
+            .get(self.get_sort_manager().cur)
+            .copied()
         else {
             debug!("Tried to index sortable columns but was out of range");
             return;
@@ -861,7 +842,10 @@ pub(crate) trait SortFilterTable: AdvancedTableView {
     }
 
     fn handle_sort_cur_desc(&mut self) {
-        let Some(column) = self.get_sortable_columns().get(self.get_sort_manager().cur).copied()
+        let Some(column) = self
+            .get_sortable_columns()
+            .get(self.get_sort_manager().cur)
+            .copied()
         else {
             debug!("Tried to index sortable columns but was out of range");
             return;
@@ -887,8 +871,7 @@ pub(crate) trait SortFilterTable: AdvancedTableView {
 
     fn go_to_last(&mut self) {
         if self.route_is_sort() {
-            self.get_mut_sort_manager().cur =
-                self.get_sortable_columns().len().saturating_sub(1);
+            self.get_mut_sort_manager().cur = self.get_sortable_columns().len().saturating_sub(1);
         } else if self.route_is_list() {
             self.set_cur_selected(self.get_filtered_count().saturating_sub(1));
         } else {
@@ -896,4 +879,3 @@ pub(crate) trait SortFilterTable: AdvancedTableView {
         }
     }
 }
-

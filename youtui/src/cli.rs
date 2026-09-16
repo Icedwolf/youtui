@@ -54,4 +54,3 @@ pub async fn handle_cli_command(cli: Cli, rt: RuntimeInfo) -> Result<()> {
     }
     Ok(())
 }
-

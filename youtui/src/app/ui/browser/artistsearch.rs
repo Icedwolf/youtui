@@ -1,13 +1,11 @@
 use crate::app::AppCallback;
-use crate::app::component::actionhandler::{
-    Scrollable, TextHandler, YoutuiEffect,
-};
+use crate::app::component::actionhandler::{Scrollable, TextHandler, YoutuiEffect};
 use crate::app::effect::Effects;
-use crate::app::server::api::{AlbumSongsData, GetArtistSongsProgressUpdate};
-use futures::StreamExt;
 use crate::app::server::ArcServer;
+use crate::app::server::api::{AlbumSongsData, GetArtistSongsProgressUpdate};
 use crate::app::structures::{ListSongAlbum, ListStatus, MaybeRc, SongListComponent};
 use crate::app::view::{ListView, TableView};
+use futures::StreamExt;
 use std::sync::Arc;
 use tracing::{debug, error, warn};
 use ytmapi_rs::common::{AlbumID, ArtistChannelID};
@@ -38,18 +36,26 @@ impl ArtistSearchBrowser {
                     Ok(artists) => Box::new(move |this: &mut ArtistSearchBrowser| {
                         this.replace_artist_list(artists);
                         Effects::none()
-                    }) as Box<dyn FnOnce(&mut ArtistSearchBrowser) -> Effects<ArtistSearchBrowser> + Send>,
+                    })
+                        as Box<
+                            dyn FnOnce(&mut ArtistSearchBrowser) -> Effects<ArtistSearchBrowser>
+                                + Send,
+                        >,
                     Err(error) => {
                         warn!("Artist search error: {error}");
                         Box::new(move |this: &mut ArtistSearchBrowser| {
                             this.search_panel.status = ListStatus::Error;
                             Effects::none()
                         })
-                            as Box<dyn FnOnce(&mut ArtistSearchBrowser) -> Effects<ArtistSearchBrowser> + Send>
+                            as Box<
+                                dyn FnOnce(&mut ArtistSearchBrowser) -> Effects<ArtistSearchBrowser>
+                                    + Send,
+                            >
                     }
                 }
             }
-        }).kill_prev::<ArtistSearchBrowser>()
+        })
+        .kill_prev::<ArtistSearchBrowser>()
     }
     pub fn handle_extra_song_action(
         &mut self,
@@ -98,9 +104,13 @@ impl ArtistSearchBrowser {
                         }
                     }
                     Effects::none()
-                }) as Box<dyn FnOnce(&mut ArtistSearchBrowser) -> Effects<ArtistSearchBrowser> + Send>
+                })
+                    as Box<
+                        dyn FnOnce(&mut ArtistSearchBrowser) -> Effects<ArtistSearchBrowser> + Send,
+                    >
             })
-        }).block_concurrent::<ArtistSearchBrowser>()
+        })
+        .block_concurrent::<ArtistSearchBrowser>()
     }
     pub fn add_album_to_playlist(&mut self) -> impl Into<YoutuiEffect<Self>> {
         let cur_idx = self.songs_panel.get_selected_item();
@@ -194,6 +204,3 @@ impl ArtistSearchBrowser {
         self.songs_panel.list.state = ListStatus::InProgress;
     }
 }
-
-
-

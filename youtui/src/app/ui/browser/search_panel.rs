@@ -1,6 +1,4 @@
-use crate::app::component::actionhandler::{
-    Action, KeyRouter, Scrollable, TextHandler,
-};
+use crate::app::component::actionhandler::{Action, KeyRouter, Scrollable, TextHandler};
 use crate::app::effect::Effects;
 use crate::app::structures::ListStatus;
 use crate::app::ui::action::AppAction;
@@ -83,10 +81,7 @@ impl<C: SearchPanelConfig> TextHandler for SearchPanel<C> {
     fn clear_text(&mut self) -> bool {
         self.search.clear_text()
     }
-    fn handle_text_event_impl(
-        &mut self,
-        event: &crossterm::event::Event,
-    ) -> Option<Effects<Self>> {
+    fn handle_text_event_impl(&mut self, event: &crossterm::event::Event) -> Option<Effects<Self>> {
         self.search
             .handle_text_event_impl(event)
             .map(|effect| effect.map(|this: &mut SearchPanel<C>| &mut this.search))

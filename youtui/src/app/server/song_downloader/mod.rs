@@ -1,19 +1,16 @@
 mod cache;
 pub(crate) mod resolve;
 
-pub use cache::{cache_clear, create_decoder_from_cache, set_cache_max_entries};
-
-use std::sync::{Arc, LazyLock};
-
-use anyhow::{Context, bail};
-use symphonia::core::io::MediaSourceStream;
-use tokio::sync::Semaphore;
-use tracing::{debug, error, warn};
-
-pub(crate) use cache::cache_put;
 use crate::app::server::streaming_buffer::{SharedBuffer, SharedBufferWriter};
 use crate::decoder::SymphoniaDecoder;
 use crate::decoder::read_seek_source::ReadSeekSource;
+use anyhow::{Context, bail};
+pub(crate) use cache::cache_put;
+pub use cache::{cache_clear, create_decoder_from_cache, set_cache_max_entries};
+use std::sync::{Arc, LazyLock};
+use symphonia::core::io::MediaSourceStream;
+use tokio::sync::Semaphore;
+use tracing::{debug, error, warn};
 
 const MAX_CONCURRENT_DOWNLOADS: usize = 1;
 const READ_BUF_SIZE: usize = 64 * 1024;
@@ -57,10 +54,10 @@ const M4A_TOTAL_LEN_TIMEOUT_S: u64 = 15;
 /// to coalesce, so it skips the window entirely (~100ms off the hot path). The
 /// decision lives in `Playlist::settle_window_for` and reads two signals — a
 /// live download in `active_downloads` OR a selection fired within the window
-/// (`last_download_trigger`) — because a held next/prev burst drops each press's
-/// entry before the following press decides (`play_song` ->
-/// `prepare_playback_id` -> `drop_unscoped_from_id`), so "a live download" alone
-/// would miss every press past the first.
+/// (`last_download_trigger`) — because a held next/prev burst drops each
+/// press's entry before the following press decides (`play_song` ->
+/// `prepare_playback_id` -> `drop_unscoped_from_id`), so "a live download"
+/// alone would miss every press past the first.
 pub(crate) const RESOLVE_SETTLE_MS: u64 = 100;
 /// Shared tail of the ffmpeg invocation for ALAC-in-fragmented-mp4 streaming.
 /// The `-i pipe:0` input precedes these mux flags (see DECISIONS.md:10).
@@ -88,9 +85,9 @@ pub(crate) struct DownloadConfig {
     pub cookie_header: Option<String>,
     pub cancel_token: tokio_util::sync::CancellationToken,
     /// Settle window in ms before the semaphore/spawn (0 = skip; see
-    /// `RESOLVE_SETTLE_MS`). Set at selection time by `Playlist::settle_window_for`
-    /// from the two burst signals (live download or recent trigger); explicitly
-    /// injectable in tests.
+    /// `RESOLVE_SETTLE_MS`). Set at selection time by
+    /// `Playlist::settle_window_for` from the two burst signals (live
+    /// download or recent trigger); explicitly injectable in tests.
     pub settle_window_ms: u64,
 }
 
@@ -220,9 +217,7 @@ async fn init_decoder_from(mss: MediaSourceStream) -> Result<SymphoniaDecoder, S
         Ok(Ok(Ok(decoder))) => Ok(decoder),
         Ok(Ok(Err(e))) => Err(format!("{e:?}")),
         Ok(Err(join_err)) => Err(format!("spawn_blocking panicked: {join_err}")),
-        Err(_elapsed) => {
-            Err("decoder init timed out (isomp4 seek blocked on Condvar)".to_string())
-        }
+        Err(_elapsed) => Err("decoder init timed out (isomp4 seek blocked on Condvar)".to_string()),
     }
 }
 
@@ -314,7 +309,8 @@ fn empty_pipe_verdict(
 }
 
 /// Bundled inputs for the background cache fill task (owns the semaphore permit
-/// for the whole fill, so no second download can start until it finishes/cancels).
+/// for the whole fill, so no second download can start until it
+/// finishes/cancels).
 struct BgCacheTask {
     vid: String,
     cancel_token: tokio_util::sync::CancellationToken,
@@ -431,9 +427,15 @@ fn is_permanently_unavailable(line: &str) -> bool {
 /// download failure that feeds the halt counter, never the stale-cookie class.
 pub(crate) fn is_auth_error_line(line: &str) -> bool {
     let line = line.to_ascii_lowercase();
-    ["sign in", "not a bot", "authentication", "requires login", "signed-in"]
-        .iter()
-        .any(|needle| line.contains(needle))
+    [
+        "sign in",
+        "not a bot",
+        "authentication",
+        "requires login",
+        "signed-in",
+    ]
+    .iter()
+    .any(|needle| line.contains(needle))
         || (line.contains("cookie") && line.contains("does not look like"))
 }
 
@@ -595,7 +597,8 @@ type FfmpegSpawn = (
 
 /// Spawn ffmpeg as an ALAC-in-fragmented-mp4 muxer reading the yt-dlp relay's
 /// stdout over stdin, and wire its stdout into the shared buffer. Returns the
-/// stderr logger, the buffer writer, the child, and the stdin feeding the relay.
+/// stderr logger, the buffer writer, the child, and the stdin feeding the
+/// relay.
 fn spawn_ffmpeg(
     writer: SharedBufferWriter,
     label: &'static str,
@@ -762,7 +765,8 @@ fn build_ytdlp_command(
 /// A spawned yt-dlp streaming child: its stderr classifier, its stdout (fed to
 /// ffmpeg's stdin for the relay path, or to the buffer writer for direct M4A),
 /// and the child itself (held for the pipeline so `kill_on_drop` fires only on
-/// bail/timeout/cancel, rather than relying on pipe closure which left orphans).
+/// bail/timeout/cancel, rather than relying on pipe closure which left
+/// orphans).
 struct YtDlpSpawn {
     stderr_handle: tokio::task::JoinHandle<()>,
     stdout: tokio::process::ChildStdout,
@@ -836,10 +840,7 @@ async fn await_full_download(
             bail!("{label} download timed out ({}s)", DOWNLOAD_TIMEOUT_S);
         }
     }
-    child
-        .wait()
-        .await
-        .with_context(|| format!("wait {label}"))
+    child.wait().await.with_context(|| format!("wait {label}"))
 }
 
 async fn ytdlp_pipeline(
@@ -873,61 +874,87 @@ async fn ytdlp_pipeline(
         let buffer = SharedBuffer::new();
         let writer = buffer.writer();
 
-        let (_stderr_handle, stdout_handle, mut child, _relay_handle, mut yt_child) = if ffmpeg_avail
-        {
-            // Spawn ffmpeg before yt-dlp. If the relay's yt-dlp fails the
-            // buffer instantly (e.g. a throttled 403 written before ffmpeg
-            // was up), the init-wait loop below bails on the first
-            // `is_failed()` check and kill_on_drop would kill a just-spawned
-            // ffmpeg before it produced its first byte. Starting ffmpeg
-            // first guarantees it is running (and reading `pipe:0`) before
-            // the relay's output can fail the buffer, and overlaps its
-            // startup with the yt-dlp spawn.
-            let (_ffmpeg_stderr_handle, write_handle, ffmpeg_child, ffmpeg_stdin) =
-                spawn_ffmpeg(writer, "ffmpeg", &cfg.video_id)?;
-            let mut ffmpeg_stdin = ffmpeg_stdin.context("no ffmpeg stdin")?;
-            let video_id = cfg.video_id.clone();
+        let (_stderr_handle, stdout_handle, mut child, _relay_handle, mut yt_child) =
+            if ffmpeg_avail {
+                // Spawn ffmpeg before yt-dlp. If the relay's yt-dlp fails the
+                // buffer instantly (e.g. a throttled 403 written before ffmpeg
+                // was up), the init-wait loop below bails on the first
+                // `is_failed()` check and kill_on_drop would kill a just-spawned
+                // ffmpeg before it produced its first byte. Starting ffmpeg
+                // first guarantees it is running (and reading `pipe:0`) before
+                // the relay's output can fail the buffer, and overlaps its
+                // startup with the yt-dlp spawn.
+                let (_ffmpeg_stderr_handle, write_handle, ffmpeg_child, ffmpeg_stdin) =
+                    spawn_ffmpeg(writer, "ffmpeg", &cfg.video_id)?;
+                let mut ffmpeg_stdin = ffmpeg_stdin.context("no ffmpeg stdin")?;
+                let video_id = cfg.video_id.clone();
 
-            let YtDlpSpawn { stderr_handle, stdout: yt_stdout, child: yt_dlp_child } =
-                spawn_ytdlp(cfg, "ba/bestaudio", buffer.clone(), t0, true, web_music_fallback_used)?;
+                let YtDlpSpawn {
+                    stderr_handle,
+                    stdout: yt_stdout,
+                    child: yt_dlp_child,
+                } = spawn_ytdlp(
+                    cfg,
+                    "ba/bestaudio",
+                    buffer.clone(),
+                    t0,
+                    true,
+                    web_music_fallback_used,
+                )?;
 
-            let relay = tokio::spawn(async move {
-                use tokio::io::{AsyncReadExt, AsyncWriteExt};
-                let mut rdr = tokio::io::BufReader::new(yt_stdout);
-                let mut buf = vec![0u8; READ_BUF_SIZE];
-                let mut first_write = true;
-                loop {
-                    match rdr.read(&mut buf).await {
-                        Ok(0) => break,
-                        Ok(n) => {
-                            if ffmpeg_stdin.write_all(&buf[..n]).await.is_err() {
-                                break;
-                            }
-                            if first_write {
-                                first_write = false;
-                                debug!(%video_id, first_chunk = n, elapsed = ?t0.elapsed(),
+                let relay = tokio::spawn(async move {
+                    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+                    let mut rdr = tokio::io::BufReader::new(yt_stdout);
+                    let mut buf = vec![0u8; READ_BUF_SIZE];
+                    let mut first_write = true;
+                    loop {
+                        match rdr.read(&mut buf).await {
+                            Ok(0) => break,
+                            Ok(n) => {
+                                if ffmpeg_stdin.write_all(&buf[..n]).await.is_err() {
+                                    break;
+                                }
+                                if first_write {
+                                    first_write = false;
+                                    debug!(%video_id, first_chunk = n, elapsed = ?t0.elapsed(),
                                     "relay: first chunk forwarded to ffmpeg");
+                                }
                             }
+                            Err(_) => break,
                         }
-                        Err(_) => break,
                     }
-                }
-                let _ = ffmpeg_stdin.shutdown().await;
-            });
+                    let _ = ffmpeg_stdin.shutdown().await;
+                });
 
-            (stderr_handle, write_handle, ffmpeg_child, Some(relay), Some(yt_dlp_child))
-        } else {
-            let YtDlpSpawn { stderr_handle, stdout: yt_stdout, child: yt_dlp_child } =
-                spawn_ytdlp(cfg, "bestaudio[ext=m4a]/bestaudio/bestaudio*", buffer.clone(), t0, false, false)?;
+                (
+                    stderr_handle,
+                    write_handle,
+                    ffmpeg_child,
+                    Some(relay),
+                    Some(yt_dlp_child),
+                )
+            } else {
+                let YtDlpSpawn {
+                    stderr_handle,
+                    stdout: yt_stdout,
+                    child: yt_dlp_child,
+                } = spawn_ytdlp(
+                    cfg,
+                    "bestaudio[ext=m4a]/bestaudio/bestaudio*",
+                    buffer.clone(),
+                    t0,
+                    false,
+                    false,
+                )?;
 
-            let write_handle = spawn_stdout_writer(yt_stdout, writer, "yt-dlp");
+                let write_handle = spawn_stdout_writer(yt_stdout, writer, "yt-dlp");
 
-            (stderr_handle, write_handle, yt_dlp_child, None, None)
-        };
+                (stderr_handle, write_handle, yt_dlp_child, None, None)
+            };
 
         let (decoder, needs_cache) = if ffmpeg_avail {
-            let deadline =
-                tokio::time::Instant::now() + std::time::Duration::from_secs(DECODER_INIT_DEADLINE_S);
+            let deadline = tokio::time::Instant::now()
+                + std::time::Duration::from_secs(DECODER_INIT_DEADLINE_S);
             while buffer.len() < STREAM_INIT_THRESHOLD
                 && tokio::time::Instant::now() < deadline
                 && !buffer.is_failed()
@@ -957,8 +984,8 @@ async fn ytdlp_pipeline(
                 // byte; skipping a playable song because it warmed up slowly is
                 // worse than waiting, so keep polling until it exits, produces
                 // data, fails, is cancelled, or the patience window elapses.
-                let empty_pipe_deadline =
-                    tokio::time::Instant::now() + std::time::Duration::from_secs(EMPTY_PIPE_PATIENCE_S);
+                let empty_pipe_deadline = tokio::time::Instant::now()
+                    + std::time::Duration::from_secs(EMPTY_PIPE_PATIENCE_S);
                 loop {
                     let verdict = empty_pipe_verdict(
                         buffer.len() > 0,
@@ -1036,7 +1063,14 @@ async fn ytdlp_pipeline(
                 Err(stream_err) => {
                     debug!(%cfg.video_id, error = %stream_err,
                         "Streaming decoder init failed, waiting for ffmpeg relay stream to complete");
-                    let status = await_full_download(cfg, &mut child, &mut yt_child, stdout_handle, "ffmpeg").await?;
+                    let status = await_full_download(
+                        cfg,
+                        &mut child,
+                        &mut yt_child,
+                        stdout_handle,
+                        "ffmpeg",
+                    )
+                    .await?;
                     if !status.success() {
                         let code = exit_code_string(&status);
                         // The 403 throttle mark can still be in flight when the
@@ -1134,7 +1168,14 @@ async fn ytdlp_pipeline(
                     // rather than retrying — degraded by design, and unreachable
                     // here because `ffmpeg_avail` is true whenever ffmpeg is
                     // installed.
-                    let status = await_full_download(cfg, &mut child, &mut yt_child, stdout_handle, "yt-dlp").await?;
+                    let status = await_full_download(
+                        cfg,
+                        &mut child,
+                        &mut yt_child,
+                        stdout_handle,
+                        "yt-dlp",
+                    )
+                    .await?;
                     if !status.success() {
                         let code = exit_code_string(&status);
                         bail!("yt-dlp exited with code {code}");
@@ -1216,13 +1257,11 @@ pub async fn download_and_decode(cfg: DownloadConfig) -> anyhow::Result<Symphoni
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::app::server::song_downloader::cache::CACHE_MAX_ENTRIES;
-    use crate::app::server::song_downloader::cache::cache_get;
+    use crate::app::server::song_downloader::cache::{CACHE_MAX_ENTRIES, cache_get};
     use crate::app::server::streaming_buffer::SharedBuffer;
     use crate::decoder::SymphoniaDecoder;
-    use std::sync::Arc;
-    use std::sync::Mutex;
     use std::sync::atomic::Ordering;
+    use std::sync::{Arc, Mutex};
     use std::time::{Duration, Instant};
     use symphonia::core::io::MediaSourceStream;
 
@@ -1235,7 +1274,10 @@ mod tests {
         let mut cmd = tokio::process::Command::new("/bin/true");
         cmd.env("HUGENV", "x".repeat(300 * 1024));
         let result = cmd.status().await;
-        assert!(result.is_err(), "oversized env must make execve fail with E2BIG");
+        assert!(
+            result.is_err(),
+            "oversized env must make execve fail with E2BIG"
+        );
     }
 
     #[tokio::test]
@@ -1243,7 +1285,10 @@ mod tests {
         let mut cmd = tokio::process::Command::new("/bin/true");
         cmd.env("HUGENV", "x".repeat(300 * 1024));
         apply_child_env(&mut cmd);
-        let status = cmd.status().await.expect("env_clear must bound env and allow spawn");
+        let status = cmd
+            .status()
+            .await
+            .expect("env_clear must bound env and allow spawn");
         assert!(status.success());
     }
 
@@ -1252,7 +1297,9 @@ mod tests {
         let mut cmd = std::process::Command::new("/bin/true");
         cmd.env("HUGENV", "x".repeat(300 * 1024));
         apply_child_env(&mut cmd);
-        let status = cmd.status().expect("sync spawn also runs with the bounded env");
+        let status = cmd
+            .status()
+            .expect("sync spawn also runs with the bounded env");
         assert!(status.success());
     }
 
@@ -1307,9 +1354,18 @@ mod tests {
         // is the regression guard for the empty-pipe patience-loop fix.
         assert_eq!(empty_pipe_verdict(false, true, true, false, false), Break);
         // Exited-but-not-failed, still empty → genuinely dead pipe.
-        assert_eq!(empty_pipe_verdict(false, true, false, false, false), SourceExited);
-        assert_eq!(empty_pipe_verdict(false, false, false, true, false), Cancelled);
-        assert_eq!(empty_pipe_verdict(false, false, false, false, true), PatienceElapsed);
+        assert_eq!(
+            empty_pipe_verdict(false, true, false, false, false),
+            SourceExited
+        );
+        assert_eq!(
+            empty_pipe_verdict(false, false, false, true, false),
+            Cancelled
+        );
+        assert_eq!(
+            empty_pipe_verdict(false, false, false, false, true),
+            PatienceElapsed
+        );
         assert_eq!(empty_pipe_verdict(false, false, false, false, false), Wait);
     }
 
@@ -1319,7 +1375,10 @@ mod tests {
         let old = Instant::now() - Duration::from_secs(BG_STALL_TIMEOUT_S + 1);
         let (_, _, stalled) =
             track_download_progress(100, 100, old, Duration::from_secs(BG_STALL_TIMEOUT_S));
-        assert!(stalled, "zero progress beyond the stall window must be reported");
+        assert!(
+            stalled,
+            "zero progress beyond the stall window must be reported"
+        );
     }
 
     // Tests touching the global BYTE_CACHE must run serially (they share the
@@ -1398,9 +1457,13 @@ mod tests {
         let mut total = 0usize;
         while total < target_frames {
             match decoder.next() {
-                Some(_) => { total += 1; }
+                Some(_) => {
+                    total += 1;
+                }
                 None => {
-                    if total == 0 { return None; }
+                    if total == 0 {
+                        return None;
+                    }
                     break;
                 }
             }
@@ -1425,7 +1488,10 @@ mod tests {
             "ERROR: [youtube] X: Video unavailable in your country",
         ];
         for line in permanent {
-            assert!(is_permanently_unavailable(line), "expected permanent: {line}");
+            assert!(
+                is_permanently_unavailable(line),
+                "expected permanent: {line}"
+            );
         }
 
         let transient = [
@@ -1504,7 +1570,7 @@ mod tests {
         failed.fail();
         let plain = SharedBuffer::new();
 
-// A throttled first relay (one relay so far) must get its retry.
+        // A throttled first relay (one relay so far) must get its retry.
         assert!(relay_throttle_retry(&throttled, 1, "v1", t0));
         // A throttled second relay (two relays so far) must get one more retry:
         // the CDN wave beats a second consecutive fresh mint often enough that
@@ -1561,18 +1627,44 @@ mod tests {
 
         // A fresh default-client attempt with formats unavailable gets exactly
         // one web_music fallback (once per song).
-        assert!(relay_client_fallback_retry(&formats_gone, false, true, "v1", t0));
+        assert!(relay_client_fallback_retry(
+            &formats_gone,
+            false,
+            true,
+            "v1",
+            t0
+        ));
         // An already-fallen-back song never falls back again — the web_music
         // attempt's own failure is definitive.
-        assert!(!relay_client_fallback_retry(&formats_gone, true, true, "v1", t0));
+        assert!(!relay_client_fallback_retry(
+            &formats_gone,
+            true,
+            true,
+            "v1",
+            t0
+        ));
         // No fallback without a provider: there is no GVS token source to
         // escape to, so the default-clients refusal is definitive.
-        assert!(!relay_client_fallback_retry(&formats_gone, false, false, "v1", t0));
+        assert!(!relay_client_fallback_retry(
+            &formats_gone,
+            false,
+            false,
+            "v1",
+            t0
+        ));
         // Classifiers stay exclusive: a throttle/plain failure is NOT a
         // reason to switch clients.
-        assert!(!relay_client_fallback_retry(&throttled, false, true, "v1", t0));
+        assert!(!relay_client_fallback_retry(
+            &throttled, false, true, "v1", t0
+        ));
         assert!(!relay_client_fallback_retry(&failed, false, true, "v1", t0));
-        assert!(!relay_client_fallback_retry(&SharedBuffer::new(), false, true, "v1", t0));
+        assert!(!relay_client_fallback_retry(
+            &SharedBuffer::new(),
+            false,
+            true,
+            "v1",
+            t0
+        ));
     }
 
     #[test]
@@ -1588,20 +1680,46 @@ mod tests {
         // the web_music flag is NOT touched by a throttle retry.
         let mut used = false;
         assert!(try_pipeline_retry(&throttled, 1, &mut used, true, "v1", t0));
-        assert!(!used, "a throttle retry must not consume the client-fallback slot");
+        assert!(
+            !used,
+            "a throttle retry must not consume the client-fallback slot"
+        );
         assert!(try_pipeline_retry(&throttled, 2, &mut used, true, "v1", t0));
         // At the third throttled attempt the ladder falls through to the
         // fallback check, which does not apply to a throttled buffer.
-        assert!(!try_pipeline_retry(&throttled, 3, &mut used, true, "v1", t0));
+        assert!(!try_pipeline_retry(
+            &throttled, 3, &mut used, true, "v1", t0
+        ));
 
         // Client fallback: a fresh format-unavailable refusal with a provider
         // retries once AND commits the slot. A second use refuses.
         let mut used = false;
-        assert!(try_pipeline_retry(&formats_gone, 1, &mut used, true, "v1", t0));
+        assert!(try_pipeline_retry(
+            &formats_gone,
+            1,
+            &mut used,
+            true,
+            "v1",
+            t0
+        ));
         assert!(used, "the client fallback must commit its one-shot slot");
-        assert!(!try_pipeline_retry(&formats_gone, 1, &mut used, true, "v1", t0));
+        assert!(!try_pipeline_retry(
+            &formats_gone,
+            1,
+            &mut used,
+            true,
+            "v1",
+            t0
+        ));
         // No provider → nothing to escape to → refuse.
-        assert!(!try_pipeline_retry(&formats_gone, 1, &mut false, false, "v1", t0));
+        assert!(!try_pipeline_retry(
+            &formats_gone,
+            1,
+            &mut false,
+            false,
+            "v1",
+            t0
+        ));
         // Plain failure → no retry of any kind.
         assert!(!try_pipeline_retry(&plain, 1, &mut false, true, "v1", t0));
     }
@@ -1645,11 +1763,8 @@ cat\n",
             static FAKE_DIR_SEQ: std::sync::atomic::AtomicUsize =
                 std::sync::atomic::AtomicUsize::new(0);
             let seq = FAKE_DIR_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-            let dir = std::env::temp_dir().join(format!(
-                "youtui_fakebin_{}_{}",
-                std::process::id(),
-                seq
-            ));
+            let dir =
+                std::env::temp_dir().join(format!("youtui_fakebin_{}_{}", std::process::id(), seq));
             std::fs::create_dir_all(&dir).expect("create fake binary dir");
             let old_path = std::env::var("PATH").unwrap_or_default();
             let new_path = format!("{}:{}", dir.display(), old_path);
@@ -1707,7 +1822,9 @@ cat\n",
         // The relay is the only download path: yt-dlp streams the audio, ffmpeg
         // transcodes it to fragmented-MP4 ALAC, and the pipeline decodes it.
         let _pipe = PIPELINE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        let _sem = SEMAPHORE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _sem = SEMAPHORE_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         let _cache = CACHE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
 
         let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
@@ -1756,7 +1873,9 @@ cat\n",
         // capped relay streams — the song must play on the first pipeline pass
         // instead of being skipped for a manual re-select.
         let _pipe = PIPELINE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        let _sem = SEMAPHORE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _sem = SEMAPHORE_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         let _cache = CACHE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
 
         let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
@@ -1814,7 +1933,9 @@ cat\n",
     #[test]
     fn throttled_relay_failure_bails_after_capped_relay_retries() {
         let _pipe = PIPELINE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        let _sem = SEMAPHORE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _sem = SEMAPHORE_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         let _cache = CACHE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
 
         let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
@@ -1875,7 +1996,9 @@ cat\n",
         // production, which `isolated_download_skips_settle_spawns_immediately`
         // exercises.
         let _pipe = PIPELINE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        let _sem = SEMAPHORE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _sem = SEMAPHORE_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         let _cache = CACHE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
 
         let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
@@ -1931,7 +2054,9 @@ cat\n",
         // A token already cancelled before the download begins must bail at the
         // pre-start check, never reaching the settle or the yt-dlp spawn.
         let _pipe = PIPELINE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        let _sem = SEMAPHORE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _sem = SEMAPHORE_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         let _cache = CACHE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
 
         let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
@@ -1943,7 +2068,11 @@ cat\n",
             write_fake_bin(
                 &fakebin.dir,
                 "yt-dlp",
-                &format!("{}echo 1 >> '{}'\nexit 1\n", YTDLP_FAKE_HEAD, count_file.display()),
+                &format!(
+                    "{}echo 1 >> '{}'\nexit 1\n",
+                    YTDLP_FAKE_HEAD,
+                    count_file.display()
+                ),
             );
 
             let token = tokio_util::sync::CancellationToken::new();
@@ -1995,7 +2124,9 @@ cat\n",
         // stream the fixture to a decoder (skipping the wait never breaks the
         // download).
         let _pipe = PIPELINE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        let _sem = SEMAPHORE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _sem = SEMAPHORE_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         let _cache = CACHE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
 
         let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
@@ -2066,7 +2197,9 @@ cat\n",
         // The pipeline must retry exactly once through `web_music` + the POT
         // provider, which streams the fixture, instead of skipping the song.
         let _pipe = PIPELINE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        let _sem = SEMAPHORE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _sem = SEMAPHORE_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         let _cache = CACHE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
 
         let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
@@ -2128,7 +2261,9 @@ cat\n",
         // song bails as a generic transient failure after exactly one fallback
         // — no endless client-toggling loop, no extra retries.
         let _pipe = PIPELINE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        let _sem = SEMAPHORE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _sem = SEMAPHORE_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         let _cache = CACHE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
 
         let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
@@ -2182,13 +2317,19 @@ cat\n",
     #[test]
     fn parse_mib() {
         let line = "[download]   5.0% of    4.06MiB at    2.14MiB/s ETA 00:00";
-        assert_eq!(parse_total_size(line), Some((4.06 * 1024.0 * 1024.0) as u64));
+        assert_eq!(
+            parse_total_size(line),
+            Some((4.06 * 1024.0 * 1024.0) as u64)
+        );
     }
 
     #[test]
     fn parse_gib() {
         let line = "[download]   1.0% of    1.50GiB at  100.00MiB/s ETA 00:10";
-        assert_eq!(parse_total_size(line), Some((1.50 * 1024.0 * 1024.0 * 1024.0) as u64));
+        assert_eq!(
+            parse_total_size(line),
+            Some((1.50 * 1024.0 * 1024.0 * 1024.0) as u64)
+        );
     }
 
     #[test]
@@ -2212,13 +2353,19 @@ cat\n",
     #[test]
     fn parse_mb_si_unit() {
         let line = "[download]  25.0% of    2.50MB at  500.00KB/s ETA 00:05";
-        assert_eq!(parse_total_size(line), Some((2.50 * 1024.0 * 1024.0) as u64));
+        assert_eq!(
+            parse_total_size(line),
+            Some((2.50 * 1024.0 * 1024.0) as u64)
+        );
     }
 
     #[test]
     fn parse_gb_si_unit() {
         let line = "[download]   1.0% of    1.20GB at   50.00MB/s ETA 00:30";
-        assert_eq!(parse_total_size(line), Some((1.20 * 1024.0 * 1024.0 * 1024.0) as u64));
+        assert_eq!(
+            parse_total_size(line),
+            Some((1.20 * 1024.0 * 1024.0 * 1024.0) as u64)
+        );
     }
 
     #[test]
@@ -2254,15 +2401,25 @@ cat\n",
             ("[download]  10.0% of  1.00kB at ...", Some(1024)),
             ("[download]  10.0% of  1.00MiB at ...", Some(1024 * 1024)),
             ("[download]  10.0% of  1.00MB at ...", Some(1024 * 1024)),
-            ("[download]  10.0% of  1.00GiB at ...", Some(1024 * 1024 * 1024)),
-            ("[download]  10.0% of  1.00GB at ...", Some(1024 * 1024 * 1024)),
+            (
+                "[download]  10.0% of  1.00GiB at ...",
+                Some(1024 * 1024 * 1024),
+            ),
+            (
+                "[download]  10.0% of  1.00GB at ...",
+                Some(1024 * 1024 * 1024),
+            ),
             ("[download]  10.0% of  500B at ...", Some(500)),
             ("[download]  10.0% of  500Bytes at ...", Some(500)),
             ("no match here", None),
             ("[youtube] jNQXAC9IVRw: Downloading page 1", None),
         ];
         for (line, expected) in cases {
-            assert_eq!(parse_total_size(line), expected, "parse_total_size({line:?})");
+            assert_eq!(
+                parse_total_size(line),
+                expected,
+                "parse_total_size({line:?})"
+            );
         }
     }
 
@@ -2287,9 +2444,13 @@ cat\n",
         buf.set_total_len(TEST_WAV.len() as u64);
         let mut keep_alive = buf.writer();
         keep_alive.write(TEST_WAV);
-        let mut dec = create_decoder_from(&buf).expect("Decoder with all data written but writer alive");
+        let mut dec =
+            create_decoder_from(&buf).expect("Decoder with all data written but writer alive");
         let ttf = time_to_first_frame(&mut dec, 1024);
-        assert!(ttf.is_some(), "Decoder should produce frames when all data is in the buffer");
+        assert!(
+            ttf.is_some(),
+            "Decoder should produce frames when all data is in the buffer"
+        );
         drop(keep_alive);
     }
 
@@ -2302,12 +2463,22 @@ cat\n",
         let mut dec = create_decoder_from(&buf)
             .expect("Decoder created from streaming buffer (may block briefly)");
         let streaming_ttf = time_to_first_frame(&mut dec, 44100);
-        assert!(streaming_ttf.is_some(), "Streaming decoder must produce frames while download is in progress");
+        assert!(
+            streaming_ttf.is_some(),
+            "Streaming decoder must produce frames while download is in progress"
+        );
         handle.join().unwrap();
-        let full_write_estimate = (TEST_WAV.len().div_ceil(64 * 1024) as u64).saturating_sub(1) * 15;
-        println!("streaming: first ~1s of audio in {:?} (full write would take ~{full_write_estimate} ms)", streaming_ttf.unwrap());
-        assert!(streaming_ttf.unwrap() < Duration::from_millis(full_write_estimate),
-            "Streaming TTF {:?} must be < {full_write_estimate} ms (full write time)", streaming_ttf.unwrap());
+        let full_write_estimate =
+            (TEST_WAV.len().div_ceil(64 * 1024) as u64).saturating_sub(1) * 15;
+        println!(
+            "streaming: first ~1s of audio in {:?} (full write would take ~{full_write_estimate} ms)",
+            streaming_ttf.unwrap()
+        );
+        assert!(
+            streaming_ttf.unwrap() < Duration::from_millis(full_write_estimate),
+            "Streaming TTF {:?} must be < {full_write_estimate} ms (full write time)",
+            streaming_ttf.unwrap()
+        );
     }
 
     #[test]
@@ -2330,7 +2501,10 @@ cat\n",
         w.finish();
         let mut dec = create_decoder_from(&buf).expect("ALAC fragmented-mp4 decoder");
         let ttf = time_to_first_frame(&mut dec, 1024);
-        assert!(ttf.is_some(), "ALAC fragmented mp4 should decode from full buffer");
+        assert!(
+            ttf.is_some(),
+            "ALAC fragmented mp4 should decode from full buffer"
+        );
     }
 
     #[test]
@@ -2342,19 +2516,32 @@ cat\n",
         while buf.len() < STREAM_INIT_THRESHOLD && Instant::now() < deadline {
             std::thread::sleep(Duration::from_millis(1));
         }
-        assert!(buf.len() >= STREAM_INIT_THRESHOLD, "buffer must reach init threshold");
+        assert!(
+            buf.len() >= STREAM_INIT_THRESHOLD,
+            "buffer must reach init threshold"
+        );
         let reader = buf.reader();
         let source = crate::decoder::read_seek_source::ReadSeekSource::nonseekable(reader);
         let mss = MediaSourceStream::new(Box::new(source), Default::default());
         let mut dec = SymphoniaDecoder::new(mss)
             .expect("ALAC decoder created from streaming buffer (may block briefly)");
         let streaming_ttf = time_to_first_frame(&mut dec, 1024);
-        assert!(streaming_ttf.is_some(), "ALAC fragmented mp4 must stream from partial buffer");
+        assert!(
+            streaming_ttf.is_some(),
+            "ALAC fragmented mp4 must stream from partial buffer"
+        );
         handle.join().unwrap();
-        let full_write_estimate = TEST_ALAC.len().div_ceil(64) as u64 * chunk_delay.as_millis() as u64;
-        println!("alac streaming: first frames in {:?} (full write would take ~{full_write_estimate} ms)", streaming_ttf.unwrap());
-        assert!(streaming_ttf.unwrap() < Duration::from_millis(full_write_estimate),
-            "ALAC streaming TTF {:?} must be < {full_write_estimate} ms (full write time)", streaming_ttf.unwrap());
+        let full_write_estimate =
+            TEST_ALAC.len().div_ceil(64) as u64 * chunk_delay.as_millis() as u64;
+        println!(
+            "alac streaming: first frames in {:?} (full write would take ~{full_write_estimate} ms)",
+            streaming_ttf.unwrap()
+        );
+        assert!(
+            streaming_ttf.unwrap() < Duration::from_millis(full_write_estimate),
+            "ALAC streaming TTF {:?} must be < {full_write_estimate} ms (full write time)",
+            streaming_ttf.unwrap()
+        );
     }
 
     #[test]
@@ -2381,10 +2568,19 @@ cat\n",
         let _full_frames = dec_full.by_ref().take(1024).count();
         _stream_handle.join().unwrap();
 
-        println!("BENCHMARK: streaming TTF = {:?} (decoder created from flowing buffer), \
-             full TTF = {:?} (decoder created after {:?} write)", streaming_ttf, full_ttf, Duration::from_millis(full_write_ms));
-        assert!(streaming_ttf < Duration::from_millis(full_write_ms),
-            "Streaming TTF {:?} must be < full write time {:?}", streaming_ttf, Duration::from_millis(full_write_ms));
+        println!(
+            "BENCHMARK: streaming TTF = {:?} (decoder created from flowing buffer), \
+             full TTF = {:?} (decoder created after {:?} write)",
+            streaming_ttf,
+            full_ttf,
+            Duration::from_millis(full_write_ms)
+        );
+        assert!(
+            streaming_ttf < Duration::from_millis(full_write_ms),
+            "Streaming TTF {:?} must be < full write time {:?}",
+            streaming_ttf,
+            Duration::from_millis(full_write_ms)
+        );
     }
 
     #[test]
@@ -2396,7 +2592,11 @@ cat\n",
         let t0 = Instant::now();
         let cached = cache_get(&key);
         let elapsed = t0.elapsed();
-        assert!(elapsed < Duration::from_millis(1), "Cache get {:?}", elapsed);
+        assert!(
+            elapsed < Duration::from_millis(1),
+            "Cache get {:?}",
+            elapsed
+        );
         let cached = cached.unwrap();
         let len = cached.len() as u64;
         let cursor = std::io::Cursor::new(cached);
@@ -2406,7 +2606,11 @@ cat\n",
         let _result = SymphoniaDecoder::new(mss);
         let elapsed = t0.elapsed();
         println!("cache decoder creation: {:?}", elapsed);
-        assert!(elapsed < Duration::from_millis(100), "Cached decoder creation must not block (>100ms: {:?})", elapsed);
+        assert!(
+            elapsed < Duration::from_millis(100),
+            "Cached decoder creation must not block (>100ms: {:?})",
+            elapsed
+        );
     }
 
     #[test]
@@ -2418,7 +2622,10 @@ cat\n",
         let mut dec = create_decoder_from(&buf)
             .expect("Decoder from streaming buffer (data may not have arrived yet)");
         let ttf = time_to_first_frame(&mut dec, 44100);
-        assert!(ttf.is_some(), "Decoder should produce frames after data starts arriving");
+        assert!(
+            ttf.is_some(),
+            "Decoder should produce frames after data starts arriving"
+        );
         handle.join().unwrap();
     }
 
@@ -2430,11 +2637,26 @@ cat\n",
         for i in 0..5 {
             cache_put(format!("evict_test_{}", i), Arc::from(vec![0u8; 1024]));
         }
-        assert!(cache_get("evict_test_0").is_none(), "Oldest entry (0) should be evicted");
-        assert!(cache_get("evict_test_1").is_none(), "Oldest entry (1) should be evicted");
-        assert!(cache_get("evict_test_2").is_some(), "Entry 2 should still be in cache");
-        assert!(cache_get("evict_test_3").is_some(), "Entry 3 should still be in cache");
-        assert!(cache_get("evict_test_4").is_some(), "Entry 4 should still be in cache");
+        assert!(
+            cache_get("evict_test_0").is_none(),
+            "Oldest entry (0) should be evicted"
+        );
+        assert!(
+            cache_get("evict_test_1").is_none(),
+            "Oldest entry (1) should be evicted"
+        );
+        assert!(
+            cache_get("evict_test_2").is_some(),
+            "Entry 2 should still be in cache"
+        );
+        assert!(
+            cache_get("evict_test_3").is_some(),
+            "Entry 3 should still be in cache"
+        );
+        assert!(
+            cache_get("evict_test_4").is_some(),
+            "Entry 4 should still be in cache"
+        );
     }
 
     #[test]
@@ -2445,12 +2667,21 @@ cat\n",
         for i in 0..3 {
             cache_put(format!("lru_test_{}", i), Arc::from(vec![0u8; 1024]));
         }
-        assert!(cache_get("lru_test_0").is_some(), "Entry 0 should be in cache");
+        assert!(
+            cache_get("lru_test_0").is_some(),
+            "Entry 0 should be in cache"
+        );
         for i in 3..5 {
             cache_put(format!("lru_test_{}", i), Arc::from(vec![0u8; 1024]));
         }
-        assert!(cache_get("lru_test_1").is_none(), "Entry 1 (now oldest) should be evicted");
-        assert!(cache_get("lru_test_0").is_some(), "Entry 0 (promoted by hit) should survive");
+        assert!(
+            cache_get("lru_test_1").is_none(),
+            "Entry 1 (now oldest) should be evicted"
+        );
+        assert!(
+            cache_get("lru_test_0").is_some(),
+            "Entry 0 (promoted by hit) should survive"
+        );
     }
 
     fn start_ffmpeg_relay() -> anyhow::Result<(
@@ -2462,8 +2693,23 @@ cat\n",
         let mut wtr = buf.writer();
         let mut ffmpeg = std::process::Command::new("ffmpeg");
         ffmpeg
-            .args(["-i", "pipe:0", "-fflags", "nobuffer", "-flags", "low_delay",
-                "-f", "mp3", "-compression_level", "5", "-ab", "128k", "-loglevel", "error", "pipe:1"])
+            .args([
+                "-i",
+                "pipe:0",
+                "-fflags",
+                "nobuffer",
+                "-flags",
+                "low_delay",
+                "-f",
+                "mp3",
+                "-compression_level",
+                "5",
+                "-ab",
+                "128k",
+                "-loglevel",
+                "error",
+                "pipe:1",
+            ])
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::null());
@@ -2477,7 +2723,10 @@ cat\n",
                 match rdr.read(&mut buf) {
                     Ok(0) => break,
                     Ok(n) => wtr.write(&buf[..n]),
-                    Err(_) => { wtr.fail(); return; }
+                    Err(_) => {
+                        wtr.fail();
+                        return;
+                    }
                 }
             }
             wtr.finish();
@@ -2492,7 +2741,10 @@ cat\n",
         let _pipe = PIPELINE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let webm_data = match std::fs::read("/tmp/test_streaming.webm") {
             Ok(d) => d,
-            Err(e) => { eprintln!("SKIP: /tmp/test_streaming.webm not available: {e}"); return; }
+            Err(e) => {
+                eprintln!("SKIP: /tmp/test_streaming.webm not available: {e}");
+                return;
+            }
         };
         let t0 = Instant::now();
         let (buf, writer, mut child) = start_ffmpeg_relay().expect("ffmpeg relay setup");
@@ -2525,20 +2777,39 @@ cat\n",
         use std::io::Read;
         let output_path = "/tmp/yt_bench_m4a.m4a";
         let status = std::process::Command::new("yt-dlp")
-            .args(["-f", "bestaudio[ext=m4a]", "--download-sections", "*0-10",
-                "-o", output_path, "--no-warnings", "--no-playlist", "--print", "after_move:",
-                "https://music.youtube.com/watch?v=jNQXAC9IVRw"])
+            .args([
+                "-f",
+                "bestaudio[ext=m4a]",
+                "--download-sections",
+                "*0-10",
+                "-o",
+                output_path,
+                "--no-warnings",
+                "--no-playlist",
+                "--print",
+                "after_move:",
+                "https://music.youtube.com/watch?v=jNQXAC9IVRw",
+            ])
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
             .status();
         match status {
-            Ok(s) if !s.success() => { eprintln!("SKIP m4a_decoder_ttf: yt-dlp exit code {:?}", s.code()); return; }
-            Err(e) => { eprintln!("SKIP m4a_decoder_ttf: yt-dlp not available: {e}"); return; }
+            Ok(s) if !s.success() => {
+                eprintln!("SKIP m4a_decoder_ttf: yt-dlp exit code {:?}", s.code());
+                return;
+            }
+            Err(e) => {
+                eprintln!("SKIP m4a_decoder_ttf: yt-dlp not available: {e}");
+                return;
+            }
             _ => {}
         }
         let data = match std::fs::read(output_path) {
             Ok(d) => d,
-            Err(e) => { eprintln!("SKIP m4a_decoder_ttf: failed to read {output_path}: {e}"); return; }
+            Err(e) => {
+                eprintln!("SKIP m4a_decoder_ttf: failed to read {output_path}: {e}");
+                return;
+            }
         };
         let _dl_dur = {
             let t0 = Instant::now();
@@ -2568,29 +2839,56 @@ cat\n",
         // Spawns ffmpeg/yt-dlp by name, so it must not run concurrently with
         // the E2E tests that inject fakes onto PATH (serialized by the lock).
         let _pipe = PIPELINE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        use std::io::Read;
-        use std::io::Write;
+        use std::io::{Read, Write};
         let video_id = "jNQXAC9IVRw";
         let url = format!("https://music.youtube.com/watch?v={video_id}");
 
         println!("--- ffmpeg relay ---");
         let t0 = Instant::now();
         let mut yt = std::process::Command::new("yt-dlp");
-        yt.args(["-f", "bestaudio[ext=webm]", "--download-sections", "*0-10",
-            "--ignore-config", "-o", "-", "--no-warnings", "--no-playlist", &url])
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::null());
+        yt.args([
+            "-f",
+            "bestaudio[ext=webm]",
+            "--download-sections",
+            "*0-10",
+            "--ignore-config",
+            "-o",
+            "-",
+            "--no-warnings",
+            "--no-playlist",
+            &url,
+        ])
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null());
         let mut yt_child = match yt.spawn() {
             Ok(c) => c,
-            Err(e) => { eprintln!("SKIP: cannot spawn yt-dlp: {e}"); return; }
+            Err(e) => {
+                eprintln!("SKIP: cannot spawn yt-dlp: {e}");
+                return;
+            }
         };
         let yt_stdout = yt_child.stdout.take().unwrap();
         let _yt_spawn_dur = t0.elapsed();
 
         let mut ffmpeg = std::process::Command::new("ffmpeg");
-        ffmpeg.args(["-i", "pipe:0", "-fflags", "nobuffer", "-flags", "low_delay",
-            "-f", "mp4", "-movflags", "empty_moov+default_base_moof+frag_every_frame",
-            "-c:a", "alac", "-loglevel", "error", "pipe:1"])
+        ffmpeg
+            .args([
+                "-i",
+                "pipe:0",
+                "-fflags",
+                "nobuffer",
+                "-flags",
+                "low_delay",
+                "-f",
+                "mp4",
+                "-movflags",
+                "empty_moov+default_base_moof+frag_every_frame",
+                "-c:a",
+                "alac",
+                "-loglevel",
+                "error",
+                "pipe:1",
+            ])
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::null());
@@ -2615,7 +2913,9 @@ cat\n",
             loop {
                 match rdr.read(&mut buf) {
                     Ok(0) => break,
-                    Ok(n) => { let _ = ff_stdin.write_all(&buf[..n]); }
+                    Ok(n) => {
+                        let _ = ff_stdin.write_all(&buf[..n]);
+                    }
                     Err(_) => break,
                 }
             }
@@ -2627,7 +2927,10 @@ cat\n",
                 match rdr.read(&mut buf) {
                     Ok(0) => break,
                     Ok(n) => relay_wtr.write(&buf[..n]),
-                    Err(_) => { relay_wtr.fail(); return; }
+                    Err(_) => {
+                        relay_wtr.fail();
+                        return;
+                    }
                 }
             }
             relay_wtr.finish();
@@ -2664,19 +2967,38 @@ cat\n",
         let t0 = Instant::now();
         let output_path = "/tmp/yt_bench_m4a_comparison.m4a";
         let mut yt2 = std::process::Command::new("yt-dlp");
-        yt2.args(["-f", "bestaudio[ext=m4a]", "--download-sections", "*0-10",
-            "--ignore-config", "-o", output_path, "--no-warnings", "--no-playlist", &url])
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null());
+        yt2.args([
+            "-f",
+            "bestaudio[ext=m4a]",
+            "--download-sections",
+            "*0-10",
+            "--ignore-config",
+            "-o",
+            output_path,
+            "--no-warnings",
+            "--no-playlist",
+            &url,
+        ])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null());
         match yt2.status() {
             Ok(s) if s.success() => {}
-            Ok(s) => { eprintln!("SKIP: yt-dlp exit code {:?}", s.code()); return; }
-            Err(e) => { eprintln!("SKIP: yt-dlp not available: {e}"); return; }
+            Ok(s) => {
+                eprintln!("SKIP: yt-dlp exit code {:?}", s.code());
+                return;
+            }
+            Err(e) => {
+                eprintln!("SKIP: yt-dlp not available: {e}");
+                return;
+            }
         }
         let _yt2_spawn_dur = t0.elapsed();
         let m4a_data = match std::fs::read(output_path) {
             Ok(d) => d,
-            Err(e) => { eprintln!("SKIP: failed to read {output_path}: {e}"); return; }
+            Err(e) => {
+                eprintln!("SKIP: failed to read {output_path}: {e}");
+                return;
+            }
         };
         let _ = std::fs::remove_file(output_path);
         let _m4a_dl_dur = t0.elapsed();
@@ -2691,10 +3013,14 @@ cat\n",
         let m4a_ttf = time_to_first_frame(&mut dec_m4a, 44100);
         let _m4a_total_dur = t0.elapsed();
 
-        let _relay_playable = relay_data_arrival + _relay_decoder_dur + relay_ttf.unwrap_or_default();
+        let _relay_playable =
+            relay_data_arrival + _relay_decoder_dur + relay_ttf.unwrap_or_default();
         let _m4a_playable = _yt2_spawn_dur + _m4a_decoder_dur + m4a_ttf.unwrap_or_default();
         println!("===== PIPELINE COMPARISON (video: {video_id}) =====");
-        println!("relay playable={:?} m4a playable={:?}", _relay_playable, _m4a_playable);
+        println!(
+            "relay playable={:?} m4a playable={:?}",
+            _relay_playable, _m4a_playable
+        );
         assert!(relay_ttf.is_some(), "ffmpeg relay must produce frames");
         assert!(m4a_ttf.is_some(), "M4A decoder must produce frames");
     }
@@ -2716,7 +3042,10 @@ cat\n",
         let mss = MediaSourceStream::new(Box::new(source), Default::default());
         let mut dec = match SymphoniaDecoder::new(mss) {
             Ok(d) => d,
-            Err(e) => { eprintln!("FAIL: symphonia rejected WAV: {e:?}"); return; }
+            Err(e) => {
+                eprintln!("FAIL: symphonia rejected WAV: {e:?}");
+                return;
+            }
         };
         let _decoder_dur = t_dec.elapsed();
         let ttf = time_to_first_frame(&mut dec, 44100);
@@ -2741,7 +3070,9 @@ cat\n",
                 let ttf2 = time_to_first_frame(&mut dec, 44100);
                 assert!(ttf2.is_some(), "streaming WAV must produce frames");
             }
-            Err(e) => { eprintln!("WAV stream init FAILED: {e:?}"); }
+            Err(e) => {
+                eprintln!("WAV stream init FAILED: {e:?}");
+            }
         }
     }
 
@@ -2758,16 +3089,24 @@ cat\n",
                 .spawn()
                 .expect("spawn sleep");
             let pid = child.id().expect("child pid");
-            let handle = tokio::spawn(async move { let _ = child.wait().await; });
+            let handle = tokio::spawn(async move {
+                let _ = child.wait().await;
+            });
             drop(handle);
             tokio::time::sleep(Duration::from_millis(200)).await;
             let alive = std::process::Command::new("kill")
                 .args(["-0", &pid.to_string()])
                 .status()
                 .expect("kill -0");
-            assert!(alive.success(), "process {pid} must survive JoinHandle drop");
+            assert!(
+                alive.success(),
+                "process {pid} must survive JoinHandle drop"
+            );
             eprintln!("PASS: JoinHandle drop -> child {pid} alive (as expected)");
-            std::process::Command::new("kill").arg(pid.to_string()).status().ok();
+            std::process::Command::new("kill")
+                .arg(pid.to_string())
+                .status()
+                .ok();
 
             let mut child2 = tokio::process::Command::new("sleep")
                 .arg("30")
@@ -2777,7 +3116,9 @@ cat\n",
                 .spawn()
                 .expect("spawn sleep 2");
             let pid2 = child2.id().expect("child2 pid");
-            let abort_handle = tokio::spawn(async move { let _ = child2.wait().await; });
+            let abort_handle = tokio::spawn(async move {
+                let _ = child2.wait().await;
+            });
             let ab = abort_handle.abort_handle();
             ab.abort();
             tokio::time::sleep(Duration::from_millis(200)).await;
@@ -2785,7 +3126,10 @@ cat\n",
                 .args(["-0", &pid2.to_string()])
                 .status()
                 .expect("kill -0 2");
-            assert!(!alive2.success(), "process {pid2} must be DEAD after AbortHandle::abort");
+            assert!(
+                !alive2.success(),
+                "process {pid2} must be DEAD after AbortHandle::abort"
+            );
             eprintln!("PASS: AbortHandle::abort -> child {pid2} dead (kill_on_drop fired)");
         });
     }
@@ -2793,7 +3137,9 @@ cat\n",
     #[test]
     fn bg_cache_task_cancel_kills_all_children() {
         use std::time::Duration;
-        let _guard = SEMAPHORE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = SEMAPHORE_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async {
             let ff_child = tokio::process::Command::new("sleep")
@@ -2840,7 +3186,10 @@ cat\n",
                     .stderr(std::process::Stdio::null())
                     .status()
                     .expect("kill -0");
-                assert!(!alive.success(), "{label} child {pid} must be dead after cancel");
+                assert!(
+                    !alive.success(),
+                    "{label} child {pid} must be dead after cancel"
+                );
             }
         });
     }
@@ -2848,7 +3197,9 @@ cat\n",
     #[test]
     fn bg_cache_task_holds_permit_until_complete() {
         use std::time::Duration;
-        let _guard = SEMAPHORE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = SEMAPHORE_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async {
             let ff_child = tokio::process::Command::new("sleep")
@@ -2902,7 +3253,9 @@ cat\n",
     #[test]
     fn permit_released_after_cancel_not_before() {
         use std::time::Duration;
-        let _guard = SEMAPHORE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = SEMAPHORE_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async {
             let ff_child = tokio::process::Command::new("sleep")

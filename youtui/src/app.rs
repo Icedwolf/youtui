@@ -1,8 +1,9 @@
 use super::appevent::{AppEvent, EventHandler};
 use crate::config::ApiKey;
 use crate::core::get_limited_sequential_file;
-use crate::{RuntimeInfo, get_data_dir, detect_browser_source};
-use crate::{COOKIE_NETSCAPE_FILENAME, get_config_dir};
+use crate::{
+    COOKIE_NETSCAPE_FILENAME, RuntimeInfo, detect_browser_source, get_config_dir, get_data_dir,
+};
 use anyhow::{Context, Result, bail};
 use component::actionhandler::YoutuiEffect;
 use crossterm::event::{DisableMouseCapture, EnableMouseCapture};
@@ -15,15 +16,14 @@ use media_controls::MediaController;
 use queue_persistence::auto_save;
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
-use server::Server;
 pub(crate) use server::song_downloader::resolve::PotProvider;
+use server::{Server, song_downloader};
 use std::borrow::Cow;
 use std::fmt::Display;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
-use server::song_downloader;
 use structures::ListSong;
 use tracing::{debug, error, info, warn};
 use tracing_subscriber::prelude::*;
@@ -163,7 +163,12 @@ impl Youtui {
         // the legacy/corrupt format below.
         let autosave_read = tokio::task::spawn_blocking(queue_persistence::read_autosave_compact);
         let t_server = std::time::Instant::now();
-        let server = Arc::new(server::Server::new(api_key, pot_provider, &config, cookie_path)?);
+        let server = Arc::new(server::Server::new(
+            api_key,
+            pot_provider,
+            &config,
+            cookie_path,
+        )?);
         debug!(
             "startup_timing: Server::new() = {}ms",
             t_server.elapsed().as_millis()
@@ -201,11 +206,17 @@ impl Youtui {
                 queue_persistence::auto_load(&mut window_state.playlist)
             }
             Ok(Err(e)) => {
-                debug!("Auto-load read failed ({}). Starting with empty playlist.", e);
+                debug!(
+                    "Auto-load read failed ({}). Starting with empty playlist.",
+                    e
+                );
                 queue_persistence::auto_load(&mut window_state.playlist)
             }
             Err(join_err) => {
-                debug!("Auto-load task panicked ({}). Starting with empty playlist.", join_err);
+                debug!(
+                    "Auto-load task panicked ({}). Starting with empty playlist.",
+                    join_err
+                );
                 queue_persistence::auto_load(&mut window_state.playlist)
             }
         };
@@ -468,13 +479,19 @@ fn run_one_cookie_export(cmd: &str, browser: &str, out: &Path) -> Result<(), Str
 fn resolve_profile_dir(browser: &str) -> Option<(String, PathBuf)> {
     if let Some((name, path)) = browser.split_once(':') {
         let dir = PathBuf::from(path);
-        return dir.join("cookies.sqlite").exists().then(|| (name.to_string(), dir));
+        return dir
+            .join("cookies.sqlite")
+            .exists()
+            .then(|| (name.to_string(), dir));
     }
     if browser == "firefox" {
         let home = PathBuf::from(std::env::var("HOME").ok()?);
         for ini in [
             home.join(".mozilla").join("firefox").join("profiles.ini"),
-            home.join(".config").join("mozilla").join("firefox").join("profiles.ini"),
+            home.join(".config")
+                .join("mozilla")
+                .join("firefox")
+                .join("profiles.ini"),
         ] {
             if let Ok(content) = std::fs::read_to_string(&ini)
                 && let Some(parent) = ini.parent()
@@ -540,16 +557,14 @@ fn create_private_dirs(db_dir: &Path) -> std::io::Result<()> {
 /// files 0600 — other local users cannot traverse in or read the tokens.
 fn lock_down_export_perms(task_dir: &Path, db_dir: &Path) {
     use std::os::unix::fs::PermissionsExt;
-    let set_mode = |p: &Path, mode: u32| {
-        match std::fs::metadata(p).map(|m| m.permissions()) {
-            Ok(mut perms) => {
-                perms.set_mode(mode);
-                if let Err(e) = std::fs::set_permissions(p, perms) {
-                    warn!("could not restrict perms on {}: {e}", p.display());
-                }
+    let set_mode = |p: &Path, mode: u32| match std::fs::metadata(p).map(|m| m.permissions()) {
+        Ok(mut perms) => {
+            perms.set_mode(mode);
+            if let Err(e) = std::fs::set_permissions(p, perms) {
+                warn!("could not restrict perms on {}: {e}", p.display());
             }
-            Err(e) => warn!("could not stat {} for perms: {e}", p.display()),
         }
+        Err(e) => warn!("could not stat {} for perms: {e}", p.display()),
     };
     set_mode(task_dir, 0o700);
     set_mode(db_dir, 0o700);
@@ -569,7 +584,13 @@ fn lock_down_export_perms(task_dir: &Path, db_dir: &Path) {
 fn run_cookie_export(cmd: &str, browser: &str, dest: &Path) -> Result<(), String> {
     let tmp = dest.with_extension("tmp");
     let direct_err = match run_one_cookie_export(cmd, browser, &tmp) {
-        Ok(()) if std::fs::metadata(&tmp).map(|m| m.len() > 0).unwrap_or(false) => return Ok(()),
+        Ok(())
+            if std::fs::metadata(&tmp)
+                .map(|m| m.len() > 0)
+                .unwrap_or(false) =>
+        {
+            return Ok(());
+        }
         Ok(()) => {
             let _ = std::fs::remove_file(&tmp);
             "export produced an empty file".to_string()
@@ -580,7 +601,13 @@ fn run_cookie_export(cmd: &str, browser: &str, dest: &Path) -> Result<(), String
         let res = run_one_cookie_export(cmd, &copied_browser, &tmp);
         let _ = std::fs::remove_dir_all(&task_dir);
         match res {
-            Ok(()) if std::fs::metadata(&tmp).map(|m| m.len() > 0).unwrap_or(false) => return Ok(()),
+            Ok(())
+                if std::fs::metadata(&tmp)
+                    .map(|m| m.len() > 0)
+                    .unwrap_or(false) =>
+            {
+                return Ok(());
+            }
             _ => {}
         }
     }
@@ -595,11 +622,18 @@ fn run_cookie_export(cmd: &str, browser: &str, dest: &Path) -> Result<(), String
 /// non-empty export, so a failed re-export preserves the last good cookies.
 fn export_browser_cookies(browser: &str, dest: &Path, yt_dlp_cmd: &str) -> bool {
     // Mirror the download path's empty-string fallback (song_downloader).
-    let cmd = if yt_dlp_cmd.is_empty() { "yt-dlp" } else { yt_dlp_cmd };
+    let cmd = if yt_dlp_cmd.is_empty() {
+        "yt-dlp"
+    } else {
+        yt_dlp_cmd
+    };
     let tmp = dest.with_extension("tmp");
     let reason = match run_cookie_export(cmd, browser, dest) {
         Ok(()) => {
-            if std::fs::metadata(&tmp).map(|m| m.len() > 0).unwrap_or(false) {
+            if std::fs::metadata(&tmp)
+                .map(|m| m.len() > 0)
+                .unwrap_or(false)
+            {
                 use std::os::unix::fs::PermissionsExt;
                 let mut perms = std::fs::metadata(&tmp)
                     .map(|m| m.permissions())
@@ -647,7 +681,11 @@ mod tests {
     #[test]
     fn cookie_export_needed_fresh_is_false() {
         let path = std::env::temp_dir().join("youtui_export_fresh.txt");
-        std::fs::write(&path, b".youtube.com\tTRUE\t/\tTRUE\t1735689600\tSAPISID\tabc\n").unwrap();
+        std::fs::write(
+            &path,
+            b".youtube.com\tTRUE\t/\tTRUE\t1735689600\tSAPISID\tabc\n",
+        )
+        .unwrap();
         assert!(!cookie_export_needed(&path));
         std::fs::remove_file(&path).ok();
     }
@@ -655,11 +693,16 @@ mod tests {
     #[test]
     fn cookie_export_needed_old_mtime_is_true() {
         let path = std::env::temp_dir().join("youtui_export_old.txt");
-        std::fs::write(&path, b".youtube.com\tTRUE\t/\tTRUE\t1735689600\tSAPISID\tabc\n").unwrap();
-        let old = std::time::SystemTime::now()
-            - Duration::from_secs(COOKIE_EXPORT_TTL.as_secs() + 3600);
+        std::fs::write(
+            &path,
+            b".youtube.com\tTRUE\t/\tTRUE\t1735689600\tSAPISID\tabc\n",
+        )
+        .unwrap();
+        let old =
+            std::time::SystemTime::now() - Duration::from_secs(COOKIE_EXPORT_TTL.as_secs() + 3600);
         let f = std::fs::File::open(&path).unwrap();
-        f.set_times(std::fs::FileTimes::new().set_modified(old)).unwrap();
+        f.set_times(std::fs::FileTimes::new().set_modified(old))
+            .unwrap();
         assert!(cookie_export_needed(&path));
         std::fs::remove_file(&path).ok();
     }
@@ -667,18 +710,28 @@ mod tests {
     #[test]
     fn export_browser_cookies_uses_configured_command() {
         // A fake "yt-dlp" whose only job is to write the cookie destination file.
-        let script = std::env::temp_dir().join(format!("youtui_fake_ytdlp_{}.sh", std::process::id()));
+        let script =
+            std::env::temp_dir().join(format!("youtui_fake_ytdlp_{}.sh", std::process::id()));
         std::fs::write(&script, "#!/bin/sh\necho 'SID=abc' > \"$5\"\nexit 0\n").unwrap();
         let mut perms = std::fs::metadata(&script).unwrap().permissions();
         use std::os::unix::fs::PermissionsExt;
         perms.set_mode(0o755);
         std::fs::set_permissions(&script, perms).unwrap();
 
-        let dest = std::env::temp_dir().join(format!("youtui_export_cfg_{}.txt", std::process::id()));
+        let dest =
+            std::env::temp_dir().join(format!("youtui_export_cfg_{}.txt", std::process::id()));
         let _ = std::fs::remove_file(&dest);
         // Config path must be honored: the fake binary runs, not the real yt-dlp.
-        assert!(export_browser_cookies("fake-browser", &dest, script.to_str().unwrap()));
-        assert!(std::fs::metadata(&dest).map(|m| m.len() > 0).unwrap_or(false));
+        assert!(export_browser_cookies(
+            "fake-browser",
+            &dest,
+            script.to_str().unwrap()
+        ));
+        assert!(
+            std::fs::metadata(&dest)
+                .map(|m| m.len() > 0)
+                .unwrap_or(false)
+        );
 
         std::fs::remove_file(&script).ok();
         std::fs::remove_file(&dest).ok();
@@ -688,7 +741,10 @@ mod tests {
     fn export_browser_cookies_empty_command_falls_back() {
         // Empty configured command must resolve to "yt-dlp" (like the download
         // path) rather than attempting `Command::new("")`.
-        let dest = std::env::temp_dir().join(format!("youtui_export_empty_cmd_{}.txt", std::process::id()));
+        let dest = std::env::temp_dir().join(format!(
+            "youtui_export_empty_cmd_{}.txt",
+            std::process::id()
+        ));
         let _ = std::fs::remove_file(&dest);
         // No such browser -> real yt-dlp (or missing binary) fails -> false.
         // Deterministic: the test only asserts no panic + bool return.
@@ -701,7 +757,8 @@ mod tests {
     fn run_cookie_export_reports_failure_stderr() {
         // A fake yt-dlp that fails loudly. The exported failure reason must
         // surface so users can tell "browser locked" from "no cookies found".
-        let script = std::env::temp_dir().join(format!("youtui_fail_export_{}.sh", std::process::id()));
+        let script =
+            std::env::temp_dir().join(format!("youtui_fail_export_{}.sh", std::process::id()));
         std::fs::write(
             &script,
             "#!/bin/sh\necho 'LockedProfileException: profile is locked' >&2\nexit 1\n",
@@ -712,7 +769,8 @@ mod tests {
         perms.set_mode(0o755);
         std::fs::set_permissions(&script, perms).unwrap();
 
-        let dest = std::env::temp_dir().join(format!("youtui_export_fail_{}.txt", std::process::id()));
+        let dest =
+            std::env::temp_dir().join(format!("youtui_export_fail_{}.txt", std::process::id()));
         let _ = std::fs::remove_file(&dest);
         let err = run_cookie_export(script.to_str().unwrap(), "fake-browser", &dest)
             .expect_err("failing export must produce an Err");
@@ -734,7 +792,8 @@ mod tests {
         use std::os::unix::fs::PermissionsExt;
         // A fake Firefox profile whose cookies.sqlite exists but whose live DB
         // "export" fails (simulates the locked-profile case: browser running).
-        let srcdir = std::env::temp_dir().join(format!("youtui_fake_profile_{}", std::process::id()));
+        let srcdir =
+            std::env::temp_dir().join(format!("youtui_fake_profile_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&srcdir);
         std::fs::create_dir_all(&srcdir).unwrap();
         std::fs::write(srcdir.join("cookies.sqlite"), b"cookie-db-bytes").unwrap();
@@ -743,7 +802,8 @@ mod tests {
         // succeeds when pointed at a copied profile (which the fallback makes).
         // Also enforces that the copied profile dir is 0700 — the temp copy holds
         // SID auth tokens in world-readable /tmp and must not leak them.
-        let script = std::env::temp_dir().join(format!("youtui_copy_export_{}.sh", std::process::id()));
+        let script =
+            std::env::temp_dir().join(format!("youtui_copy_export_{}.sh", std::process::id()));
         let orig = srcdir.to_str().unwrap();
         std::fs::write(
             &script,
@@ -756,12 +816,16 @@ mod tests {
         perms.set_mode(0o755);
         std::fs::set_permissions(&script, perms).unwrap();
 
-        let dest = std::env::temp_dir().join(format!("youtui_export_copy_{}.txt", std::process::id()));
+        let dest =
+            std::env::temp_dir().join(format!("youtui_export_copy_{}.txt", std::process::id()));
         let _ = std::fs::remove_file(&dest);
         let browser = format!("firefox:{}", srcdir.display());
 
         let res = run_cookie_export(script.to_str().unwrap(), &browser, &dest);
-        assert!(res.is_ok(), "copy fallback must recover from locked profile, got: {res:?}");
+        assert!(
+            res.is_ok(),
+            "copy fallback must recover from locked profile, got: {res:?}"
+        );
         assert!(
             std::fs::metadata(dest.with_extension("tmp"))
                 .map(|m| m.len() > 0)
@@ -785,7 +849,8 @@ mod tests {
         // re-export (the historical 0-byte-trap). The fake yt-dlp writes an
         // empty output then fails — under the new success rule (non-empty
         // file) that is a true failure, proving the atomic publish.
-        let script = std::env::temp_dir().join(format!("youtui_corrupt_export_{}.sh", std::process::id()));
+        let script =
+            std::env::temp_dir().join(format!("youtui_corrupt_export_{}.sh", std::process::id()));
         std::fs::write(
             &script,
             "#!/bin/sh\nout='' nxt=''\nfor a in \"$@\"; do\n  if [ \"$nxt\" = cookies ]; then out=\"$a\"; nxt=''; fi\n  if [ \"$a\" = --cookies ]; then nxt=cookies; fi\ndone\n: > \"$out\"\nexit 1\n",
@@ -795,8 +860,13 @@ mod tests {
         perms.set_mode(0o755);
         std::fs::set_permissions(&script, perms).unwrap();
 
-        let dest = std::env::temp_dir().join(format!("youtui_export_atomic_{}.txt", std::process::id()));
-        std::fs::write(&dest, b".youtube.com\tTRUE\t/\tTRUE\t1735689600\tSID\tabc\n").unwrap();
+        let dest =
+            std::env::temp_dir().join(format!("youtui_export_atomic_{}.txt", std::process::id()));
+        std::fs::write(
+            &dest,
+            b".youtube.com\tTRUE\t/\tTRUE\t1735689600\tSID\tabc\n",
+        )
+        .unwrap();
 
         let ok = export_browser_cookies("fake-browser", &dest, script.to_str().unwrap());
         assert!(!ok, "failing export must report failure");

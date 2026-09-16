@@ -2,8 +2,8 @@ use self::draw::draw_browser;
 use super::action::{AppAction, TextEntryAction};
 use super::{AppCallback, WindowContext};
 use crate::app::component::actionhandler::{
-    Action, ActionHandler, Component, DelegateScrollable, DominantKeyRouter, KeyRouter,
-    Scrollable, TextHandler, YoutuiEffect, apply_action_mapped,
+    Action, ActionHandler, Component, DelegateScrollable, DominantKeyRouter, KeyRouter, Scrollable,
+    TextHandler, YoutuiEffect, apply_action_mapped,
 };
 use crate::app::effect::Effects;
 use crate::app::ui::browser::playlistsearch::PlaylistSearchBrowser;
@@ -269,10 +269,7 @@ impl TextHandler for Browser {
             BrowserVariant::Playlist => self.playlist_search_browser.clear_text(),
         }
     }
-    fn handle_text_event_impl(
-        &mut self,
-        event: &crossterm::event::Event,
-    ) -> Option<Effects<Self>> {
+    fn handle_text_event_impl(&mut self, event: &crossterm::event::Event) -> Option<Effects<Self>> {
         // Let E (change search type) pass through to the keybind router
         // instead of being typed into the search input.
         if matches!(
@@ -525,8 +522,7 @@ mod tests {
     use crate::app::component::actionhandler::{ActionHandler, KeyRouter};
     use crate::app::ui::action::AppAction;
     use crate::app::ui::browser::BrowserAction;
-    use crate::app::ui::browser::shared_components::BrowserSearchAction;
-    use crate::app::ui::browser::shared_components::SortFilterTable;
+    use crate::app::ui::browser::shared_components::{BrowserSearchAction, SortFilterTable};
     use crate::config::Config;
     use crate::config::keymap::KeyActionTree;
     use crate::keyaction::KeyActionVisibility;

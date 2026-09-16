@@ -195,7 +195,8 @@ async fn test_search_artists_drops_junk_entries() {
     let source_path = Path::new("./test_json/search_artists_with_junk_20260813.json");
     let source = tokio::fs::read_to_string(source_path).await.unwrap();
     let parsed: Vec<crate::parse::SearchResultArtist> =
-        process_json::<_, BrowserToken>(source, SearchQuery::new_filtered("", ArtistsFilter)).unwrap();
+        process_json::<_, BrowserToken>(source, SearchQuery::new_filtered("", ArtistsFilter))
+            .unwrap();
     let names: Vec<&str> = parsed.iter().map(|a| a.artist.as_str()).collect();
     assert_eq!(names, ["American Football", "Mike Kinsella"]);
 }
@@ -208,7 +209,8 @@ async fn test_search_songs_drops_junk_entries() {
     let source_path = Path::new("./test_json/search_songs_with_junk_20260813.json");
     let source = tokio::fs::read_to_string(source_path).await.unwrap();
     let parsed: Vec<crate::parse::SearchResultSong> =
-        process_json::<_, BrowserToken>(source, SearchQuery::new_filtered("", SongsFilter)).unwrap();
+        process_json::<_, BrowserToken>(source, SearchQuery::new_filtered("", SongsFilter))
+            .unwrap();
     // 24 shelf entries = 20 real songs + 3 malformed leaks (no album browse)
     // + 1 well-formed unrelated entry (kept, structurally valid). The 3
     // malformed leaks drop; every retained song has an album.
@@ -331,14 +333,15 @@ fn inject_junk_into_lists(source: &str, targets: &[(&str, &str)]) -> String {
         match value {
             serde_json::Value::Object(map) => {
                 for (key, child) in map.iter_mut() {
-                    if let Some(list) = targets
-                        .iter()
-                        .find(|(rk, _)| *rk == key)
-                        .and_then(|(_, array_key)| {
-                            child
-                                .get_mut(*array_key)
-                                .and_then(serde_json::Value::as_array_mut)
-                        })
+                    if let Some(list) =
+                        targets
+                            .iter()
+                            .find(|(rk, _)| *rk == key)
+                            .and_then(|(_, array_key)| {
+                                child
+                                    .get_mut(*array_key)
+                                    .and_then(serde_json::Value::as_array_mut)
+                            })
                     {
                         list.push(serde_json::json!({
                             "musicResponsiveListItemRenderer": {}
@@ -372,7 +375,8 @@ async fn test_search_basic_shelves_drop_junk_entries() {
     .await
     .unwrap();
     let source = inject_junk_into_lists(&source, &[("musicShelfRenderer", "contents")]);
-    let parsed: SearchResults = process_json::<_, BrowserToken>(source, SearchQuery::new("")).unwrap();
+    let parsed: SearchResults =
+        process_json::<_, BrowserToken>(source, SearchQuery::new("")).unwrap();
     assert!(!parsed.albums.is_empty());
     assert!(!parsed.featured_playlists.is_empty());
     assert!(!parsed.songs.is_empty());

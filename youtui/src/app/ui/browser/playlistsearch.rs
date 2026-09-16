@@ -1,18 +1,15 @@
-use crate::app::component::actionhandler::{
-    Scrollable, TextHandler, YoutuiEffect,
-};
+use crate::app::component::actionhandler::{Scrollable, TextHandler, YoutuiEffect};
 use crate::app::effect::Effects;
-use crate::app::server::api::GetPlaylistSongsProgressUpdate;
 use crate::app::server::ArcServer;
-use futures::StreamExt;
+use crate::app::server::api::GetPlaylistSongsProgressUpdate;
 use crate::app::structures::{ListStatus, SongListComponent};
 use crate::app::view::{ListView, TableView};
+use futures::StreamExt;
 use search_panel::NonPodcastSearchResultPlaylist;
 use std::sync::Arc;
 use tracing::{debug, error, warn};
 use ytmapi_rs::common::PlaylistID;
 use ytmapi_rs::parse::{PlaylistItem, SearchResultPlaylist};
-
 
 pub mod search_panel;
 pub mod songs_panel;
@@ -38,15 +35,26 @@ impl PlaylistSearchBrowser {
                     Ok(playlists) => Box::new(move |this: &mut PlaylistSearchBrowser| {
                         this.replace_playlist_list(playlists);
                         Effects::none()
-                    }) as Box<dyn FnOnce(&mut PlaylistSearchBrowser) -> Effects<PlaylistSearchBrowser> + Send>,
+                    })
+                        as Box<
+                            dyn FnOnce(&mut PlaylistSearchBrowser) -> Effects<PlaylistSearchBrowser>
+                                + Send,
+                        >,
                     Err(error) => {
                         warn!("Playlist search error: {error}");
                         Box::new(|_: &mut PlaylistSearchBrowser| Effects::none())
-                            as Box<dyn FnOnce(&mut PlaylistSearchBrowser) -> Effects<PlaylistSearchBrowser> + Send>
+                            as Box<
+                                dyn FnOnce(
+                                        &mut PlaylistSearchBrowser,
+                                    )
+                                        -> Effects<PlaylistSearchBrowser>
+                                    + Send,
+                            >
                     }
                 }
             }
-        }).kill_prev::<PlaylistSearchBrowser>()
+        })
+        .kill_prev::<PlaylistSearchBrowser>()
     }
     pub fn handle_extra_song_action(
         &mut self,
@@ -69,7 +77,10 @@ impl PlaylistSearchBrowser {
                         GetPlaylistSongsProgressUpdate::Songs(items) => {
                             this.handle_append_song_list(items);
                         }
-                        GetPlaylistSongsProgressUpdate::GetPlaylistSongsError { playlist_id, error } => {
+                        GetPlaylistSongsProgressUpdate::GetPlaylistSongsError {
+                            playlist_id,
+                            error,
+                        } => {
                             this.handle_search_playlist_error(playlist_id, error);
                         }
                         GetPlaylistSongsProgressUpdate::AllSongsSent => {
@@ -77,9 +88,14 @@ impl PlaylistSearchBrowser {
                         }
                     }
                     Effects::none()
-                }) as Box<dyn FnOnce(&mut PlaylistSearchBrowser) -> Effects<PlaylistSearchBrowser> + Send>
+                })
+                    as Box<
+                        dyn FnOnce(&mut PlaylistSearchBrowser) -> Effects<PlaylistSearchBrowser>
+                            + Send,
+                    >
             })
-        }).block_concurrent::<PlaylistSearchBrowser>()
+        })
+        .block_concurrent::<PlaylistSearchBrowser>()
     }
     pub fn handle_search_playlist_error(
         &mut self,
@@ -105,4 +121,3 @@ impl PlaylistSearchBrowser {
         self.songs_panel.list.state = ListStatus::InProgress;
     }
 }
-

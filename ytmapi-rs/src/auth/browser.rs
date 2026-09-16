@@ -64,10 +64,11 @@ impl BrowserToken {
             ("Cookie", cookies.as_str().into()),
         ];
         let response_text = client.get_query(YTM_URL, initial_headers, &()).await?.text;
-        // If the response is an error page (rejected user agent), INNERTUBE_CLIENT_VERSION
-        // won't be present and the parsing below will produce a descriptive error.
-        // Previously this was an English-only `contains` check that broke for non-English
-        // locales — the INNERTUBE_CLIENT_VERSION fallback works for all languages.
+        // If the response is an error page (rejected user agent),
+        // INNERTUBE_CLIENT_VERSION won't be present and the parsing below will
+        // produce a descriptive error. Previously this was an English-only
+        // `contains` check that broke for non-English locales — the
+        // INNERTUBE_CLIENT_VERSION fallback works for all languages.
         let client_version = response_text
             .split_once("INNERTUBE_CLIENT_VERSION\":\"")
             .ok_or(Error::header(

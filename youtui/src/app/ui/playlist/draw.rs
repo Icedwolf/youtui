@@ -36,8 +36,11 @@ impl TableView for Playlist {
         (0..count).map(move |visual_i| {
             let actual_i = self.visual_to_actual_index(visual_i);
 
-            let playing_indicator: Cow<'_, str> =
-                if Some(visual_i) == cur_playing_visual { ">".into() } else { "".into() };
+            let playing_indicator: Cow<'_, str> = if Some(visual_i) == cur_playing_visual {
+                ">".into()
+            } else {
+                "".into()
+            };
 
             let fields = [
                 ListSongDisplayableField::Song,
@@ -55,8 +58,7 @@ impl TableView for Playlist {
                 None => {
                     debug!(
                         visual_i,
-                        actual_i,
-                        "draw: visual_to_actual_index desync, rendering empty row"
+                        actual_i, "draw: visual_to_actual_index desync, rendering empty row"
                     );
                     let empty = std::array::from_fn(|_| Cow::Borrowed(""));
                     iter::once(playing_indicator).chain(empty)

@@ -1,10 +1,9 @@
 use crate::app::structures::Percentage;
 use anyhow::Context;
 use futures::Stream;
-use std::borrow::Borrow;
-use rodio::Source;
 use rodio::source::EmptyCallback;
-use rodio::{ChannelCount, SampleRate};
+use rodio::{ChannelCount, SampleRate, Source};
+use std::borrow::Borrow;
 use std::fmt::Debug;
 use std::time::Duration;
 use tokio::sync::{mpsc, oneshot};
@@ -72,18 +71,27 @@ impl<I: Debug + PartialEq + Copy> PlaybackState<I> {
         }
     }
 
-    fn handle_increase_volume(&self, sink: &rodio::Player, vol_inc: i8, tx: oneshot::Sender<Percentage>) {
+    fn handle_increase_volume(
+        &self,
+        sink: &rodio::Player,
+        vol_inc: i8,
+        tx: oneshot::Sender<Percentage>,
+    ) {
         sink.set_volume((sink.volume() + vol_inc as f32 / 100.0).clamp(0.0, 1.0));
         let _ = tx.send(Percentage((sink.volume() * 100.0).round() as u8));
         debug!("Rodio sent volume update");
     }
 
-    fn handle_set_volume(&self, sink: &rodio::Player, percentage: u8, tx: oneshot::Sender<Percentage>) {
+    fn handle_set_volume(
+        &self,
+        sink: &rodio::Player,
+        percentage: u8,
+        tx: oneshot::Sender<Percentage>,
+    ) {
         sink.set_volume((percentage as f32 / 100.0).clamp(0.0, 1.0));
         let _ = tx.send(Percentage((sink.volume() * 100.0).round() as u8));
         debug!("Rodio sent volume update");
     }
-
 }
 
 enum AsyncRodioRequest<I> {
@@ -205,7 +213,8 @@ where
                 trace!("Received {msg:?}");
                 match msg {
                     AsyncRodioResponse::ProgressUpdate(duration) => {
-                        send_or_error(&streamtx, PlayUpdate::PlayProgress(duration, identifier)).await;
+                        send_or_error(&streamtx, PlayUpdate::PlayProgress(duration, identifier))
+                            .await;
                     }
                     AsyncRodioResponse::StartedPlaying(duration) => {
                         debug!(

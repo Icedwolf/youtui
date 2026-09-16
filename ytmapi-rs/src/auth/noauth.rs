@@ -44,8 +44,8 @@ impl NoAuthToken {
     }
 }
 
-/// Find the JSON payload inside `ytcfg.set(...)` in the YouTube Music HTML page.
-/// Returns the raw JSON substring (without outer braces) on success.
+/// Find the JSON payload inside `ytcfg.set(...)` in the YouTube Music HTML
+/// page. Returns the raw JSON substring (without outer braces) on success.
 fn extract_ytcfg_json(page: &str) -> Option<&str> {
     let start = page.find("ytcfg.set")?;
     let rest = &page[start + 9..].trim_start();

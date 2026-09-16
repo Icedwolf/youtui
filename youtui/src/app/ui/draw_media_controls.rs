@@ -20,7 +20,7 @@ pub fn draw_app_media_controls(w: &YoutuiWindow) -> MediaControlsUpdate<'_> {
         | PlayState::Playing(id)
         | PlayState::Paused(id)
         | PlayState::Buffering(id) => w.playlist.get_song_from_id(id),
-        PlayState::NotPlaying  => None,
+        PlayState::NotPlaying => None,
     };
     let song_title = cur_active_song
         .map(|s| s.title.as_str())

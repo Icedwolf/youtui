@@ -123,7 +123,7 @@ pub fn draw_footer(f: &mut Frame, w: &mut super::YoutuiWindow, chunk: Rect) {
         | PlayState::Playing(id)
         | PlayState::Paused(id)
         | PlayState::Buffering(id) => Some(id),
-        PlayState::NotPlaying  => None,
+        PlayState::NotPlaying => None,
     };
 
     let mut duration = 0;
@@ -193,7 +193,7 @@ pub fn draw_footer(f: &mut Frame, w: &mut super::YoutuiWindow, chunk: Rect) {
     let song_line = truncate(&w.footer_cache.song_and_artists, max_text_width);
     let album_line = truncate(&w.footer_cache.album_title, max_text_width);
     let footer = Paragraph::new(vec![Line::from(song_line), Line::from(album_line)]);
-// The volume label is cached and only rebuilt when the value changes;
+    // The volume label is cached and only rebuilt when the value changes;
     // update it before building the widgets so nothing borrows the cache
     // mutably mid-frame.
     let vol = w.playlist.volume().0;

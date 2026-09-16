@@ -413,12 +413,7 @@ impl BrowserSongsList {
         let album = Rc::new(ListSongAlbum::from(album));
         let artists = Rc::new(artists.into_iter().map(Into::into).collect::<Vec<_>>());
         for song in best.into_values() {
-            self.add_raw_album_song(
-                song.clone(),
-                album.clone(),
-                year.clone(),
-                artists.clone(),
-            );
+            self.add_raw_album_song(song.clone(), album.clone(), year.clone(), artists.clone());
         }
     }
     pub fn append_raw_playlist_items(&mut self, raw_list: Vec<PlaylistItem>) {
@@ -552,8 +547,7 @@ impl BrowserSongsList {
     }
     fn add_raw_playlist_item(&mut self, item: PlaylistItem) -> Option<ListSongID> {
         let id = self.create_next_id();
-        let (track_no, title, video_id, duration, artists, album, explicit) = match item
-        {
+        let (track_no, title, video_id, duration, artists, album, explicit) = match item {
             PlaylistItem::Song(PlaylistSong {
                 video_id,
                 album,
@@ -578,15 +572,7 @@ impl BrowserSongsList {
                 title,
                 track_no,
                 ..
-            }) => (
-                track_no,
-                title,
-                video_id,
-                duration,
-                vec![],
-                None,
-                None,
-            ),
+            }) => (track_no, title, video_id, duration, vec![], None, None),
             // Episode has no video id, so we can't currently handle it as a ListSong.
             PlaylistItem::Episode(PlaylistEpisode { .. }) => {
                 warn!("Skipping podcast episode — no video_id, cannot represent as ListSong");
@@ -928,8 +914,7 @@ mod bench {
         let artists_string = compute_artists_string(&artists);
         let start = std::time::Instant::now();
         for _ in 0..ITERATIONS {
-            let result =
-                compute_lowercached("Song Title", Some("Album Name"), &artists_string);
+            let result = compute_lowercached("Song Title", Some("Album Name"), &artists_string);
             std::hint::black_box(&result);
         }
         let elapsed = start.elapsed();

@@ -8,19 +8,19 @@ use crate::app::server::song_downloader::{
     cache_clear, create_decoder_from_cache, download_and_decode,
 };
 use crate::app::structures::{
-    BrowserSongsList, DownloadStatus, ListSong, ListSongDisplayableField, ListSongID,
-    Percentage, PlayState, SongListComponent,
+    BrowserSongsList, DownloadStatus, ListSong, ListSongDisplayableField, ListSongID, Percentage,
+    PlayState, SongListComponent,
 };
 use crate::app::ui::{AppCallback, WindowContext};
 use crate::app::view::draw::{draw_loadable, draw_panel_mut, draw_table};
 use crate::app::view::{BasicConstraint, DrawableMut, HasTitle, Loadable, TableView};
 use crate::async_rodio_sink::{AllStopped, PlayUpdate, Stopped, VolumeUpdate};
-use futures::{Stream, StreamExt};
 use crate::config::Config;
 use crate::config::keymap::Keymap;
 use crate::core::PoisonRecovery;
 use crate::widgets::ScrollingTableState;
 use crossterm::event::{KeyCode, KeyModifiers};
+use futures::{Stream, StreamExt};
 use notify_rust::{Notification, Timeout};
 use rand::rngs::StdRng;
 use rand::{RngExt, SeedableRng};
@@ -52,10 +52,11 @@ const GAPLESS_PLAYBACK_THRESHOLD: Duration = Duration::from_secs(1);
 pub const DEFAULT_UI_VOLUME: Percentage = Percentage(50);
 
 /// Held-key (or repeated-key) shuffle toggles arrive faster than a download
-/// can be cancelled. Every toggle used to call `regenerate_downloads_for_current`
-/// immediately, spawning a fresh resolve + download before the previous one was
-/// cancelled — a burst of key events spawned several yt-dlp processes at once.
-/// Regeneration for shuffle toggles is now debounced to this trailing window.
+/// can be cancelled. Every toggle used to call
+/// `regenerate_downloads_for_current` immediately, spawning a fresh resolve +
+/// download before the previous one was cancelled — a burst of key events
+/// spawned several yt-dlp processes at once. Regeneration for shuffle toggles
+/// is now debounced to this trailing window.
 const SHUFFLE_REGEN_DEBOUNCE_MS: u64 = 100;
 
 fn is_cancellation_error(msg: &str) -> bool {
@@ -231,8 +232,9 @@ impl ActionHandler<PlaylistAction> for Playlist {
                 for _ in &unchecked {
                     effect = effect.push(Effects::new(
                         |_: &crate::app::server::ArcServer| async move {
-                            Box::new(|_: &mut Playlist| Effects::none()) as Box<dyn FnOnce(&mut Playlist) -> Effects<Playlist> + Send>
-                        }
+                            Box::new(|_: &mut Playlist| Effects::none())
+                                as Box<dyn FnOnce(&mut Playlist) -> Effects<Playlist> + Send>
+                        },
                     ));
                 }
                 self.resolve_remaining = 0;
@@ -322,10 +324,7 @@ impl TextHandler for Playlist {
         }
     }
 
-    fn handle_text_event_impl(
-        &mut self,
-        event: &crossterm::event::Event,
-    ) -> Option<Effects<Self>> {
+    fn handle_text_event_impl(&mut self, event: &crossterm::event::Event) -> Option<Effects<Self>> {
         if !self.search_enabled {
             return None;
         }

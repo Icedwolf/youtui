@@ -154,8 +154,8 @@ impl<T> PoisonRecovery for Result<T, PoisonError<T>> {
 }
 
 /// Extract a readable message from a panic payload (the `Box<dyn Any + Send>`
-/// captured by `catch_unwind`). Must take the payload as `&Box`, not `&dyn Any`,
-/// because `downcast_ref` on a materialized `&(dyn Any + Send)` reference
+/// captured by `catch_unwind`). Must take the payload as `&Box`, not `&dyn
+/// Any`, because `downcast_ref` on a materialized `&(dyn Any + Send)` reference
 /// silently fails while auto-deref through the Box works.
 pub(crate) fn panic_message(payload: &Box<dyn std::any::Any + Send>) -> String {
     payload

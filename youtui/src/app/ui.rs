@@ -7,9 +7,8 @@ use super::component::actionhandler::{
 };
 use super::structures::{ListSong, Percentage};
 use crate::app::effect::Effects;
-use crate::app::ui::footer::FooterCache;
 use crate::app::server::ArcServer;
-use std::sync::Arc;
+use crate::app::ui::footer::FooterCache;
 use crate::config::Config;
 use crate::config::keymap::Keymap;
 use crate::keyaction::{DisplayableKeyAction, DisplayableMode, flatten_keybinds_as_readable};
@@ -17,6 +16,7 @@ use crate::widgets::ScrollingTableState;
 use action::{AppAction, ListAction, PAGE_KEY_LINES, TextEntryAction};
 use crossterm::event::{Event, KeyEvent};
 use itertools::Either;
+use std::sync::Arc;
 
 pub mod action;
 pub mod browser;
@@ -353,10 +353,7 @@ impl YoutuiWindow {
         self.key_stack.push(key_event);
         self.global_handle_key_stack()
     }
-    fn handle_mouse_event(
-        &mut self,
-        mouse_event: crossterm::event::MouseEvent,
-    ) -> Effects<Self> {
+    fn handle_mouse_event(&mut self, mouse_event: crossterm::event::MouseEvent) -> Effects<Self> {
         tracing::debug!("Received unimplemented {:?} mouse event", mouse_event);
         Effects::none()
     }
@@ -444,7 +441,8 @@ impl YoutuiWindow {
                         this.playlist.handle_volume_update(update);
                     }
                     Effects::none()
-                }) as Box<dyn FnOnce(&mut YoutuiWindow) -> Effects<YoutuiWindow> + Send>
+                })
+                    as Box<dyn FnOnce(&mut YoutuiWindow) -> Effects<YoutuiWindow> + Send>
             }
         })
     }
@@ -459,7 +457,8 @@ impl YoutuiWindow {
                         this.playlist.handle_volume_update(update);
                     }
                     Effects::none()
-                }) as Box<dyn FnOnce(&mut YoutuiWindow) -> Effects<YoutuiWindow> + Send>
+                })
+                    as Box<dyn FnOnce(&mut YoutuiWindow) -> Effects<YoutuiWindow> + Send>
             }
         })
     }
@@ -471,10 +470,7 @@ impl YoutuiWindow {
         let (id, next_effect) = self.playlist.push_song_list(song_list);
         e.push(next_effect).push(self.playlist.play_song(id))
     }
-    pub fn handle_add_songs_to_playlist(
-        &mut self,
-        song_list: Vec<ListSong>,
-    ) -> Effects<Self> {
+    pub fn handle_add_songs_to_playlist(&mut self, song_list: Vec<ListSong>) -> Effects<Self> {
         let (_, effect) = self.playlist.push_song_list(song_list);
         effect.map(|this: &mut Self| &mut this.playlist)
     }
@@ -549,5 +545,3 @@ impl YoutuiWindow {
         })
     }
 }
-
-

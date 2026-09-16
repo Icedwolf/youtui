@@ -1,8 +1,7 @@
 use super::{DownloadTask, Playlist, QueueState};
 use crate::app::queue_persistence::{CompactSavedQueue, CompactSongRef};
 use crate::app::structures::{
-    ListSong, ListSongDisplayableField, ListSongID, ListStatus,
-    Percentage, PlayState,
+    ListSong, ListSongDisplayableField, ListSongID, ListStatus, Percentage, PlayState,
 };
 use pretty_assertions::assert_eq;
 use std::sync::{Arc, OnceLock};
@@ -343,10 +342,10 @@ mod state_transitions {
         DownloadProgressUpdate, HALT_AFTER_CONSECUTIVE_FAILURES, Playlist, PlaylistAction,
         QueueState, is_auth_error, is_dead_video_error,
     };
-    use std::sync::Arc;
     use crate::app::view::HasTitle;
     use pretty_assertions::assert_eq;
     use ratatui::style::Color;
+    use std::sync::Arc;
     use ytmapi_rs::common::{VideoID, YoutubeID};
 
     fn undownloaded_songs(n: usize) -> Playlist {
@@ -438,7 +437,13 @@ mod state_transitions {
     #[test]
     fn session_dead_is_not_persisted_across_playlists() {
         // New sessions start with an empty dead set (no disk persistence).
-        assert!(Playlist::new(Percentage(50)).0.list.session_dead_videos.is_empty());
+        assert!(
+            Playlist::new(Percentage(50))
+                .0
+                .list
+                .session_dead_videos
+                .is_empty()
+        );
     }
 
     #[test]
@@ -591,13 +596,11 @@ mod state_transitions {
         // A success resets the run, so the count restarts from zero.
         p.play_status = PlayState::NotPlaying;
         let _effect = p.handle_song_download_progress_update(
-            DownloadProgressUpdate::Completed(Box::new(
-                rodio::buffer::SamplesBuffer::new(
-                    std::num::NonZeroU16::new(1).unwrap(),
-                    std::num::NonZeroU32::new(44100).unwrap(),
-                    vec![0.0f32; 4410],
-                ),
-            )),
+            DownloadProgressUpdate::Completed(Box::new(rodio::buffer::SamplesBuffer::new(
+                std::num::NonZeroU16::new(1).unwrap(),
+                std::num::NonZeroU32::new(44100).unwrap(),
+                vec![0.0f32; 4410],
+            ))),
             ListSongID(2),
         );
 
@@ -1479,7 +1482,8 @@ mod state_transitions {
         // Add song 2 to play-next queue
         p.play_next_queue.push_back(ListSongID(2));
 
-        // play_next_or_stop should pop from queue instead of playing natural next (song 1)
+        // play_next_or_stop should pop from queue instead of playing natural next (song
+        // 1)
         let _ = p.play_next_or_stop(ListSongID(0));
         assert_eq!(p.play_status, PlayState::Buffering(ListSongID(2)));
     }
@@ -1523,7 +1527,8 @@ mod state_transitions {
         let _ = p.play_next_or_stop(ListSongID(0));
         assert_eq!(p.play_status, PlayState::Buffering(ListSongID(1)));
 
-        // After consuming, queue should be empty and next falls through to natural order
+        // After consuming, queue should be empty and next falls through to natural
+        // order
         assert!(p.play_next_queue.is_empty());
         let _ = p.play_next_or_stop(ListSongID(1));
         assert_eq!(p.play_status, PlayState::Buffering(ListSongID(2)));
@@ -1830,11 +1835,17 @@ mod state_transitions {
         p.play_status = PlayState::Buffering(ListSongID(0));
 
         let _effect = p.toggle_shuffle();
-        let older = p.shuffle_regen_token.clone().expect("pending after first toggle");
+        let older = p
+            .shuffle_regen_token
+            .clone()
+            .expect("pending after first toggle");
 
         // A second toggle supersedes the older regen and schedules a newer one.
         let _effect = p.toggle_shuffle();
-        let newer = p.shuffle_regen_token.clone().expect("pending after second toggle");
+        let newer = p
+            .shuffle_regen_token
+            .clone()
+            .expect("pending after second toggle");
         assert!(older.is_cancelled(), "first regen must be superseded");
 
         // The OLD fired callback running late must not clear the newer token:
@@ -1860,10 +1871,16 @@ mod state_transitions {
         p.play_status = PlayState::Buffering(ListSongID(0));
 
         let _effect = p.toggle_shuffle();
-        let older = p.shuffle_regen_token.clone().expect("pending after first toggle");
+        let older = p
+            .shuffle_regen_token
+            .clone()
+            .expect("pending after first toggle");
 
         let _effect = p.toggle_shuffle();
-        let newer = p.shuffle_regen_token.clone().expect("pending after second toggle");
+        let newer = p
+            .shuffle_regen_token
+            .clone()
+            .expect("pending after second toggle");
         assert!(older.is_cancelled(), "first regen must be superseded");
 
         // A stale fired callback whose token is no longer pending must not
@@ -1954,12 +1971,15 @@ mod state_transitions {
     #[test]
     fn live_download_yields_full_settle_window() {
         let p = undownloaded_songs(1);
-        p.active_downloads.lock().unwrap_or_else(|e| e.into_inner()).push((
-            p.get_id_from_index(0).expect("song 0"),
-            crate::app::ui::playlist::DownloadTask {
-                cancel_token: Arc::new(tokio_util::sync::CancellationToken::new()),
-            },
-        ));
+        p.active_downloads
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .push((
+                p.get_id_from_index(0).expect("song 0"),
+                crate::app::ui::playlist::DownloadTask {
+                    cancel_token: Arc::new(tokio_util::sync::CancellationToken::new()),
+                },
+            ));
         assert_eq!(
             p.settle_window_for(),
             crate::app::server::song_downloader::RESOLVE_SETTLE_MS,

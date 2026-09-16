@@ -10,7 +10,6 @@ use ytmapi_rs::common::{
     ApiOutcome, ArtistChannelID, FeedbackTokenAddToLibrary, FeedbackTokenRemoveFromLibrary,
     PlaylistID, UserChannelID, YoutubeID,
 };
-
 use ytmapi_rs::query::playlist::{GetPlaylistDetailsQuery, PrivacyStatus};
 use ytmapi_rs::query::search::{
     AlbumsFilter, ArtistsFilter, CommunityPlaylistsFilter, EpisodesFilter, FeaturedPlaylistsFilter,
@@ -181,9 +180,7 @@ generate_query_test_logged_in!(
     test_get_library_artist_subscriptions,
     GetLibraryArtistSubscriptionsQuery::default()
 );
-generate_query_test!(
-    test_basic_search, SearchQuery::new("Beatles")
-);
+generate_query_test!(test_basic_search, SearchQuery::new("Beatles"));
 generate_query_test!(
     test_basic_search_alternate_query_1,
     SearchQuery::new("Beaten")
@@ -215,7 +212,9 @@ generate_query_test!(
 // # MULTISTAGE TESTS
 #[tokio::test]
 async fn test_get_mood_playlists() {
-    let Some(browser_api): Option<YtMusic<BrowserToken>> = crate::utils::maybe_new_standard_api().await else {
+    let Some(browser_api): Option<YtMusic<BrowserToken>> =
+        crate::utils::maybe_new_standard_api().await
+    else {
         eprintln!("SKIP: browser auth not configured");
         return;
     };
@@ -476,7 +475,6 @@ async fn test_add_remove_history_items() {
     );
 }
 
-
 #[tokio::test]
 #[ignore = "Ignored by default due to quota"]
 async fn test_delete_create_playlist() {
@@ -674,7 +672,6 @@ async fn test_edit_playlist() {
 }
 
 // # BASIC TESTS WITH ADDITIONAL ASSERTIONS
-
 
 #[tokio::test]
 async fn test_get_library_playlists() {

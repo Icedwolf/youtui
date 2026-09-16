@@ -1,8 +1,7 @@
 use super::Browser;
 use super::artistsearch::ArtistSearchBrowser;
 use super::search_panel::SearchPanelInputRouting;
-use super::shared_components::SearchBlock;
-use super::shared_components::SearchBrowserSide;
+use super::shared_components::{SearchBlock, SearchBrowserSide};
 use super::songs_panel::SongsInputRouting;
 use super::songsearch::SongSearchBrowser;
 use crate::app::ui::browser::playlistsearch::PlaylistSearchBrowser;

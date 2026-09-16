@@ -23,7 +23,9 @@ enum Discriminator {
 pub type MutationFn<C> = Box<dyn FnOnce(&mut C) -> Effects<C> + Send>;
 type ExecFn<C> = Box<dyn FnOnce(&ArcServer) -> BoxFuture<MutationFn<C>> + Send>;
 
-type StreamFn<C> = Box<dyn FnOnce(&ArcServer) -> Pin<Box<dyn futures::Stream<Item = MutationFn<C>> + Send>> + Send>;
+type StreamFn<C> = Box<
+    dyn FnOnce(&ArcServer) -> Pin<Box<dyn futures::Stream<Item = MutationFn<C>> + Send>> + Send,
+>;
 
 enum WorkKind<C> {
     Single(ExecFn<C>),
@@ -103,9 +105,7 @@ impl<C: 'static> Effects<C> {
     {
         Effects(vec![Work {
             discriminator: Discriminator::None,
-            kind: WorkKind::Stream(Box::new(move |server| {
-                Box::pin(build(server))
-            })),
+            kind: WorkKind::Stream(Box::new(move |server| Box::pin(build(server)))),
         }])
     }
 
@@ -207,7 +207,6 @@ impl<C: 'static> TaskManager<C> {
     pub async fn get_next_response(&mut self) -> Option<TaskResult<C>> {
         self.result_rx.recv().await
     }
-
 }
 
 fn spawn_stream<C: 'static>(

@@ -8,22 +8,20 @@ use futures::stream::FuturesUnordered;
 use futures::{Stream, StreamExt};
 use reqwest;
 use std::borrow::Borrow;
-use std::collections::HashMap;
-use std::collections::HashSet;
-use std::collections::hash_map;
+use std::collections::{HashMap, HashSet, hash_map};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::{debug, info, trace, warn};
 use ytmapi_rs::auth::BrowserToken;
-use ytmapi_rs::common::{
-    AlbumID, ArtistChannelID, PlaylistID, VideoID, YoutubeID,
-};
+use ytmapi_rs::common::{AlbumID, ArtistChannelID, PlaylistID, VideoID, YoutubeID};
 use ytmapi_rs::parse::{
     AlbumSong, GetAlbum, GetArtist, GetArtistAlbums, GetArtistAlbumsAlbum, ParsedSongAlbum,
     ParsedSongArtist, PlaylistItem, SearchResultArtist, SearchResultPlaylist, SearchResultSong,
 };
-use ytmapi_rs::query::{GetAlbumQuery, GetArtistAlbumsQuery, GetArtistQuery, GetPlaylistTracksQuery};
+use ytmapi_rs::query::{
+    GetAlbumQuery, GetArtistAlbumsQuery, GetArtistQuery, GetPlaylistTracksQuery,
+};
 
 #[derive(Clone)]
 /// # Note
@@ -233,7 +231,9 @@ fn resolve_channel_id_from_search(s: &str) -> Option<ArtistChannelID<'static>> {
     let raw = s.trim();
     if raw.starts_with("UC")
         && raw.len() == 24
-        && raw.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+        && raw
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
     {
         return Some(ArtistChannelID::from_raw(raw.to_string()));
     }
@@ -256,7 +256,12 @@ fn resolve_channel_id_from_search(s: &str) -> Option<ArtistChannelID<'static>> {
 async fn search_artists(api: ConcurrentApi, text: String) -> Result<Vec<SearchResultArtist>> {
     debug!("Searching artists for {text}");
     if let Some(channel_id) = resolve_channel_id_from_search(&text) {
-        match query_api_with_retry::<GetArtistQuery<'_>, GetArtist>(&api, GetArtistQuery::new(channel_id)).await {
+        match query_api_with_retry::<GetArtistQuery<'_>, GetArtist>(
+            &api,
+            GetArtistQuery::new(channel_id),
+        )
+        .await
+        {
             Ok(artist) => {
                 debug!("Resolved channel ID to artist: {}", artist.name);
                 return Ok(vec![SearchResultArtist::new(
@@ -680,7 +685,8 @@ fn get_artist_songs(
         // Reorder by original index so albums appear in the same order as
         // browse_id_list, regardless of completion order.
         album_results.sort_by_key(|(idx, _)| *idx);
-        let mut all_albums: Vec<AlbumSongsData> = album_results.into_iter().map(|(_, a)| a).collect();
+        let mut all_albums: Vec<AlbumSongsData> =
+            album_results.into_iter().map(|(_, a)| a).collect();
         if let Some(top) = top_songs_data {
             all_albums.insert(0, top);
         }
@@ -1259,7 +1265,8 @@ mod tests {
         let playlist_items = vec![make_playlist_item("", "EMPTY_TITLE_ID")];
         resolve_omv_with_audio_playlist(&mut album_songs, &playlist_items);
 
-        // All album songs have empty titles → all should match the empty-title playlist item
+        // All album songs have empty titles → all should match the empty-title playlist
+        // item
         for song in &album_songs {
             assert_eq!(
                 song.video_id.get_raw(),

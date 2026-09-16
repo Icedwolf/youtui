@@ -1,11 +1,9 @@
 use super::{TableSortCommand, TableView, basic_constraints_to_table_constraints};
 use crate::app::ui::browser::shared_components::SortFilterTable;
 use crate::app::view::{BasicConstraint, HasTitle, ListView, Loadable};
-use crate::drawutils::centered_rect;
-use crate::drawutils::draw_text_box;
 use crate::drawutils::{
     DESELECTED_BORDER_COLOUR, ROW_HIGHLIGHT_COLOUR, SELECTED_BORDER_COLOUR, TABLE_HEADINGS_COLOUR,
-    TEXT_COLOUR,
+    TEXT_COLOUR, centered_rect, draw_text_box,
 };
 use crate::widgets::{ScrollingList, ScrollingTable, ScrollingTableState};
 use ratatui::Frame;

@@ -23,11 +23,7 @@ pub async fn main() -> Result<(), ytmapi_rs::Error> {
 ```
 "##
 )]
-use crate::{
-    Result, YtMusic,
-    auth::BrowserToken,
-    client::Client,
-};
+use crate::{Result, YtMusic, auth::BrowserToken, client::Client};
 use std::path::Path;
 
 #[derive(Default)]

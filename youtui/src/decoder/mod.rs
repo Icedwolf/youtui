@@ -1,8 +1,7 @@
-use std::sync::LazyLock;
-use std::time::Duration;
-
 use rodio::{ChannelCount, SampleRate, Source};
 use std::num::NonZero;
+use std::sync::LazyLock;
+use std::time::Duration;
 use symphonia::core::audio::{Layout, SampleBuffer, SignalSpec};
 use symphonia::core::codecs::{CODEC_TYPE_NULL, CodecRegistry, Decoder, DecoderOptions};
 use symphonia::core::errors::Error;
@@ -118,7 +117,6 @@ impl SymphoniaDecoder {
             duration,
         })
     }
-
 }
 
 impl Iterator for SymphoniaDecoder {

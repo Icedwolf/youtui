@@ -1,6 +1,5 @@
 use rat_text::HasScreenCursor;
-use rat_text::text_input::TextInput;
-use rat_text::text_input::TextInputState;
+use rat_text::text_input::{TextInput, TextInputState};
 use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Style};
@@ -19,9 +18,9 @@ pub(crate) const PROGRESS_FG_COLOUR: Color = Color::LightGreen;
 pub(crate) const TABLE_HEADINGS_COLOUR: Color = Color::LightGreen;
 pub(crate) const ROW_HIGHLIGHT_COLOUR: Color = Color::Blue;
 
-/// Upper bound (seconds) for a plausible single-song duration. A decoder duration
-/// above this is bogus (e.g. a fractional time_base mis-scaled to hours) and is
-/// rejected in favour of metadata.
+/// Upper bound (seconds) for a plausible single-song duration. A decoder
+/// duration above this is bogus (e.g. a fractional time_base mis-scaled to
+/// hours) and is rejected in favour of metadata.
 pub(crate) const MAX_PLAUSIBLE_DURATION_S: usize = 7200;
 
 /// Resolve the duration to display for a song.
@@ -29,8 +28,8 @@ pub(crate) const MAX_PLAUSIBLE_DURATION_S: usize = 7200;
 /// Prefer the decoder-reported `actual` duration, but reject nonsensical values
 /// and fall back to the API metadata (`meta_secs`): a zero duration (streamed
 /// fragmented-MP4 ALAC reports `mdhd.duration = 0`, so symphonia yields
-/// `n_frames = Some(0)`) and a bogus huge value both indicate the true length is
-/// unknown.
+/// `n_frames = Some(0)`) and a bogus huge value both indicate the true length
+/// is unknown.
 pub(crate) fn resolve_display_duration(
     actual: Option<std::time::Duration>,
     meta_secs: usize,

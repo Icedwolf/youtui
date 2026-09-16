@@ -42,10 +42,11 @@ pub struct CompactSongRef {
 #[derive(Serialize, Deserialize)]
 pub struct CompactSavedQueue {
     pub songs: Vec<CompactSongRef>,
-    /// Actual (list) index of the playing song at save time, NOT a visual index.
-    /// On load, this is used directly as `get_id_from_index(idx)` regardless of
-    /// shuffle state, and then `enable_shuffle` syncs `cur_selected`. If shuffle
-    /// was OFF at save time, this is the natural list position.
+    /// Actual (list) index of the playing song at save time, NOT a visual
+    /// index. On load, this is used directly as `get_id_from_index(idx)`
+    /// regardless of shuffle state, and then `enable_shuffle` syncs
+    /// `cur_selected`. If shuffle was OFF at save time, this is the natural
+    /// list position.
     pub current_index: Option<usize>,
     #[serde(default)]
     pub shuffle_enabled: bool,
@@ -215,7 +216,7 @@ mod criterion_benches {
     use crate::app::structures::ListSong;
     use criterion::Criterion;
     use std::hint::black_box;
-use ytmapi_rs::common::{VideoID, YoutubeID};
+    use ytmapi_rs::common::{VideoID, YoutubeID};
 
     fn big_playlist(count: usize) -> Vec<ListSong> {
         (0..count)
@@ -275,9 +276,7 @@ use ytmapi_rs::common::{VideoID, YoutubeID};
     }
 }
 
-pub fn auto_load(
-    playlist: &mut Playlist,
-) -> Result<Effects<Playlist>, Box<dyn std::error::Error>> {
+pub fn auto_load(playlist: &mut Playlist) -> Result<Effects<Playlist>, Box<dyn std::error::Error>> {
     debug!("Auto-loading queue from __autosave.json");
     match load_queue(playlist, AUTO_SAVE) {
         Ok(effect) => {
@@ -292,12 +291,12 @@ pub fn auto_load(
 }
 
 /// Read + deserialize the autosave file's compact format without touching the
-/// playlist, so the CPU-bound `serde_json` parse (~200ms for a ~19MB / 135k-song
-/// queue) can run on a blocking thread and overlap the rest of startup. Returns
-/// `None` when the file is missing, corrupt, or the legacy (`ListSong`) format —
-/// those fall back to the full synchronous `auto_load`. `CompactSavedQueue` is
-/// `Send` (unlike `ListSong`, which holds `Rc`/`MaybeRc`), so it can cross the
-/// `spawn_blocking` boundary.
+/// playlist, so the CPU-bound `serde_json` parse (~200ms for a ~19MB /
+/// 135k-song queue) can run on a blocking thread and overlap the rest of
+/// startup. Returns `None` when the file is missing, corrupt, or the legacy
+/// (`ListSong`) format — those fall back to the full synchronous `auto_load`.
+/// `CompactSavedQueue` is `Send` (unlike `ListSong`, which holds
+/// `Rc`/`MaybeRc`), so it can cross the `spawn_blocking` boundary.
 pub fn read_autosave_compact() -> anyhow::Result<Option<CompactSavedQueue>> {
     let path = get_queue_dir()
         .map_err(|e| anyhow::anyhow!("{e}"))?
@@ -375,13 +374,7 @@ mod tests {
 
         // Verify structure has only compact fields
         let keys: Vec<_> = parsed.as_object().unwrap().keys().collect();
-        let expected_keys = vec![
-            "video_id",
-            "title",
-            "artists",
-            "album",
-            "duration_string",
-        ];
+        let expected_keys = vec!["video_id", "title", "artists", "album", "duration_string"];
         for key in expected_keys {
             assert!(keys.iter().any(|k| *k == key));
         }

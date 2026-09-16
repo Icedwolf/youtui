@@ -4,6 +4,7 @@ use super::{
 use crate::common::{ContinuationParams, Explicit, SearchSuggestion, SuggestionType, TextRun};
 use crate::continuations::ParseFromContinuable;
 use crate::nav_consts::*;
+use crate::parse::{EpisodeDate, ParsedSongAlbum};
 use crate::query::search::UnfilteredSearchType;
 use crate::query::search::filteredsearch::{
     AlbumsFilter, ArtistsFilter, CommunityPlaylistsFilter, EpisodesFilter, FeaturedPlaylistsFilter,
@@ -11,14 +12,13 @@ use crate::query::search::filteredsearch::{
     SongsFilter, VideosFilter,
 };
 use crate::query::*;
-use crate::parse::{EpisodeDate, ParsedSongAlbum};
 use crate::youtube_enums::{PlaylistEndpointParams, YoutubeMusicPageType, YoutubeMusicVideoType};
 use crate::{Error, Result};
 use const_format::concatcp;
 use itertools::Itertools;
 use json_crawler::{JsonCrawler, JsonCrawlerBorrowed, JsonCrawlerIterator, JsonCrawlerOwned};
-use serde::de::IntoDeserializer;
 use serde::Deserialize;
+use serde::de::IntoDeserializer;
 
 mod types;
 pub use types::*;
@@ -810,7 +810,9 @@ impl TryFrom<FilteredSearchMusicShelfContents> for Vec<SearchResultCommunityPlay
         Ok(value
             .0
             .try_iter_mut()?
-            .filter_map(|a| parse_community_playlist_search_result_from_music_shelf_contents(a).ok())
+            .filter_map(|a| {
+                parse_community_playlist_search_result_from_music_shelf_contents(a).ok()
+            })
             .collect())
     }
 }

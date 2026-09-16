@@ -1,16 +1,14 @@
 use super::get_sort_keybinds;
 use super::shared_components::{
     BrowserSearchAction, FilterAction, FilterManager, SearchBlock, SortAction, SortFilterTable,
-    SortManager, add_song_to_playlist_impl, add_songs_to_playlist_impl,
-    play_song_impl, play_songs_impl,
+    SortManager, add_song_to_playlist_impl, add_songs_to_playlist_impl, play_song_impl,
+    play_songs_impl,
 };
 use crate::app::component::actionhandler::{
-    Action, ActionHandler, Component, KeyRouter, Scrollable, TextHandler,
-    YoutuiEffect,
+    Action, ActionHandler, Component, KeyRouter, Scrollable, TextHandler, YoutuiEffect,
 };
 use crate::app::effect::Effects;
 use crate::app::server::ArcServer;
-use std::sync::Arc;
 use crate::app::structures::{
     BrowserSongsList, ListSongDisplayableField, ListStatus, Percentage, SongListComponent,
 };
@@ -24,6 +22,7 @@ use ratatui::text::Line;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::cell::RefCell;
+use std::sync::Arc;
 use tracing::{debug, warn};
 use ytmapi_rs::parse::SearchResultSong;
 
@@ -35,7 +34,7 @@ pub struct SongSearchBrowser {
     pub search: SearchBlock,
     pub widget_state: ScrollingTableState,
     pub sort: SortManager,
-    pub     filter: FilterManager,
+    pub filter: FilterManager,
     filtered_indices: Vec<usize>,
     cached_title: RefCell<Option<(ListStatus, usize, Line<'static>)>>,
 }
@@ -100,10 +99,7 @@ impl TextHandler for SongSearchBrowser {
             InputRouting::Sort => false,
         }
     }
-    fn handle_text_event_impl(
-        &mut self,
-        event: &crossterm::event::Event,
-    ) -> Option<Effects<Self>> {
+    fn handle_text_event_impl(&mut self, event: &crossterm::event::Event) -> Option<Effects<Self>> {
         match self.input_routing {
             InputRouting::Search => self
                 .search
@@ -183,7 +179,9 @@ impl KeyRouter<AppAction> for SongSearchBrowser {
 }
 impl SongListComponent for SongSearchBrowser {
     fn get_song_from_idx(&self, idx: usize) -> Option<&crate::app::structures::ListSong> {
-        self.filtered_indices.get(idx).and_then(|&i| self.song_list.get_song_from_idx(i))
+        self.filtered_indices
+            .get(idx)
+            .and_then(|&i| self.song_list.get_song_from_idx(i))
     }
 }
 impl Loadable for SongSearchBrowser {
@@ -295,10 +293,7 @@ impl HasTitle for SongSearchBrowser {
         let title = match &self.song_list.state {
             ListStatus::New => Line::from("Songs"),
             ListStatus::Loading => Line::from("Songs - loading"),
-            ListStatus::InProgress => Line::from(format!(
-                "Songs - {} results - loading",
-                len
-            )),
+            ListStatus::InProgress => Line::from(format!("Songs - {} results - loading", len)),
             ListStatus::Loaded => {
                 if len == 0 {
                     Line::from("Songs - no songs found")
@@ -380,18 +375,25 @@ impl SongSearchBrowser {
                     Ok(songs) => Box::new(move |this: &mut SongSearchBrowser| {
                         this.replace_song_list(songs);
                         Effects::none()
-                    }) as Box<dyn FnOnce(&mut SongSearchBrowser) -> Effects<SongSearchBrowser> + Send>,
+                    })
+                        as Box<
+                            dyn FnOnce(&mut SongSearchBrowser) -> Effects<SongSearchBrowser> + Send,
+                        >,
                     Err(error) => {
                         warn!("Song search error: {error}");
                         Box::new(move |this: &mut SongSearchBrowser| {
                             this.song_list.state = ListStatus::Error;
                             Effects::none()
                         })
-                            as Box<dyn FnOnce(&mut SongSearchBrowser) -> Effects<SongSearchBrowser> + Send>
+                            as Box<
+                                dyn FnOnce(&mut SongSearchBrowser) -> Effects<SongSearchBrowser>
+                                    + Send,
+                            >
                     }
                 }
             }
-        }).kill_prev::<SongSearchBrowser>()
+        })
+        .kill_prev::<SongSearchBrowser>()
     }
     pub fn play_song(&mut self) -> impl Into<YoutuiEffect<Self>> + use<> {
         play_song_impl::<Self>(self.get_selected_item(), |idx| {
@@ -589,8 +591,7 @@ mod tests {
 
     #[test]
     fn title_cache_tracks_state_and_len() {
-        use ytmapi_rs::common::VideoID;
-        use ytmapi_rs::common::YoutubeID;
+        use ytmapi_rs::common::{VideoID, YoutubeID};
         let mut browser = SongSearchBrowser::new();
         assert_eq!(browser.get_title().to_string(), "Songs");
         // Same call twice returns the cached clone.
@@ -611,6 +612,3 @@ mod tests {
         assert_eq!(browser.get_title().to_string(), "Songs - 1 results");
     }
 }
-
-
-

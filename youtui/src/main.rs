@@ -37,14 +37,23 @@ pub(crate) fn detect_browser_source() -> Option<String> {
     }
     let ff_paths = [
         home.join(".mozilla").join("firefox").join("profiles.ini"),
-        home.join(".config").join("mozilla").join("firefox").join("profiles.ini"),
+        home.join(".config")
+            .join("mozilla")
+            .join("firefox")
+            .join("profiles.ini"),
     ];
     for ff_path in &ff_paths {
         if ff_path.exists() {
             return Some("firefox".to_string());
         }
     }
-    if home.join(".config").join("chromium").join("Default").join("Cookies").exists() {
+    if home
+        .join(".config")
+        .join("chromium")
+        .join("Default")
+        .join("Cookies")
+        .exists()
+    {
         return Some("chromium".to_string());
     }
     None
@@ -451,7 +460,8 @@ pub(crate) async fn run_app(rt: RuntimeInfo) -> anyhow::Result<()> {
 }
 
 /// Returns the data directory path. Override with `YOUTUI_DATA_DIR` env var.
-/// Defaults to the OS‑specific data directory (e.g. `~/.local/share/youtui` on Linux).
+/// Defaults to the OS‑specific data directory (e.g. `~/.local/share/youtui` on
+/// Linux).
 pub(crate) fn get_data_dir() -> anyhow::Result<PathBuf> {
     let directory = if let Ok(s) = std::env::var("YOUTUI_DATA_DIR") {
         PathBuf::from(s)
@@ -463,8 +473,9 @@ pub(crate) fn get_data_dir() -> anyhow::Result<PathBuf> {
     Ok(directory)
 }
 
-/// Returns the config directory path. Override with `YOUTUI_CONFIG_DIR` env var.
-/// Defaults to the OS‑specific config directory (e.g. `~/.config/youtui` on Linux).
+/// Returns the config directory path. Override with `YOUTUI_CONFIG_DIR` env
+/// var. Defaults to the OS‑specific config directory (e.g. `~/.config/youtui`
+/// on Linux).
 pub(crate) fn get_config_dir() -> anyhow::Result<PathBuf> {
     let directory = if let Ok(s) = std::env::var("YOUTUI_CONFIG_DIR") {
         PathBuf::from(s)
@@ -488,22 +499,19 @@ fn load_pot_provider() -> Option<app::PotProvider> {
     let plugin = plugin_dir
         .join("bgutil-ytdlp-pot-provider")
         .join("yt_dlp_plugins");
-    let executable = std::fs::metadata(&cli)
-        .ok()
-        .is_some_and(|metadata| {
-            metadata.is_file()
-                && {
-                    #[cfg(unix)]
-                    {
-                        use std::os::unix::fs::PermissionsExt;
-                        metadata.permissions().mode() & 0o111 != 0
-                    }
-                    #[cfg(not(unix))]
-                    {
-                        true
-                    }
-                }
-        });
+    let executable = std::fs::metadata(&cli).ok().is_some_and(|metadata| {
+        metadata.is_file() && {
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                metadata.permissions().mode() & 0o111 != 0
+            }
+            #[cfg(not(unix))]
+            {
+                true
+            }
+        }
+    });
     if plugin.is_dir() && executable {
         Some(app::PotProvider { plugin_dir, cli })
     } else {

@@ -1,5 +1,5 @@
-use crate::config::Config;
 use self::song_downloader::resolve::{PotProvider, is_nonempty_cookie_file};
+use crate::config::Config;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -273,25 +273,38 @@ Cookie: SAPISID=from_header";
 
     #[test]
     fn exported_cookie_file_preferred_over_api_key() {
-        let path = std::env::temp_dir().join(format!("youtui_cookie_hdr_{}.txt", std::process::id()));
-        std::fs::write(&path, ".youtube.com\tTRUE\t/\tTRUE\t1735689600\tSAPISID\tfrom_export\n")
-            .expect("write exported cookies");
+        let path =
+            std::env::temp_dir().join(format!("youtui_cookie_hdr_{}.txt", std::process::id()));
+        std::fs::write(
+            &path,
+            ".youtube.com\tTRUE\t/\tTRUE\t1735689600\tSAPISID\tfrom_export\n",
+        )
+        .expect("write exported cookies");
         let api_key = ApiKey::BrowserToken("SAPISID=from_manual".into());
 
         // Non-empty exported file must win over the manual api_key header.
         let header = resolve_cookie_header(Some(&path), &api_key).unwrap();
-        assert!(header.contains("SAPISID=from_export"), "exported cookies must win");
+        assert!(
+            header.contains("SAPISID=from_export"),
+            "exported cookies must win"
+        );
 
         // Empty export -> fall back to the manual header.
         std::fs::write(&path, b"").expect("write empty cookies");
         let header = resolve_cookie_header(Some(&path), &api_key).unwrap();
-        assert!(header.contains("SAPISID=from_manual"), "empty export must fall back");
+        assert!(
+            header.contains("SAPISID=from_manual"),
+            "empty export must fall back"
+        );
 
         // Missing export -> fall back to the manual header.
         let missing = std::env::temp_dir().join("youtui_missing_cookie_hdr.txt");
         let _ = std::fs::remove_file(&missing);
         let header = resolve_cookie_header(Some(&missing), &api_key).unwrap();
-        assert!(header.contains("SAPISID=from_manual"), "missing export must fall back");
+        assert!(
+            header.contains("SAPISID=from_manual"),
+            "missing export must fall back"
+        );
 
         std::fs::remove_file(&path).ok();
         std::fs::remove_file(&missing).ok();
@@ -299,7 +312,8 @@ Cookie: SAPISID=from_header";
 
     #[test]
     fn exported_guest_cookies_fall_back_to_manual() {
-        let path = std::env::temp_dir().join(format!("youtui_cookie_guest_{}.txt", std::process::id()));
+        let path =
+            std::env::temp_dir().join(format!("youtui_cookie_guest_{}.txt", std::process::id()));
         // Guest-only cookies: no SID/APISID family -> not a real login.
         std::fs::write(
             &path,

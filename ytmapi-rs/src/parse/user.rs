@@ -2,9 +2,9 @@ use super::ParseFrom;
 use crate::Result;
 use crate::common::{PlaylistID, UserPlaylistsParams, UserVideosParams, VideoID};
 use crate::nav_consts::{
-    CAROUSEL, CAROUSEL_TITLE, GRID_ITEMS, MTRIR, NAVIGATION_BROWSE,
-    NAVIGATION_BROWSE_ID, NAVIGATION_VIDEO_ID, SECTION_LIST, SECTION_LIST_ITEM, SINGLE_COLUMN_TAB,
-    SUBTITLE2, SUBTITLE3, TITLE_TEXT, VISUAL_HEADER,
+    CAROUSEL, CAROUSEL_TITLE, GRID_ITEMS, MTRIR, NAVIGATION_BROWSE, NAVIGATION_BROWSE_ID,
+    NAVIGATION_VIDEO_ID, SECTION_LIST, SECTION_LIST_ITEM, SINGLE_COLUMN_TAB, SUBTITLE2, SUBTITLE3,
+    TITLE_TEXT, VISUAL_HEADER,
 };
 use crate::query::{GetUserPlaylistsQuery, GetUserQuery, GetUserVideosQuery};
 use const_format::concatcp;
@@ -119,22 +119,14 @@ fn parse_user_video(c: impl JsonCrawler) -> Result<UserVideo> {
     let title = item.take_value_pointer(TITLE_TEXT)?;
     let views = item.take_value_pointer(SUBTITLE2)?;
     let id = item.take_value_pointer(NAVIGATION_VIDEO_ID)?;
-    Ok(UserVideo {
-        title,
-        views,
-        id,
-    })
+    Ok(UserVideo { title, views, id })
 }
 fn parse_user_playlist(c: impl JsonCrawler) -> Result<UserPlaylist> {
     let mut item = c.navigate_pointer(MTRIR)?;
     let title = item.take_value_pointer(TITLE_TEXT)?;
     let views = item.take_value_pointer(SUBTITLE3)?;
     let id = item.take_value_pointer(NAVIGATION_BROWSE_ID)?;
-    Ok(UserPlaylist {
-        title,
-        views,
-        id,
-    })
+    Ok(UserPlaylist { title, views, id })
 }
 
 #[cfg(test)]

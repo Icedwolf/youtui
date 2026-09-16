@@ -1,5 +1,5 @@
-use crate::app::effect::Effects;
 use crate::app::AppCallback;
+use crate::app::effect::Effects;
 use crate::config::Config;
 use crate::config::keymap::{KeyActionTree, Keymap};
 use crate::keyaction::{DisplayableKeyAction, KeyAction, KeyActionVisibility};
@@ -118,10 +118,7 @@ pub trait TextHandler: Component {
     fn get_text(&self) -> Option<&str>;
     fn clear_text(&mut self) -> bool;
     fn is_text_handling(&self) -> bool;
-    fn handle_text_event_impl(
-        &mut self,
-        event: &Event,
-    ) -> Option<Effects<Self>>
+    fn handle_text_event_impl(&mut self, event: &Event) -> Option<Effects<Self>>
     where
         Self: Sized;
     fn try_handle_text(&mut self, event: &Event) -> Option<Effects<Self>>

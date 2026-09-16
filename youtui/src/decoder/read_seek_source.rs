@@ -1,5 +1,4 @@
 use std::io::{Read, Result, Seek, SeekFrom};
-
 use symphonia::core::io::MediaSource;
 
 /// A read source that reports itself as seekable (or not) with an optional
@@ -18,11 +17,19 @@ pub struct ReadSeekSource<T: Read + Seek + Send + Sync> {
 
 impl<T: Read + Seek + Send + Sync> ReadSeekSource<T> {
     pub fn new(inner: T, length: Option<u64>) -> Self {
-        ReadSeekSource { inner, seekable: true, length }
+        ReadSeekSource {
+            inner,
+            seekable: true,
+            length,
+        }
     }
 
     pub fn nonseekable(inner: T) -> Self {
-        ReadSeekSource { inner, seekable: false, length: None }
+        ReadSeekSource {
+            inner,
+            seekable: false,
+            length: None,
+        }
     }
 }
 

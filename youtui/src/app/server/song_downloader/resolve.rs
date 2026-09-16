@@ -87,7 +87,8 @@ pub fn apply_ytdlp_auth_args(
                 .arg(format!("youtube:skip={skip}"));
         }
     } else {
-        cmd.arg("--extractor-args").arg(format!("youtube:skip={skip}"));
+        cmd.arg("--extractor-args")
+            .arg(format!("youtube:skip={skip}"));
     }
     // Always use --add-header Cookie: instead of --cookies <file>. The
     // historical --cookies "tv downgraded" m3u8-only regression (yt-dlp reading
@@ -122,8 +123,14 @@ mod tests {
         std::fs::write(&empty, b"").expect("write empty cookie file");
         std::fs::write(&full, b"# Netscape HTTP Cookie File\n").expect("write cookie file");
 
-        assert!(!is_nonempty_cookie_file(&empty), "empty file must be rejected");
-        assert!(!is_nonempty_cookie_file(&missing), "missing file must be rejected");
+        assert!(
+            !is_nonempty_cookie_file(&empty),
+            "empty file must be rejected"
+        );
+        assert!(
+            !is_nonempty_cookie_file(&missing),
+            "missing file must be rejected"
+        );
         assert!(is_nonempty_cookie_file(&full), "non-empty file must pass");
 
         std::fs::remove_file(&empty).ok();
@@ -211,13 +218,7 @@ mod tests {
     fn ytdlp_args_always_ignore_global_config() {
         use tokio::process::Command;
         let mut cmd = Command::new("yt-dlp");
-        apply_ytdlp_auth_args(
-            &mut cmd,
-            None,
-            Some("cookie=header"),
-            "dQw4w9WgXcQ",
-            false,
-        );
+        apply_ytdlp_auth_args(&mut cmd, None, Some("cookie=header"), "dQw4w9WgXcQ", false);
         let args: Vec<String> = cmd
             .as_std()
             .get_args()
@@ -244,13 +245,7 @@ mod tests {
         };
 
         let mut cmd = Command::new("yt-dlp");
-        apply_ytdlp_auth_args(
-            &mut cmd,
-            Some(&provider),
-            None,
-            "web-music-vid",
-            false,
-        );
+        apply_ytdlp_auth_args(&mut cmd, Some(&provider), None, "web-music-vid", false);
         let args: Vec<String> = cmd
             .as_std()
             .get_args()
@@ -332,11 +327,14 @@ mod tests {
             .map(|w| &w[1])
             .collect();
         assert!(
-            args.windows(2).any(|w| w[0] == "--plugin-dirs" && w[1] == "/plugins"),
+            args.windows(2)
+                .any(|w| w[0] == "--plugin-dirs" && w[1] == "/plugins"),
             "client fallback must configure the plugin directory: {args:?}"
         );
         assert!(
-            extractors.iter().any(|e| e.contains("player_client=web_music")),
+            extractors
+                .iter()
+                .any(|e| e.contains("player_client=web_music")),
             "client fallback must force web_music: {args:?}"
         );
         assert!(

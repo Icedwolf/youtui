@@ -481,10 +481,9 @@ mod tests {
     #[test]
     fn start_playback_from_stopped_pushes() {
         let mut current = souvlaki::MediaPlayback::Stopped;
-        let pushed =
-            MediaController::update_progress(&mut current, true, Duration::ZERO, |p| {
-                souvlaki::MediaPlayback::Playing { progress: p }
-            });
+        let pushed = MediaController::update_progress(&mut current, true, Duration::ZERO, |p| {
+            souvlaki::MediaPlayback::Playing { progress: p }
+        });
         assert!(pushed);
         assert_eq!(
             current,
@@ -502,8 +501,8 @@ mod tests {
     }
 
     /// Zero-cost compile-time check: NotificationController type exists and is
-    /// a field of MediaController. Neither function is ever called — they're only
-    /// referenced for type-checking.
+    /// a field of MediaController. Neither function is ever called — they're
+    /// only referenced for type-checking.
     #[test]
     fn notification_type_and_field_are_present() {
         fn _type(_: &NotificationController) {}

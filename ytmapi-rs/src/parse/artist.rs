@@ -1,7 +1,7 @@
 use super::search::SearchResultVideo;
 use super::{
-    ParseFrom, ParsedSongAlbum, ParsedSongArtist, ProcessedResult,
-    parse_flex_column_item, parse_song_album, parse_song_artists,
+    ParseFrom, ParsedSongAlbum, ParsedSongArtist, ProcessedResult, parse_flex_column_item,
+    parse_song_album, parse_song_artists,
 };
 use crate::Result;
 use crate::common::{
@@ -61,8 +61,7 @@ impl<'a> ParseFrom<GetArtistQuery<'a>> for GetArtist {
                         .take_value_pointer(concatcp!("/subheader", RUN_TEXT))
                         .ok()
                 });
-                let top_releases =
-                    parse_artist_top_releases_from_section_list_contents(results)?;
+                let top_releases = parse_artist_top_releases_from_section_list_contents(results)?;
                 (description, views, top_releases)
             }
             Err(_) => (None, None, GetArtistTopReleases::default()),
@@ -265,7 +264,8 @@ fn parse_artist_song(mut json: impl JsonCrawler) -> Result<ArtistSong> {
     })
 }
 fn parse_artist_songs(mut json: impl JsonCrawler) -> Result<GetArtistSongs> {
-    let browse_id = json.take_value_pointer(concatcp!(TITLE, NAVIGATION_BROWSE_ID))
+    let browse_id = json
+        .take_value_pointer(concatcp!(TITLE, NAVIGATION_BROWSE_ID))
         .unwrap_or_else(|_| PlaylistID::from_raw(""));
     let results = json
         .borrow_pointer("/contents")?
@@ -309,7 +309,11 @@ fn parse_artist_top_releases_from_section_list_contents(
                 let results = r
                     .navigate_pointer("/contents")?
                     .try_iter_mut()?
-                    .filter_map(|i| i.navigate_pointer(MTRIR).ok().and_then(|m| parse_album_from_mtrir(m).ok()))
+                    .filter_map(|i| {
+                        i.navigate_pointer(MTRIR)
+                            .ok()
+                            .and_then(|m| parse_album_from_mtrir(m).ok())
+                    })
                     .collect();
                 singles = Some(GetArtistAlbums {
                     browse_id,
@@ -321,7 +325,11 @@ fn parse_artist_top_releases_from_section_list_contents(
                 let results = r
                     .navigate_pointer("/contents")?
                     .try_iter_mut()?
-                    .filter_map(|i| i.navigate_pointer(MTRIR).ok().and_then(|m| parse_album_from_mtrir(m).ok()))
+                    .filter_map(|i| {
+                        i.navigate_pointer(MTRIR)
+                            .ok()
+                            .and_then(|m| parse_album_from_mtrir(m).ok())
+                    })
                     .collect();
                 albums = Some(GetArtistAlbums {
                     browse_id,
@@ -602,20 +610,21 @@ mod tests {
             match value {
                 serde_json::Value::Object(map) => {
                     for (key, child) in map.iter_mut() {
-if let Some(list) = targets
-                        .iter()
-                        .find(|(rk, _)| *rk == key)
-                        .and_then(|(_, array_key)| {
-                            child
-                                .get_mut(*array_key)
-                                .and_then(serde_json::Value::as_array_mut)
-                        })
-                    {
-                        list.push(serde_json::json!({
-                            "musicResponsiveListItemRenderer": {},
-                            "musicTwoRowItemRenderer": {}
-                        }));
-                    }
+                        if let Some(list) =
+                            targets
+                                .iter()
+                                .find(|(rk, _)| *rk == key)
+                                .and_then(|(_, array_key)| {
+                                    child
+                                        .get_mut(*array_key)
+                                        .and_then(serde_json::Value::as_array_mut)
+                                })
+                        {
+                            list.push(serde_json::json!({
+                                "musicResponsiveListItemRenderer": {},
+                                "musicTwoRowItemRenderer": {}
+                            }));
+                        }
                         walk(child, targets);
                     }
                 }
@@ -645,7 +654,10 @@ if let Some(list) = targets
             .unwrap();
         let source = inject_junk_into_lists(
             &source,
-            &[("musicShelfRenderer", "contents"), ("musicCarouselShelfRenderer", "contents")],
+            &[
+                ("musicShelfRenderer", "contents"),
+                ("musicCarouselShelfRenderer", "contents"),
+            ],
         );
         let parsed: crate::parse::GetArtist = process_json::<_, BrowserToken>(
             source,

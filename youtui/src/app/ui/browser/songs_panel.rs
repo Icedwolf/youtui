@@ -1,15 +1,11 @@
-use crate::app::component::actionhandler::{
-    Action, KeyRouter, Scrollable, TextHandler,
-};
+use crate::app::component::actionhandler::{Action, KeyRouter, Scrollable, TextHandler};
 use crate::app::effect::Effects;
 use crate::app::structures::{
     BrowserSongsList, ListSong, ListSongDisplayableField, ListStatus, Percentage, SongListComponent,
 };
 use crate::app::ui::action::AppAction;
 use crate::app::ui::browser::get_sort_keybinds;
-use crate::app::ui::browser::shared_components::{
-    FilterManager, SortFilterTable, SortManager,
-};
+use crate::app::ui::browser::shared_components::{FilterManager, SortFilterTable, SortManager};
 use crate::app::view::{AdvancedTableView, BasicConstraint, HasTitle, Loadable, TableView};
 use crate::config::Config;
 use crate::config::keymap::Keymap;
@@ -90,10 +86,7 @@ impl<C: SongsPanelConfig> TextHandler for SongsPanel<C> {
     fn clear_text(&mut self) -> bool {
         self.filter.clear_text()
     }
-    fn handle_text_event_impl(
-        &mut self,
-        event: &crossterm::event::Event,
-    ) -> Option<Effects<Self>> {
+    fn handle_text_event_impl(&mut self, event: &crossterm::event::Event) -> Option<Effects<Self>> {
         self.filter
             .handle_text_event_impl(event)
             .map(|effect| effect.map(|this: &mut SongsPanel<C>| &mut this.filter))
@@ -353,7 +346,9 @@ define_browser_songs_action!(
 mod tests {
     use super::*;
     use crate::app::structures::ListSong;
-    use crate::app::view::{Filter, FilterString, SortDirection, TableFilterCommand, TableSortCommand};
+    use crate::app::view::{
+        Filter, FilterString, SortDirection, TableFilterCommand, TableSortCommand,
+    };
     use ytmapi_rs::common::{VideoID, YoutubeID};
 
     fn song_for(video_id: &str, title: &str, album: &str) -> ListSong {
@@ -374,7 +369,9 @@ mod tests {
 
     fn album_filter(text: &str) -> TableFilterCommand {
         // ArtistSongsConfig filterable_columns are &[1, 2, 4] -> Album/Song/Year.
-        TableFilterCommand::All(Filter::Contains(FilterString::case_insensitive(text.into())))
+        TableFilterCommand::All(Filter::Contains(FilterString::case_insensitive(
+            text.into(),
+        )))
     }
 
     #[test]

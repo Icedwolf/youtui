@@ -1,13 +1,11 @@
-use std::collections::{HashMap, VecDeque};
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, LazyLock, Mutex};
-
-use symphonia::core::io::MediaSourceStream;
-use tracing::debug;
-
 use crate::core::PoisonRecovery;
 use crate::decoder::SymphoniaDecoder;
 use crate::decoder::read_seek_source::ReadSeekSource;
+use std::collections::{HashMap, VecDeque};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, LazyLock, Mutex};
+use symphonia::core::io::MediaSourceStream;
+use tracing::debug;
 
 pub(crate) static CACHE_MAX_ENTRIES: AtomicUsize = AtomicUsize::new(1);
 

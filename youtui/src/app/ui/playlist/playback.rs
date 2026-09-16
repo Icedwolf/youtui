@@ -191,29 +191,23 @@ Re-log into your browser, or check your cookie file / PO-token provider, then re
                 .map(|d| Box::new(d) as Box<dyn Source<Item = f32> + Send + 'static>);
 
             if let Some(decoder) = cache_decoder {
-                let task = Effects::new_stream(
-                    move |server: &crate::app::server::ArcServer| {
-                        playback_stream(Arc::clone(server), id, decoder)
-                    }
-                );
+                let task = Effects::new_stream(move |server: &crate::app::server::ArcServer| {
+                    playback_stream(Arc::clone(server), id, decoder)
+                });
                 effect = effect.push(task);
             } else if let Some(preloaded) = self.preloaded_sources.remove(&id) {
-                let task = Effects::new_stream(
-                    move |server: &crate::app::server::ArcServer| {
-                        playback_stream(Arc::clone(server), id, preloaded)
-                    }
-                );
+                let task = Effects::new_stream(move |server: &crate::app::server::ArcServer| {
+                    playback_stream(Arc::clone(server), id, preloaded)
+                });
                 effect = effect.push(task);
             } else {
-                effect = effect.push(
-                    Effects::new(|server: &crate::app::server::ArcServer| {
-                        server.player.stop();
-                        async move {
-                            Box::new(|_: &mut Playlist| Effects::none())
-                                as Box<dyn FnOnce(&mut Playlist) -> Effects<Playlist> + Send>
-                        }
-                    })
-                );
+                effect = effect.push(Effects::new(|server: &crate::app::server::ArcServer| {
+                    server.player.stop();
+                    async move {
+                        Box::new(|_: &mut Playlist| Effects::none())
+                            as Box<dyn FnOnce(&mut Playlist) -> Effects<Playlist> + Send>
+                    }
+                }));
                 effect = effect.push(self.download_song(id));
             }
         } else {
@@ -253,11 +247,7 @@ Re-log into your browser, or check your cookie file / PO-token provider, then re
         if let (Some(_current_id), Some(playing_idx)) =
             (self.get_cur_playing_id(), self.get_cur_playing_index())
         {
-            if let Some(shuffled_pos) =
-                self.shuffle_visual_map
-                    .get(playing_idx)
-                    .copied()
-                    .flatten()
+            if let Some(shuffled_pos) = self.shuffle_visual_map.get(playing_idx).copied().flatten()
             {
                 self.cur_selected = shuffled_pos;
             }
@@ -286,7 +276,7 @@ Re-log into your browser, or check your cookie file / PO-token provider, then re
     pub fn play_prev(&mut self) -> Effects<Self> {
         let cur = &self.play_status;
         match cur {
-            PlayState::NotPlaying  => {
+            PlayState::NotPlaying => {
                 debug!("play_prev: stopped, jumping to last song");
                 let last_visual = self.get_max_visual_index();
                 let last_actual = self.visual_to_actual_index(last_visual);
@@ -327,10 +317,7 @@ Re-log into your browser, or check your cookie file / PO-token provider, then re
         self.volume.0 = new_vol.clamp(0, 100);
     }
 
-    pub fn push_song_list(
-        &mut self,
-        song_list: Vec<ListSong>,
-    ) -> (ListSongID, Effects<Self>) {
+    pub fn push_song_list(&mut self, song_list: Vec<ListSong>) -> (ListSongID, Effects<Self>) {
         let was_playing = self.get_cur_playing_id();
         let first_id = self.list.push_song_list(song_list);
         self.rebuild_id_cache();
@@ -338,9 +325,7 @@ Re-log into your browser, or check your cookie file / PO-token provider, then re
         if self.shuffle_enabled {
             self.generate_shuffle_indices();
 
-            if let (_, Some(playing_idx)) =
-                (was_playing, self.get_cur_playing_index())
-            {
+            if let (_, Some(playing_idx)) = (was_playing, self.get_cur_playing_index()) {
                 if let Some(shuffled_pos) =
                     self.shuffle_indices.iter().position(|&i| i == playing_idx)
                 {
@@ -379,14 +364,10 @@ Re-log into your browser, or check your cookie file / PO-token provider, then re
         0
     }
 
-    fn play_next_inner(
-        &mut self,
-        prev_id: ListSongID,
-        no_next_msg: &str,
-    ) -> Effects<Self> {
+    fn play_next_inner(&mut self, prev_id: ListSongID, no_next_msg: &str) -> Effects<Self> {
         let current_id = self.get_cur_playing_id();
         match &self.play_status {
-            PlayState::NotPlaying  => {
+            PlayState::NotPlaying => {
                 debug!("Asked to play next, but not currently playing");
                 Effects::none()
             }
@@ -553,9 +534,10 @@ Re-log into your browser, or check your cookie file / PO-token provider, then re
     pub(crate) fn settle_window_for(&self) -> u64 {
         let has_live_download = !self.active_downloads.lock().unwrap_or_warn().is_empty();
         let recent_trigger = self.last_download_trigger.is_some_and(|t| {
-            t.elapsed() <= std::time::Duration::from_millis(
-                crate::app::server::song_downloader::RESOLVE_SETTLE_MS,
-            )
+            t.elapsed()
+                <= std::time::Duration::from_millis(
+                    crate::app::server::song_downloader::RESOLVE_SETTLE_MS,
+                )
         });
         if has_live_download || recent_trigger {
             crate::app::server::song_downloader::RESOLVE_SETTLE_MS
@@ -623,13 +605,19 @@ Re-log into your browser, or check your cookie file / PO-token provider, then re
             }
             DownloadStatus::None => {}
             DownloadStatus::Queued => {
-                debug!("download_song: {} queued — proceeding with download", video_id);
+                debug!(
+                    "download_song: {} queued — proceeding with download",
+                    video_id
+                );
             }
             DownloadStatus::Downloaded => {
                 // A replay after the 1-entry cache evicted this song: play_song
                 // only reaches download_song on a cache miss, so a Downloaded
                 // song here is the designed re-select → re-download path.
-                debug!("download_song: {} already downloaded — re-downloading", video_id);
+                debug!(
+                    "download_song: {} already downloaded — re-downloading",
+                    video_id
+                );
             }
         };
 
@@ -637,7 +625,10 @@ Re-log into your browser, or check your cookie file / PO-token provider, then re
         let cancel_token_for_stream = cancel_token.clone();
 
         let mut downloads = self.active_downloads.lock().unwrap_or_warn();
-        if downloads.iter().any(|(sid, task)| *sid == id && !task.cancel_token.is_cancelled()) {
+        if downloads
+            .iter()
+            .any(|(sid, task)| *sid == id && !task.cancel_token.is_cancelled())
+        {
             if matches!(song.download_status, DownloadStatus::Queued) {
                 debug!(
                     "download_song: {} already queued with active download",
@@ -662,73 +653,73 @@ Re-log into your browser, or check your cookie file / PO-token provider, then re
 
         debug!("download_song: starting download for {}", video_id);
 
-        let effect = Effects::new_stream(
-            move |server: &crate::app::server::ArcServer| {
-                let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
-                let yt_cmd = server.config.yt_dlp_command.clone();
-                let pot_provider = server.pot_provider.clone();
-                let cp = server.cookie_path.clone();
-                let ch = server.cookie_header.clone();
-                let vid = video_id.clone();
-                let song_id = id;
+        let effect = Effects::new_stream(move |server: &crate::app::server::ArcServer| {
+            let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+            let yt_cmd = server.config.yt_dlp_command.clone();
+            let pot_provider = server.pot_provider.clone();
+            let cp = server.cookie_path.clone();
+            let ch = server.cookie_header.clone();
+            let vid = video_id.clone();
+            let song_id = id;
 
-                tokio::spawn(async move {
-                    let emit: MutationFn<Playlist> = Box::new(move |this: &mut Playlist| {
-                        this.handle_song_download_progress_update(
-                            DownloadProgressUpdate::Downloading, song_id,
-                        )
-                    });
-                    let _ = tx.send(emit);
-
-                    let result = std::panic::AssertUnwindSafe(
-                        download_and_decode(crate::app::server::song_downloader::DownloadConfig {
-                            yt_dlp_command: yt_cmd,
-                            video_id: vid,
-                            pot_provider,
-                            cookie_path: cp,
-                            cookie_header: ch,
-                            cancel_token: (*cancel_token_for_stream).clone(),
-                            settle_window_ms,
-                        }),
+            tokio::spawn(async move {
+                let emit: MutationFn<Playlist> = Box::new(move |this: &mut Playlist| {
+                    this.handle_song_download_progress_update(
+                        DownloadProgressUpdate::Downloading,
+                        song_id,
                     )
-                    .catch_unwind()
-                    .await;
-
-                    let emit: MutationFn<Playlist> = match result {
-                        Ok(Ok(decoder)) => {
-                            let decoder = Box::new(decoder)
-                                as Box<dyn Source<Item = f32> + Send>;
-                            Box::new(move |this: &mut Playlist| {
-                                this.handle_song_download_progress_update(
-                                    DownloadProgressUpdate::Completed(decoder), song_id,
-                                )
-                            })
-                        }
-                        Ok(Err(e)) => {
-                            let err = format!("{:#}", e);
-                            Box::new(move |this: &mut Playlist| {
-                                this.handle_song_download_progress_update(
-                                    DownloadProgressUpdate::Error(err), song_id,
-                                )
-                            })
-                        }
-                        Err(panic) => {
-                            let msg = crate::core::panic_message(&panic);
-                            error!("download_and_decode panicked: {msg}");
-                            Box::new(move |this: &mut Playlist| {
-                                this.handle_song_download_progress_update(
-                                    DownloadProgressUpdate::Error(format!("download panicked: {msg}")),
-                                    song_id,
-                                )
-                            })
-                        }
-                    };
-                    let _ = tx.send(emit);
                 });
+                let _ = tx.send(emit);
 
-                UnboundedReceiverStream::new(rx)
-            }
-        );
+                let result = std::panic::AssertUnwindSafe(download_and_decode(
+                    crate::app::server::song_downloader::DownloadConfig {
+                        yt_dlp_command: yt_cmd,
+                        video_id: vid,
+                        pot_provider,
+                        cookie_path: cp,
+                        cookie_header: ch,
+                        cancel_token: (*cancel_token_for_stream).clone(),
+                        settle_window_ms,
+                    },
+                ))
+                .catch_unwind()
+                .await;
+
+                let emit: MutationFn<Playlist> = match result {
+                    Ok(Ok(decoder)) => {
+                        let decoder = Box::new(decoder) as Box<dyn Source<Item = f32> + Send>;
+                        Box::new(move |this: &mut Playlist| {
+                            this.handle_song_download_progress_update(
+                                DownloadProgressUpdate::Completed(decoder),
+                                song_id,
+                            )
+                        })
+                    }
+                    Ok(Err(e)) => {
+                        let err = format!("{:#}", e);
+                        Box::new(move |this: &mut Playlist| {
+                            this.handle_song_download_progress_update(
+                                DownloadProgressUpdate::Error(err),
+                                song_id,
+                            )
+                        })
+                    }
+                    Err(panic) => {
+                        let msg = crate::core::panic_message(&panic);
+                        error!("download_and_decode panicked: {msg}");
+                        Box::new(move |this: &mut Playlist| {
+                            this.handle_song_download_progress_update(
+                                DownloadProgressUpdate::Error(format!("download panicked: {msg}")),
+                                song_id,
+                            )
+                        })
+                    }
+                };
+                let _ = tx.send(emit);
+            });
+
+            UnboundedReceiverStream::new(rx)
+        });
 
         downloads.push((id, DownloadTask { cancel_token }));
 
@@ -785,7 +776,7 @@ Re-log into your browser, or check your cookie file / PO-token provider, then re
             | PlayState::Playing(id)
             | PlayState::Paused(id)
             | PlayState::Buffering(id) => Some(id),
-            PlayState::NotPlaying  => None,
+            PlayState::NotPlaying => None,
         }
     }
 
@@ -809,7 +800,7 @@ Re-log into your browser, or check your cookie file / PO-token provider, then re
             PlayState::Buffering(_) => '',
             PlayState::Paused(_) => '',
             PlayState::Error(_) => '',
-            PlayState::NotPlaying  => '',
+            PlayState::NotPlaying => '',
         }
     }
 
@@ -871,7 +862,7 @@ impl Playlist {
 
     pub fn handle_next(&mut self) -> Effects<Self> {
         match self.play_status {
-            PlayState::NotPlaying  => {
+            PlayState::NotPlaying => {
                 debug!("Asked to play next, but not currently playing");
                 Effects::none()
             }
@@ -902,7 +893,8 @@ impl Playlist {
         Effects::new(|server: &crate::app::server::ArcServer| {
             server.player.pause();
             async move {
-                Box::new(|_: &mut Playlist| Effects::none()) as Box<dyn FnOnce(&mut Playlist) -> Effects<Playlist> + Send>
+                Box::new(|_: &mut Playlist| Effects::none())
+                    as Box<dyn FnOnce(&mut Playlist) -> Effects<Playlist> + Send>
             }
         })
     }
@@ -919,7 +911,8 @@ impl Playlist {
         Effects::new(|server: &crate::app::server::ArcServer| {
             server.player.pause();
             async move {
-                Box::new(|_: &mut Playlist| Effects::none()) as Box<dyn FnOnce(&mut Playlist) -> Effects<Playlist> + Send>
+                Box::new(|_: &mut Playlist| Effects::none())
+                    as Box<dyn FnOnce(&mut Playlist) -> Effects<Playlist> + Send>
             }
         })
     }
@@ -936,7 +929,8 @@ impl Playlist {
         Effects::new(|server: &crate::app::server::ArcServer| {
             server.player.pause();
             async move {
-                Box::new(|_: &mut Playlist| Effects::none()) as Box<dyn FnOnce(&mut Playlist) -> Effects<Playlist> + Send>
+                Box::new(|_: &mut Playlist| Effects::none())
+                    as Box<dyn FnOnce(&mut Playlist) -> Effects<Playlist> + Send>
             }
         })
     }
@@ -1030,7 +1024,7 @@ impl Playlist {
         return_task
     }
 
-fn cancel_song_download(&self, id: ListSongID) {
+    fn cancel_song_download(&self, id: ListSongID) {
         let token = {
             let mut downloads = self.active_downloads.lock().unwrap_or_warn();
             let pos = downloads.iter().position(|(song_id, _)| *song_id == id);
@@ -1189,19 +1183,11 @@ fn cancel_song_download(&self, id: ListSongID) {
 
     pub(super) fn actual_to_visual_index(&self, actual_index: usize) -> Option<usize> {
         if !self.search_text.is_empty() {
-            return self
-                .search_visual_map
-                .get(actual_index)
-                .copied()
-                .flatten();
+            return self.search_visual_map.get(actual_index).copied().flatten();
         }
 
         if self.shuffle_enabled && !self.shuffle_indices.is_empty() {
-            return self
-                .shuffle_visual_map
-                .get(actual_index)
-                .copied()
-                .flatten();
+            return self.shuffle_visual_map.get(actual_index).copied().flatten();
         }
 
         Some(actual_index)
@@ -1448,11 +1434,10 @@ fn cancel_song_download(&self, id: ListSongID) {
                             start.elapsed().as_millis()
                         );
                     }
-                    let task = Effects::new_stream(
-                        move |server: &crate::app::server::ArcServer| {
+                    let task =
+                        Effects::new_stream(move |server: &crate::app::server::ArcServer| {
                             playback_stream(Arc::clone(server), id, decoder)
-                        }
-                    );
+                        });
                     effect = effect.push(task);
                 } else {
                     debug!(
@@ -1502,9 +1487,8 @@ fn cancel_song_download(&self, id: ListSongID) {
                                 .unwrap_or_default();
                             self.list.session_dead_videos.insert(video_id);
                             if self.notifications_enabled && !title.is_empty() {
-                                let body = format!(
-                                    "{title} — no longer available on YouTube, skipped"
-                                );
+                                let body =
+                                    format!("{title} — no longer available on YouTube, skipped");
                                 spawn_notification("Song Unavailable", &body, 5000);
                             }
                         }
@@ -1516,8 +1500,7 @@ fn cancel_song_download(&self, id: ListSongID) {
                         if !is_dead && !is_auth {
                             self.consecutive_download_failures =
                                 self.consecutive_download_failures.saturating_add(1);
-                            if self.consecutive_download_failures
-                                >= HALT_AFTER_CONSECUTIVE_FAILURES
+                            if self.consecutive_download_failures >= HALT_AFTER_CONSECUTIVE_FAILURES
                             {
                                 self.halt_on_download_failures(&e);
                                 return Effects::none();
@@ -1535,11 +1518,7 @@ fn cancel_song_download(&self, id: ListSongID) {
         self.volume = response.0
     }
 
-    pub fn handle_set_song_play_progress(
-        &mut self,
-        d: Duration,
-        id: ListSongID,
-    ) -> Effects<Self> {
+    pub fn handle_set_song_play_progress(&mut self, d: Duration, id: ListSongID) -> Effects<Self> {
         if !self.check_id_is_cur(id) {
             return Effects::none();
         }
@@ -1590,11 +1569,7 @@ fn cancel_song_download(&self, id: ListSongID) {
         self.autoplay_next_or_stop(id)
     }
 
-    pub fn handle_playing(
-        &mut self,
-        duration: Option<Duration>,
-        id: ListSongID,
-    ) -> Effects<Self> {
+    pub fn handle_playing(&mut self, duration: Option<Duration>, id: ListSongID) -> Effects<Self> {
         if let Some(song) = self.get_mut_song_from_id(id) {
             song.actual_duration = duration;
         }

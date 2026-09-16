@@ -324,7 +324,10 @@ mod tests {
         assert!(!buf.is_throttled(), "fresh buffer must not be throttled");
         assert!(!buf.is_failed(), "precondition: fresh buffer is not failed");
         buf.mark_throttled();
-        assert!(buf.is_throttled(), "mark_throttled must set the throttled flag");
+        assert!(
+            buf.is_throttled(),
+            "mark_throttled must set the throttled flag"
+        );
         assert!(
             buf.is_failed(),
             "mark_throttled must fail the buffer so the pipeline loops break immediately"
@@ -554,8 +557,10 @@ mod tests {
             }
             total_read += n;
         }
-        assert_eq!(total_read, total as usize,
-            "Reader must read all data after writer handle is dropped");
+        assert_eq!(
+            total_read, total as usize,
+            "Reader must read all data after writer handle is dropped"
+        );
     }
 
     #[test]
@@ -605,8 +610,10 @@ mod tests {
                 total_read += n;
                 // All bytes must be 0xAB — if reader ever sees the empty
                 // intermediate state, it would read stale/zero bytes.
-                assert!(out[..n].iter().all(|&b| b == 0xAB),
-                    "reader got corrupted data at offset {total_read}");
+                assert!(
+                    out[..n].iter().all(|&b| b == 0xAB),
+                    "reader got corrupted data at offset {total_read}"
+                );
             }
             assert_eq!(total_read, total as usize);
         });

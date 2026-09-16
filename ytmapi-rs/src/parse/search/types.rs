@@ -1,6 +1,6 @@
 use crate::common::{
-    AlbumID, AlbumType, ArtistChannelID, EpisodeID, Explicit, PlaylistID, PodcastID,
-    UserChannelID, VideoID,
+    AlbumID, AlbumType, ArtistChannelID, EpisodeID, Explicit, PlaylistID, PodcastID, UserChannelID,
+    VideoID,
 };
 use crate::parse::{EpisodeDate, ParsedSongAlbum};
 use crate::youtube_enums::YoutubeMusicVideoType;
