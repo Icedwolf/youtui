@@ -38,6 +38,12 @@ The codebase is at a local optimum across the areas this project optimizes:
 - **Sort reindexes the filtered list** — `push_sort_command`/`apply_all_sort_commands` rebuild
   `filtered_indices` after reordering the underlying list, so filter-then-sort keeps the visible
   rows and play-on-selected correct (previously the stale mapping pointed at wrong songs).
+- **No inherent/trait method-name collisions remain** — scripted audit (all 57 `.rs` files under
+  `youtui/src`) compares inherent methods against (a) methods in concrete trait impl blocks and
+  (b) required/default methods of every trait a type implements (incl. external `Widget`/
+  `StatefulWidget` render surfaces). Both reports: **0 collisions**. The `6863e05` shadow class
+  is closed tree-wide; `Playlist::get_song_from_idx` is trait-only (the "dual method" was a
+  misread — its 3 call sites in playback.rs all resolve to the trait impl).
 - **RAM** — in-memory ALAC buffers are duration/source-dependent (5.5–77MB, median ~45MB);
   cache max = 1 by design.
 - **Render/CPU** — per-frame caches (title, row numbers, artist string, lowercased fields)
