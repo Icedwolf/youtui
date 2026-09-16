@@ -449,4 +449,26 @@ mod tests {
         // Visible row 1 (the second Alpha song) must NOT resolve as list[1] ("tb").
         assert_eq!(panel.get_song_from_idx(1).unwrap().title, "tc");
     }
+
+    #[test]
+    fn sort_after_filter_reindexes_filtered_indices() {
+        let mut panel = panel_with(vec![
+            song_for("a", "ts", "BY"),
+            song_for("b", "tt", "AX"),
+            song_for("c", "tu", "CZ"),
+            song_for("d", "tv", "AX"),
+        ]);
+        panel.filter.filter_text.set_text("AX");
+        panel.apply_filter();
+        assert_eq!(panel.filtered_indices, vec![1, 3]);
+        panel
+            .push_sort_command(TableSortCommand {
+                column: 1,
+                direction: SortDirection::Asc,
+            })
+            .unwrap();
+        // Album asc: b(AX), d(AX), a(BY), c(CZ); filtered reindexed to [0, 1].
+        assert_eq!(panel.filtered_indices, vec![0, 1]);
+        assert_eq!(panel.get_song_from_idx(1).unwrap().title, "tv");
+    }
 }

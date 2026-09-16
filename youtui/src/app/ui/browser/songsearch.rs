@@ -496,6 +496,29 @@ mod tests {
     }
 
     #[test]
+    fn sort_after_filter_reindexes_filtered_indices() {
+        let mut browser = SongSearchBrowser::new();
+        browser.song_list.push_song_list(vec![
+            song("a", "tv", "BY"),
+            song("b", "ts", "AX"),
+            song("c", "tt", "CZ"),
+            song("d", "tu", "AX"),
+        ]);
+        browser.filter.filter_text.set_text("AX");
+        browser.apply_filter();
+        assert_eq!(browser.filtered_indices, vec![1, 3]);
+        browser
+            .push_sort_command(TableSortCommand {
+                column: 0,
+                direction: SortDirection::Asc,
+            })
+            .unwrap();
+        // Title asc: ts(b), tt(c), tu(d), tv(a); filtered reindexed to [0, 2].
+        assert_eq!(browser.filtered_indices, vec![0, 2]);
+        assert_eq!(browser.get_song_from_idx(1).unwrap().title, "tu");
+    }
+
+    #[test]
     fn apply_filter_clamps_selection_to_shrunk_filtered_list() {
         let mut browser = SongSearchBrowser::new();
         browser.song_list.push_song_list(vec![

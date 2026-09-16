@@ -677,6 +677,7 @@ pub(crate) trait SortFilterTable: AdvancedTableView {
             )?;
             self.get_mut_songs().sort(col, c.direction);
         }
+        self.rebuild_filtered_indices();
         Ok(())
     }
 
@@ -740,6 +741,7 @@ pub(crate) trait SortFilterTable: AdvancedTableView {
             .sort_commands
             .retain(|cmd| cmd.column != sort_command.column);
         self.get_mut_sort_manager().sort_commands.push(sort_command);
+        self.rebuild_filtered_indices();
         Ok(())
     }
 
