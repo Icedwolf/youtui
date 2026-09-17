@@ -1,7 +1,7 @@
 # Youtui Backlog
 
 **Build:** 0 errors, 0 warnings, 0 clippy
-**Tests:** 398 youtui bins green (2 ignored). Binary is NOT reinstalled to
+**Tests:** 402 youtui bins green (2 ignored). Binary is NOT reinstalled to
 `~/.config/cargo/bin/youtui` anymore (user runs it actively) — `target/release/youtui` is the
 verification artifact only.
 **Last updated:** 2026-09-17
@@ -200,6 +200,18 @@ The codebase is at a local optimum across the areas this project optimizes:
   parity before/after. Net −14 lines across 3 files. `ui/footer.rs` cache, `action.rs`
   (`NoOp` = keybind-migration sentinel, live), `draw_media_controls.rs`, `ui/draw.rs`, and
   `scrolling_table.rs` otherwise clean.
+- **Playlist search silent failure fixed + artist-search album actions deduped.**
+  `PlaylistSearchBrowser::execute_search` never set `ListStatus::Loading` pre-fetch nor
+  `ListStatus::Error` on failure (songsearch/artistsearch both do) — a failed playlist search
+  left the panel on a stale status. Now mirrors the siblings: title shows "Playlists - loading"
+  then "Playlists - Error received" on failure. Locked by `search_sets_loading_state_before_fetch`
+  (red before, green after; the error arm is sibling-parity + already-covered panel render).
+  `add_album_to_playlist`/`play_album` shared ~20 identical lines (selected song → album →
+  filter list by album id); both now call `selected_album_songs()` with `error!` preserved.
+  3 parity tests lock callback contents. Net −34 production lines (+4 tests = 402 bins green).
+  Also repaired a **pre-existing `cargo +nightly fmt` drift** (app.rs, keyaction.rs,
+  songs_panel.rs, songsearch.rs) that earlier verification rounds had masked behind a `tail`
+  pipeline — the fmt gate now uses the bare formatter exit status (`style:` commit `013efa1`).
 - **`apply_ytdlp_auth_args` duplicate skip-only branch collapsed** — the inner
   `else` (fallback requested but no pot provider) and the outer `else` (no
   fallback) emitted the byte-identical
