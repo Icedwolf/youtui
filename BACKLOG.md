@@ -1,7 +1,7 @@
 # Youtui Backlog
 
 **Build:** 0 errors, 0 warnings, 0 clippy
-**Tests:** 395 youtui bins green (2 ignored)
+**Tests:** 397 youtui bins green (2 ignored)
 **Last updated:** 2026-09-17
 
 This file is a working backlog only — no changelog, no session archaeology. Past work
@@ -141,6 +141,18 @@ The codebase is at a local optimum across the areas this project optimizes:
   Test-first: `direct_get_active_keybinds_chains_browser_map_when_filter_shown` — failed on the
   old gate (keymap blocked), passes after; the direct-call contract (dominant still yields
   variant + `browser` map) is locked. Net −16 lines. (395 tests.)
+- **`SongsPanel`/`SongSearchBrowser` `get_all_keybinds` help gap fixed.** Both returned only
+  their list/search maps, omitting the `filter` and `sort` maps that `get_active_keybinds`
+  routes to — so the help menu (`YoutuiWindow::get_help_list_items` → `flatten_keybinds_as_readable`
+  over `get_all_keybinds`) was missing the 7 Global-visibility sort/filter shortcuts
+  (sort Enter asc / Alt+Enter desc / Alt+o clear / o close; filter f close / Enter apply /
+  Alt+f clear) plus the list-navigation keys that `get_sort_keybinds` = `[sort, list]` carries
+  (PageUp/PageDown/g/G were absent from help entirely — window `get_all_keybinds` never chains
+  `list`). Both impls now return the union of every map the active router can select
+  (`keybinds_key` + `filter` + `get_sort_keybinds`; and `browser_songs` + `browser_search` +
+  `filter` + `get_sort_keybinds`). Test-first: 2 new tests assert the filter map (`f` closes)
+  and sort map (Enter asc) are present — failed on current code, pass after. `Playlist` and
+  `SearchPanel` `get_all_keybinds` verified complete (state-flat/2-map). (397 tests.)
 - **`apply_ytdlp_auth_args` duplicate skip-only branch collapsed** — the inner
   `else` (fallback requested but no pot provider) and the outer `else` (no
   fallback) emitted the byte-identical
