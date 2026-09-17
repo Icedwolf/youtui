@@ -91,7 +91,7 @@ impl Youtui {
         // Setup tracing and link to tui_logger.
         // NOTE: File logging is always enabled for now - I can't think of a use case
         // where we wouldn't want this.
-        init_tracing(debug, true).await?;
+        init_tracing(debug).await?;
         match debug {
             true => info!("Starting in debug mode"),
             false => info!("Starting"),
@@ -378,40 +378,33 @@ fn destruct_terminal() -> Result<()> {
 }
 
 /// Initialise tracing and subscribers such as tuilogger and file logging.
+/// File logging is always enabled; `debug` selects the youtui log level.
 /// # Panics
 /// If tracing fails to initialise, function will panic
-async fn init_tracing(debug: bool, logging: bool) -> Result<()> {
+async fn init_tracing(debug: bool) -> Result<()> {
     let tracing_log_level = if debug {
         tracing::Level::DEBUG
     } else {
         tracing::Level::WARN
     };
-    if logging {
-        let context_layer =
-            tracing_subscriber::filter::Targets::new().with_target("youtui", tracing_log_level);
-        let (log_file, log_file_name) = get_limited_sequential_file(
-            &get_data_dir()?,
-            LOG_FILE_NAME,
-            LOG_FILE_EXT,
-            MAX_LOG_FILES,
-        )
-        .await?;
-        let log_file = log_file
-            .try_into_std()
-            .map_err(|_| anyhow::anyhow!("log file busy, cannot convert to std handle"))?;
-        let log_file_layer = tracing_subscriber::fmt::layer().with_writer(Arc::new(log_file));
-        tracing_subscriber::registry()
-            .with(log_file_layer)
-            .with(context_layer)
-            .init();
-        info!("Logging to {:?}.", log_file_name);
-    } else {
-        tracing_subscriber::registry()
-            .with(
-                tracing_subscriber::filter::Targets::new().with_target("youtui", tracing_log_level),
-            )
-            .init();
-    }
+    let context_layer =
+        tracing_subscriber::filter::Targets::new().with_target("youtui", tracing_log_level);
+    let (log_file, log_file_name) = get_limited_sequential_file(
+        &get_data_dir()?,
+        LOG_FILE_NAME,
+        LOG_FILE_EXT,
+        MAX_LOG_FILES,
+    )
+    .await?;
+    let log_file = log_file
+        .try_into_std()
+        .map_err(|_| anyhow::anyhow!("log file busy, cannot convert to std handle"))?;
+    let log_file_layer = tracing_subscriber::fmt::layer().with_writer(Arc::new(log_file));
+    tracing_subscriber::registry()
+        .with(log_file_layer)
+        .with(context_layer)
+        .init();
+    info!("Logging to {:?}.", log_file_name);
     Ok(())
 }
 
