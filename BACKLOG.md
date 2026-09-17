@@ -1,7 +1,7 @@
 # Youtui Backlog
 
 **Build:** 0 errors, 0 warnings, 0 clippy
-**Tests:** 392 youtui bins green (2 ignored)
+**Tests:** 394 youtui bins green (2 ignored)
 **Last updated:** 2026-09-17
 
 This file is a working backlog only — no changelog, no session archaeology. Past work
@@ -112,6 +112,16 @@ The codebase is at a local optimum across the areas this project optimizes:
   `FilterManager::get_text`, `SearchPanel::clear_text` — called from AddSong search
   submit + `apply_filter`) demoted to inherent methods. 4 new parity locks
   (search_block get/clear, filter_manager get, search_panel clear). (Net −43 lines.)
+- **`TextEntryAction` Playlist no-op audited — reachable, deliberate.** Full chain traced
+  (`handle_crossterm_event` → `try_handle_text` → playlist `handle_text_event_impl` → fall
+  through of unhandled keys → `text_entry` keybind map → `handle_text_entry_action` ui.rs:379).
+  The `WindowContext::Playlist => Effects::none()` arm is reachable (Left/Right always, plus
+  Backspace/Ctrl+W on empty text) and intentionally swallows those actions so they cannot leak
+  into the playlist list keymap — playlist search is search-as-you-type. Enter/Esc never reach
+  the keybind map: the text handler closes the search directly (`KeyCode::Esc | KeyCode::Enter`
+  arm, mod.rs:343). No dead code; added a documenting comment and 2 parity locks
+  (`text_enter_closes_search_and_is_consumed`, `text_esc_closes_search_and_is_consumed`) closing
+  the untested Enter/Esc row of the state table.
 - **`apply_ytdlp_auth_args` duplicate skip-only branch collapsed** — the inner
   `else` (fallback requested but no pot provider) and the outer `else` (no
   fallback) emitted the byte-identical
