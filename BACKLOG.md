@@ -1,7 +1,7 @@
 # Youtui Backlog
 
 **Build:** 0 errors, 0 warnings, 0 clippy
-**Tests:** 402 youtui bins green (2 ignored). Binary is NOT reinstalled to
+**Tests:** 403 youtui bins green (2 ignored). Binary is NOT reinstalled to
 `~/.config/cargo/bin/youtui` anymore (user runs it actively) — `target/release/youtui` is the
 verification artifact only.
 **Last updated:** 2026-09-17
@@ -212,6 +212,16 @@ The codebase is at a local optimum across the areas this project optimizes:
   Also repaired a **pre-existing `cargo +nightly fmt` drift** (app.rs, keyaction.rs,
   songs_panel.rs, songsearch.rs) that earlier verification rounds had masked behind a `tail`
   pipeline — the fmt gate now uses the bare formatter exit status (`style:` commit `013efa1`).
+- **Vestigial `ResolveAudioTracks` stub reduced to a retained no-op.**
+  The `PlaylistAction::ResolveAudioTracks` arm marked `ListSong::resolution_checked` (a field
+  nothing read), spawned N no-op effect closures, and set/cleared
+  `Playlist::resolving_audio`/`resolve_remaining` synchronously — the `[RESOLVING]` title
+  indicator could never render. All unobservable. The variant + describe + Global `r` keybind
+  stay as a documented no-op (config-parse compat, same as the retained `BrowserSearchAction`);
+  removed the dead `resolution_checked` field (4 ctor inits), the two flags (+inits), the
+  no-op spawn, and the dead indicator. Locked by `resolve_audio_tracks_is_retained_noop`
+  (red before: spawned 3 no-op closures; green after). Net ~−40 production lines,
+  +1 test (403 bins green).
 - **`apply_ytdlp_auth_args` duplicate skip-only branch collapsed** — the inner
   `else` (fallback requested but no pot provider) and the outer `else` (no
   fallback) emitted the byte-identical
