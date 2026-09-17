@@ -183,6 +183,12 @@ The codebase is at a local optimum across the areas this project optimizes:
   cell output and never touch either member — green before/after. Net −14 lines.
   `queue_persistence.rs` scan clean (`auto_load` is still the synchronous fallback; criterion
   benches are old-vs-new baselines, deliberate).
+- **`TabGrid` dead `style` + duplicated render arms collapsed.** `style` had no builder (always
+  `Style::default()`, a transparent no-op in `Line::from(title).style(style)`). The render body's
+  `MaxCols`/`MaxRows` match arms were 30 identical verbatim lines — `longest_title`/`rows` are
+  already computed by constraint-dispatching helpers before the match, so the match was pure
+  duplication; the single body now follows. Parity: `test_basic_tab_grid`/`_max_cols`/`_max_rows`
+  pin exact cell output, green before/after. Net −41 lines.
 - **`apply_ytdlp_auth_args` duplicate skip-only branch collapsed** — the inner
   `else` (fallback requested but no pot provider) and the outer `else` (no
   fallback) emitted the byte-identical
