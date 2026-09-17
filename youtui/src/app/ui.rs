@@ -172,18 +172,6 @@ impl TextHandler for YoutuiWindow {
             WindowContext::Playlist => self.playlist.is_text_handling(),
         }
     }
-    fn get_text(&self) -> std::option::Option<&str> {
-        match self.context {
-            WindowContext::Browser => self.browser.get_text(),
-            WindowContext::Playlist => self.playlist.get_text(),
-        }
-    }
-    fn clear_text(&mut self) -> bool {
-        match self.context {
-            WindowContext::Browser => self.browser.clear_text(),
-            WindowContext::Playlist => self.playlist.clear_text(),
-        }
-    }
     fn handle_text_event_impl(&mut self, event: &Event) -> Option<Effects<Self>> {
         match self.context {
             WindowContext::Browser => self

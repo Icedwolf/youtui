@@ -255,20 +255,6 @@ impl TextHandler for Browser {
             BrowserVariant::Playlist => self.playlist_search_browser.is_text_handling(),
         }
     }
-    fn get_text(&self) -> std::option::Option<&str> {
-        match self.variant {
-            BrowserVariant::Artist => self.artist_search_browser.get_text(),
-            BrowserVariant::Song => self.song_search_browser.get_text(),
-            BrowserVariant::Playlist => self.playlist_search_browser.get_text(),
-        }
-    }
-    fn clear_text(&mut self) -> bool {
-        match self.variant {
-            BrowserVariant::Artist => self.artist_search_browser.clear_text(),
-            BrowserVariant::Song => self.song_search_browser.clear_text(),
-            BrowserVariant::Playlist => self.playlist_search_browser.clear_text(),
-        }
-    }
     fn handle_text_event_impl(&mut self, event: &crossterm::event::Event) -> Option<Effects<Self>> {
         // Let E (change search type) pass through to the keybind router
         // instead of being typed into the search input.

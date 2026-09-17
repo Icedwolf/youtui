@@ -77,14 +77,8 @@ impl<C: SongsPanelConfig> SongListComponent for SongsPanel<C> {
 }
 
 impl<C: SongsPanelConfig> TextHandler for SongsPanel<C> {
-    fn get_text(&self) -> Option<&str> {
-        self.filter.get_text()
-    }
     fn is_text_handling(&self) -> bool {
         self.route == SongsInputRouting::Filter
-    }
-    fn clear_text(&mut self) -> bool {
-        self.filter.clear_text()
     }
     fn handle_text_event_impl(&mut self, event: &crossterm::event::Event) -> Option<Effects<Self>> {
         self.filter

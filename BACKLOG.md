@@ -1,8 +1,8 @@
 # Youtui Backlog
 
 **Build:** 0 errors, 0 warnings, 0 clippy
-**Tests:** 381 youtui bins green (2 ignored)
-**Last updated:** 2026-09-16
+**Tests:** 392 youtui bins green (2 ignored)
+**Last updated:** 2026-09-17
 
 This file is a working backlog only — no changelog, no session archaeology. Past work
 and its rationale live in git history and in the code comments / `DECISIONS.md`.
@@ -103,12 +103,15 @@ The codebase is at a local optimum across the areas this project optimizes:
   hoisting it above the `is_none` check is behavior-preserving. Existing regen-token
   tests cover both rows (stale token cancelled on supersede, idle toggle schedules
   nothing).
-- **Note: `clear_text` gap** — `Playlist::clear_text` (mod.rs:317) calls
-  `update_search_indices` but skips `cached_title` invalidation + clamp. Appears
-  unreachable for Playlist (no event-loop dispatch found). Flag for future audit.
-  Also `handle_song_download_progress_update`, `download_upcoming_from_id`,
-  `handle_set_to_error`, `apply_fired_shuffle_regen` all re-audited — reachable
-  branches, kept.
+- **`TextHandler::get_text`/`clear_text` dead chain removed** — the flagged `clear_text`
+  gap (Playlist skipped `cached_title` invalidation + clamp) is **resolved as dead code**,
+  not a bug: `YoutuiWindow::get_text`/`clear_text` (ui.rs) have zero callers anywhere, so
+  the whole container chain (`Browser` → `SongSearchBrowser`/macro composite browsers →
+  `Playlist`) was transitively dead. Both methods removed from the `TextHandler` trait;
+  the 4 live leaf helpers (`SearchBlock::get_text`/`clear_text`,
+  `FilterManager::get_text`, `SearchPanel::clear_text` — called from AddSong search
+  submit + `apply_filter`) demoted to inherent methods. 4 new parity locks
+  (search_block get/clear, filter_manager get, search_panel clear). (Net −43 lines.)
 - **`apply_ytdlp_auth_args` duplicate skip-only branch collapsed** — the inner
   `else` (fallback requested but no pot provider) and the outer `else` (no
   fallback) emitted the byte-identical

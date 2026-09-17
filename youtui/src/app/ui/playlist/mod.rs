@@ -306,24 +306,6 @@ impl TextHandler for Playlist {
         self.search_enabled
     }
 
-    fn get_text(&self) -> std::option::Option<&str> {
-        if self.search_enabled {
-            Some(&self.search_text)
-        } else {
-            None
-        }
-    }
-
-    fn clear_text(&mut self) -> bool {
-        if !self.search_text.is_empty() {
-            self.search_text.clear();
-            self.update_search_indices();
-            true
-        } else {
-            false
-        }
-    }
-
     fn handle_text_event_impl(&mut self, event: &crossterm::event::Event) -> Option<Effects<Self>> {
         if !self.search_enabled {
             return None;

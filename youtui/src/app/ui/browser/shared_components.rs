@@ -178,15 +178,14 @@ impl FilterManager {
         }
     }
 }
+impl FilterManager {
+    pub fn get_text(&self) -> std::option::Option<&str> {
+        Some(self.filter_text.text())
+    }
+}
 impl TextHandler for FilterManager {
     fn is_text_handling(&self) -> bool {
         true
-    }
-    fn get_text(&self) -> std::option::Option<&str> {
-        Some(self.filter_text.text())
-    }
-    fn clear_text(&mut self) -> bool {
-        self.filter_text.clear()
     }
     fn handle_text_event_impl(&mut self, event: &crossterm::event::Event) -> Option<Effects<Self>> {
         match handle_events(&mut self.filter_text, true, event) {
@@ -196,15 +195,17 @@ impl TextHandler for FilterManager {
     }
 }
 
+impl SearchBlock {
+    pub fn get_text(&self) -> std::option::Option<&str> {
+        Some(self.search_contents.text())
+    }
+    pub fn clear_text(&mut self) -> bool {
+        self.search_contents.clear()
+    }
+}
 impl TextHandler for SearchBlock {
     fn is_text_handling(&self) -> bool {
         true
-    }
-    fn get_text(&self) -> std::option::Option<&str> {
-        Some(self.search_contents.text())
-    }
-    fn clear_text(&mut self) -> bool {
-        self.search_contents.clear()
     }
     fn handle_text_event_impl(&mut self, event: &crossterm::event::Event) -> Option<Effects<Self>> {
         match handle_events(&mut self.search_contents, true, event) {
@@ -304,20 +305,6 @@ macro_rules! define_search_results_browser {
                 match self.side {
                     SearchBrowserSide::Search => self.search_panel.is_text_handling(),
                     SearchBrowserSide::Songs => self.songs_panel.is_text_handling(),
-                }
-            }
-            fn get_text(&self) -> std::option::Option<&str> {
-                use $crate::app::ui::browser::shared_components::SearchBrowserSide;
-                match self.side {
-                    SearchBrowserSide::Search => self.search_panel.get_text(),
-                    SearchBrowserSide::Songs => self.songs_panel.get_text(),
-                }
-            }
-            fn clear_text(&mut self) -> bool {
-                use $crate::app::ui::browser::shared_components::SearchBrowserSide;
-                match self.side {
-                    SearchBrowserSide::Search => self.search_panel.clear_text(),
-                    SearchBrowserSide::Songs => self.songs_panel.clear_text(),
                 }
             }
             fn handle_text_event_impl(
@@ -877,5 +864,36 @@ pub(crate) trait SortFilterTable: AdvancedTableView {
         } else {
             debug!("go_to_last called while in filter/search mode");
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn search_block_get_text_roundtrips_contents() {
+        let mut block = SearchBlock::default();
+        assert_eq!(block.get_text(), Some(""));
+        block.search_contents.set_text("query");
+        assert_eq!(block.get_text(), Some("query"));
+    }
+
+    #[test]
+    fn search_block_clear_text_empties_and_reports_nonempty() {
+        let mut block = SearchBlock::default();
+        block.search_contents.set_text("query");
+        assert!(block.clear_text());
+        assert_eq!(block.get_text(), Some(""));
+        // Empty clear reports false (rat-text TextInputState::clear contract).
+        assert!(!block.clear_text());
+    }
+
+    #[test]
+    fn filter_manager_get_text_roundtrips_contents() {
+        let mut filter = FilterManager::default();
+        assert_eq!(filter.get_text(), Some(""));
+        filter.filter_text.set_text("album");
+        assert_eq!(filter.get_text(), Some("album"));
     }
 }

@@ -53,6 +53,9 @@ impl<C: SearchPanelConfig> SearchPanel<C> {
             _cfg: PhantomData,
         }
     }
+    pub fn clear_text(&mut self) -> bool {
+        self.search.clear_text()
+    }
     pub fn open_search(&mut self) {
         self.search_popped = true;
         self.route = SearchPanelInputRouting::Search;
@@ -74,12 +77,6 @@ impl<C: SearchPanelConfig> crate::app::component::actionhandler::Component for S
 impl<C: SearchPanelConfig> TextHandler for SearchPanel<C> {
     fn is_text_handling(&self) -> bool {
         self.route == SearchPanelInputRouting::Search
-    }
-    fn get_text(&self) -> Option<&str> {
-        self.search.get_text()
-    }
-    fn clear_text(&mut self) -> bool {
-        self.search.clear_text()
     }
     fn handle_text_event_impl(&mut self, event: &crossterm::event::Event) -> Option<Effects<Self>> {
         self.search
@@ -319,5 +316,14 @@ mod tests {
         let mut p = panel();
         p.status = ListStatus::Error;
         assert_eq!(p.get_title().to_string(), "Artists - Error received");
+    }
+
+    #[test]
+    fn clear_text_empties_search_and_reports_nonempty() {
+        let mut p = panel();
+        assert!(!p.clear_text());
+        p.search.search_contents.set_text("the beatles");
+        assert!(p.clear_text());
+        assert_eq!(p.search.search_contents.text(), "");
     }
 }

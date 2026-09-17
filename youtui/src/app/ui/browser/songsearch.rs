@@ -84,21 +84,6 @@ impl TextHandler for SongSearchBrowser {
             InputRouting::Filter | InputRouting::Search
         )
     }
-    fn get_text(&self) -> std::option::Option<&str> {
-        match self.input_routing {
-            InputRouting::Filter => self.filter.get_text(),
-            InputRouting::Search => self.search.get_text(),
-            InputRouting::List | InputRouting::Sort => None,
-        }
-    }
-    fn clear_text(&mut self) -> bool {
-        match self.input_routing {
-            InputRouting::Search => self.search.clear_text(),
-            InputRouting::Filter => self.filter.clear_text(),
-            InputRouting::List => false,
-            InputRouting::Sort => false,
-        }
-    }
     fn handle_text_event_impl(&mut self, event: &crossterm::event::Event) -> Option<Effects<Self>> {
         match self.input_routing {
             InputRouting::Search => self

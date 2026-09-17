@@ -115,8 +115,6 @@ pub fn get_global_keybinds_as_readable_iter<'a, A: Action + 'static>(
 }
 
 pub trait TextHandler: Component {
-    fn get_text(&self) -> Option<&str>;
-    fn clear_text(&mut self) -> bool;
     fn is_text_handling(&self) -> bool;
     fn handle_text_event_impl(&mut self, event: &Event) -> Option<Effects<Self>>
     where
