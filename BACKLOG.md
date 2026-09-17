@@ -153,6 +153,10 @@ The codebase is at a local optimum across the areas this project optimizes:
   `filter` + `get_sort_keybinds`). Test-first: 2 new tests assert the filter map (`f` closes)
   and sort map (Enter asc) are present — failed on current code, pass after. `Playlist` and
   `SearchPanel` `get_all_keybinds` verified complete (state-flat/2-map). (397 tests.)
+- **`init_tracing` dead `logging` branch removed.** The param was hardcoded `true` at the only
+  call site (app.rs:94); the `false` branch built a subscriber with a Targets filter and no
+  layer — unreachable and would silently swallow every event if ever taken. Function now always
+  file-logs (matching the standing "File logging is always enabled" note). Net −7 lines.
 - **`apply_ytdlp_auth_args` duplicate skip-only branch collapsed** — the inner
   `else` (fallback requested but no pot provider) and the outer `else` (no
   fallback) emitted the byte-identical
