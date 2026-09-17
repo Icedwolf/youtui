@@ -385,7 +385,14 @@ impl YoutuiWindow {
                 .browser
                 .handle_text_entry_action(action)
                 .map(|this: &mut Self| &mut this.browser),
-            WindowContext::Playlist => Effects::none(),
+            WindowContext::Playlist => {
+                // Reachable: the playlist text handler does not consume arrows or
+                // empty-text Backspace/Ctrl+W, so they fall through the text_entry
+                // keybind map to here. Swallowing them (search-as-you-type) keeps
+                // them from leaking into the playlist list keymap. Enter/Esc never
+                // arrive — the text handler closes the search directly.
+                Effects::none()
+            }
         }
     }
     pub fn pauseplay(&mut self) -> Effects<Self> {

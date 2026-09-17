@@ -1552,6 +1552,50 @@ mod state_transitions {
         assert!(p.cached_title.borrow().is_none());
     }
 
+    #[test]
+    fn text_enter_closes_search_and_is_consumed() {
+        let mut p = downloaded_songs(3);
+        p.search_enabled = true;
+        p.search_text = "Song".to_string();
+        p.update_search_indices();
+        let _ = p.get_title();
+        assert!(p.cached_title.borrow().is_some());
+
+        let event = Event::Key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        assert!(
+            p.handle_text_event_impl(&event).is_some(),
+            "Enter while searching must be consumed by the text handler so it \
+             never reaches TextEntryAction::Submit (playlist search is \
+             search-as-you-type; Enter only closes the search)"
+        );
+        assert!(!p.search_enabled, "Enter must close the search");
+        assert!(
+            p.cached_title.borrow().is_none(),
+            "closing the search must invalidate the cached title"
+        );
+    }
+
+    #[test]
+    fn text_esc_closes_search_and_is_consumed() {
+        let mut p = downloaded_songs(3);
+        p.search_enabled = true;
+        p.search_text = "Song".to_string();
+        p.update_search_indices();
+        let _ = p.get_title();
+        assert!(p.cached_title.borrow().is_some());
+
+        let event = Event::Key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+        assert!(
+            p.handle_text_event_impl(&event).is_some(),
+            "Esc while searching must be consumed by the text handler"
+        );
+        assert!(!p.search_enabled, "Esc must close the search");
+        assert!(
+            p.cached_title.borrow().is_none(),
+            "closing the search must invalidate the cached title"
+        );
+    }
+
     // ---------------------------------------------------------------------------
     // Play-next queue
     // ---------------------------------------------------------------------------
