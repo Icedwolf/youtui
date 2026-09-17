@@ -92,7 +92,11 @@ impl<C: SongsPanelConfig> KeyRouter<AppAction> for SongsPanel<C> {
         &self,
         config: &'a Config,
     ) -> impl Iterator<Item = &'a Keymap<AppAction>> + 'a {
+        // Union of every map `get_active_keybinds` can route to (list,
+        // filter, sort) so the help menu lists the sort/filter shortcuts.
         std::iter::once(C::keybinds_key(config))
+            .chain(std::iter::once(&config.keybinds.filter))
+            .chain(get_sort_keybinds(config))
     }
     fn get_active_keybinds<'a>(
         &self,
@@ -343,6 +347,7 @@ mod tests {
     use crate::app::view::{
         Filter, FilterString, SortDirection, TableFilterCommand, TableSortCommand,
     };
+    use itertools::Itertools;
     use ytmapi_rs::common::{VideoID, YoutubeID};
 
     fn song_for(video_id: &str, title: &str, album: &str) -> ListSong {
@@ -408,6 +413,43 @@ mod tests {
             .unwrap();
         assert_eq!(panel.get_sort_commands().len(), 1);
         assert_eq!(panel.list.get_song_from_idx(0).unwrap().title, "ta");
+    }
+
+    #[test]
+    fn get_all_keybinds_includes_filter_and_sort_maps() {
+        use crate::app::ui::browser::shared_components::{FilterAction, SortAction};
+        use crate::config::keymap::KeyActionTree;
+        use crate::keyaction::KeyActionVisibility;
+        use crate::keybind::Keybind;
+        let cfg = Config::default();
+        let panel = SongsPanel::<ArtistSongsConfig>::new();
+        let all: Vec<_> = panel.get_all_keybinds(&cfg).collect();
+
+        let filter_close = (
+            &Keybind::new_unmodified(crossterm::event::KeyCode::Char('f')),
+            &KeyActionTree::new_key_with_visibility(
+                AppAction::Filter(FilterAction::Close),
+                KeyActionVisibility::Global,
+            ),
+        );
+        assert!(
+            all.iter()
+                .any(|km| km.iter().contains(&filter_close)),
+            "get_all_keybinds must include the filter action map ('f' closes the popup)"
+        );
+
+        let sort_asc = (
+            &Keybind::new_unmodified(crossterm::event::KeyCode::Enter),
+            &KeyActionTree::new_key_with_visibility(
+                AppAction::Sort(SortAction::SortSelectedAsc),
+                KeyActionVisibility::Global,
+            ),
+        );
+        assert!(
+            all.iter()
+                .any(|km| km.iter().contains(&sort_asc)),
+            "get_all_keybinds must include the sort action map (Enter sorts ascending)"
+        );
     }
 
     #[test]
