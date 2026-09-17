@@ -185,6 +185,9 @@ impl FilterManager {
 }
 impl TextHandler for FilterManager {
     fn is_text_handling(&self) -> bool {
+        // Vestigial: no caller consults this. The gate that actually decides
+        // whether filter text is handled lives in `SongsPanel::is_text_handling`
+        // (route == Filter) — this true is never reached.
         true
     }
     fn handle_text_event_impl(&mut self, event: &crossterm::event::Event) -> Option<Effects<Self>> {
@@ -205,6 +208,9 @@ impl SearchBlock {
 }
 impl TextHandler for SearchBlock {
     fn is_text_handling(&self) -> bool {
+        // Vestigial: no caller consults this. The gate that actually decides
+        // whether search text is handled lives in `SearchPanel::is_text_handling`
+        // (route == Search) — this true is never reached.
         true
     }
     fn handle_text_event_impl(&mut self, event: &crossterm::event::Event) -> Option<Effects<Self>> {
