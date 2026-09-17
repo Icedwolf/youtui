@@ -221,6 +221,11 @@ The codebase is at a local optimum across the areas this project optimizes:
   (both clear the key stack). Example `config.toml` drops the suggestion section; two
   browser.rs tests flipped to assert no dead suggestion bindings in the search-route active
   chain; new red→green test asserts empty defaults. (keymap.rs sweep otherwise clean.)
+- **Player-pause effect deduped.** `pauseplay`/`resume`/`pause` (playback.rs) each carried a
+  byte-identical 7-line `server.player.pause()` effect block (only the `play_status` guard
+  differs). Extracted private assoc fn `player_pause_effect()`; all three call it. `stop()`
+  untouched (its block carries the `handle_all_stopped` mutation). Parity locked by the
+  existing pause/resume state-transition tests; net −5 lines.
 - **Vestigial `ResolveAudioTracks` stub reduced to a retained no-op.**
   The `PlaylistAction::ResolveAudioTracks` arm marked `ListSong::resolution_checked` (a field
   nothing read), spawned N no-op effect closures, and set/cleared
