@@ -27,6 +27,7 @@ define_search_results_browser!(
 );
 impl PlaylistSearchBrowser {
     pub fn execute_search(&mut self, search_query: String) -> Effects<Self> {
+        self.search_panel.status = ListStatus::Loading;
         Effects::new(move |server: &ArcServer| {
             let query = search_query.clone();
             let server = Arc::clone(server);
@@ -42,7 +43,10 @@ impl PlaylistSearchBrowser {
                         >,
                     Err(error) => {
                         warn!("Playlist search error: {error}");
-                        Box::new(|_: &mut PlaylistSearchBrowser| Effects::none())
+                        Box::new(move |this: &mut PlaylistSearchBrowser| {
+                            this.search_panel.status = ListStatus::Error;
+                            Effects::none()
+                        })
                             as Box<
                                 dyn FnOnce(
                                         &mut PlaylistSearchBrowser,
@@ -119,5 +123,25 @@ impl PlaylistSearchBrowser {
         }
         self.songs_panel.rebuild_filtered_indices();
         self.songs_panel.list.state = ListStatus::InProgress;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn search_sets_loading_state_before_fetch() {
+        let mut browser = PlaylistSearchBrowser::new(
+            search_panel::PlaylistSearchPanel::new(),
+            songs_panel::PlaylistSongsPanel::new(),
+        );
+        browser
+            .search_panel
+            .search
+            .search_contents
+            .set_text("some query");
+        let _ = browser.search();
+        assert_eq!(browser.search_panel.status, ListStatus::Loading);
     }
 }

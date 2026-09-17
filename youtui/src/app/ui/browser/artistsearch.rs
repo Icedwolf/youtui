@@ -3,7 +3,7 @@ use crate::app::component::actionhandler::{Scrollable, TextHandler, YoutuiEffect
 use crate::app::effect::Effects;
 use crate::app::server::ArcServer;
 use crate::app::server::api::{AlbumSongsData, GetArtistSongsProgressUpdate};
-use crate::app::structures::{ListSongAlbum, ListStatus, MaybeRc, SongListComponent};
+use crate::app::structures::{ListSong, ListSongAlbum, ListStatus, MaybeRc, SongListComponent};
 use crate::app::view::{ListView, TableView};
 use futures::StreamExt;
 use std::sync::Arc;
@@ -112,54 +112,43 @@ impl ArtistSearchBrowser {
         })
         .block_concurrent::<ArtistSearchBrowser>()
     }
-    pub fn add_album_to_playlist(&mut self) -> impl Into<YoutuiEffect<Self>> {
+    /// Resolves the selected song's album and returns every song in the list
+    /// that shares that album id (the "album" view). Returns `None` when the
+    /// selection is invalid or the selected song lacks album metadata.
+    fn selected_album_songs(&mut self) -> Option<Vec<ListSong>> {
         let cur_idx = self.songs_panel.get_selected_item();
-        let Some(cur_song) = self.songs_panel.get_song_from_idx(cur_idx) else {
-            return (Effects::none(), None);
-        };
+        let cur_song = self.songs_panel.get_song_from_idx(cur_idx)?;
         let Some(ref cur_album) = cur_song.album else {
             error!("Expected album details to be in list but they are missing!");
-            return (Effects::none(), None);
+            return None;
         };
-        let song_list = self
-            .songs_panel
-            .list
-            .get_list_iter()
-            .filter(|song| {
-                song.album
-                    .as_ref()
-                    .is_some_and(|album: &MaybeRc<ListSongAlbum>| album.as_ref().id == cur_album.id)
-            })
-            .cloned()
-            .collect();
+        Some(
+            self.songs_panel
+                .list
+                .get_list_iter()
+                .filter(|song| {
+                    song.album
+                        .as_ref()
+                        .is_some_and(|album: &MaybeRc<ListSongAlbum>| {
+                            album.as_ref().id == cur_album.id
+                        })
+                })
+                .cloned()
+                .collect(),
+        )
+    }
+    pub fn add_album_to_playlist(&mut self) -> impl Into<YoutuiEffect<Self>> {
         (
             Effects::none(),
-            Some(AppCallback::AddSongsToPlaylist(song_list)),
+            self.selected_album_songs()
+                .map(AppCallback::AddSongsToPlaylist),
         )
     }
     pub fn play_album(&mut self) -> impl Into<YoutuiEffect<Self>> {
-        let cur_idx = self.songs_panel.get_selected_item();
-        let Some(cur_song) = self.songs_panel.get_song_from_idx(cur_idx) else {
-            return (Effects::none(), None);
-        };
-        let Some(ref cur_album) = cur_song.album else {
-            error!("Expected album details to be in list but they are missing!");
-            return (Effects::none(), None);
-        };
-        let song_list = self
-            .songs_panel
-            .list
-            .get_list_iter()
-            .filter(|song| {
-                song.album
-                    .as_ref()
-                    .is_some_and(|album: &MaybeRc<ListSongAlbum>| album.as_ref().id == cur_album.id)
-            })
-            .cloned()
-            .collect();
         (
             Effects::none(),
-            Some(AppCallback::AddSongsToPlaylistAndPlay(song_list)),
+            self.selected_album_songs()
+                .map(AppCallback::AddSongsToPlaylistAndPlay),
         )
     }
     pub fn handle_search_artist_error(
@@ -202,5 +191,100 @@ impl ArtistSearchBrowser {
         }
         self.songs_panel.rebuild_filtered_indices();
         self.songs_panel.list.state = ListStatus::InProgress;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::app::structures::ListSong;
+    use ytmapi_rs::common::{VideoID, YoutubeID};
+
+    fn browser_with_album_songs() -> ArtistSearchBrowser {
+        let mut browser = ArtistSearchBrowser::new(
+            search_panel::ArtistSearchPanel::new(),
+            songs_panel::AlbumSongsPanel::new(),
+        );
+        browser.songs_panel.list.push_song_list(vec![
+            ListSong::create_with_metadata(
+                VideoID::from_raw("a".to_owned()),
+                "Song A".into(),
+                vec!["Artist".into()],
+                Some("Album".into()),
+                "3:00".into(),
+            ),
+            ListSong::create_with_metadata(
+                VideoID::from_raw("b".to_owned()),
+                "Song B".into(),
+                vec!["Artist".into()],
+                Some("Album".into()),
+                "3:00".into(),
+            ),
+            ListSong::create_with_metadata(
+                VideoID::from_raw("c".to_owned()),
+                "Song C".into(),
+                vec!["Artist".into()],
+                None,
+                "3:00".into(),
+            ),
+        ]);
+        browser.songs_panel.rebuild_filtered_indices();
+        browser
+    }
+
+    fn album_song_ids_from(callback: Option<AppCallback>) -> Vec<String> {
+        match callback {
+            Some(
+                AppCallback::AddSongsToPlaylist(songs)
+                | AppCallback::AddSongsToPlaylistAndPlay(songs),
+            ) => songs
+                .iter()
+                .map(|song| song.video_id.get_raw().to_string())
+                .collect(),
+            _ => panic!("expected a song-list AppCallback"),
+        }
+    }
+
+    #[test]
+    fn play_album_callback_contains_only_album_sharing_songs() {
+        let mut browser = browser_with_album_songs();
+        let effect: YoutuiEffect<ArtistSearchBrowser> = browser.play_album().into();
+        assert_eq!(
+            album_song_ids_from(effect.callback),
+            ["a".to_owned(), "b".to_owned()]
+        );
+    }
+
+    #[test]
+    fn add_album_to_playlist_callback_contains_only_album_sharing_songs() {
+        let mut browser = browser_with_album_songs();
+        let effect: YoutuiEffect<ArtistSearchBrowser> = browser.add_album_to_playlist().into();
+        assert_eq!(
+            album_song_ids_from(effect.callback),
+            ["a".to_owned(), "b".to_owned()]
+        );
+    }
+
+    #[test]
+    fn album_actions_noop_when_selected_song_lacks_album() {
+        let mut browser = ArtistSearchBrowser::new(
+            search_panel::ArtistSearchPanel::new(),
+            songs_panel::AlbumSongsPanel::new(),
+        );
+        browser
+            .songs_panel
+            .list
+            .push_song_list(vec![ListSong::create_with_metadata(
+                VideoID::from_raw("c".to_owned()),
+                "Song C".into(),
+                vec!["Artist".into()],
+                None,
+                "3:00".into(),
+            )]);
+        browser.songs_panel.rebuild_filtered_indices();
+        let play: YoutuiEffect<ArtistSearchBrowser> = browser.play_album().into();
+        assert!(play.callback.is_none());
+        let add: YoutuiEffect<ArtistSearchBrowser> = browser.add_album_to_playlist().into();
+        assert!(add.callback.is_none());
     }
 }
