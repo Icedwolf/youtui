@@ -836,6 +836,19 @@ impl Playlist {
         self.play_prev()
     }
 
+    /// Player pause with no mutation — shared by `pauseplay`/`resume`/`pause`.
+    /// Rodio's sink pause is idempotent, so all three state guards send the
+    /// same server command; only the guard differs.
+    fn player_pause_effect() -> Effects<Self> {
+        Effects::new(|server: &crate::app::server::ArcServer| {
+            server.player.pause();
+            async move {
+                Box::new(|_: &mut Playlist| Effects::none())
+                    as Box<dyn FnOnce(&mut Playlist) -> Effects<Playlist> + Send>
+            }
+        })
+    }
+
     pub fn pauseplay(&mut self) -> Effects<Self> {
         let _id = match self.play_status {
             PlayState::Playing(id) => {
@@ -849,13 +862,7 @@ impl Playlist {
             _ => return Effects::none(),
         };
 
-        Effects::new(|server: &crate::app::server::ArcServer| {
-            server.player.pause();
-            async move {
-                Box::new(|_: &mut Playlist| Effects::none())
-                    as Box<dyn FnOnce(&mut Playlist) -> Effects<Playlist> + Send>
-            }
-        })
+        Self::player_pause_effect()
     }
 
     pub fn resume(&mut self) -> Effects<Self> {
@@ -867,13 +874,7 @@ impl Playlist {
             _ => return Effects::none(),
         };
 
-        Effects::new(|server: &crate::app::server::ArcServer| {
-            server.player.pause();
-            async move {
-                Box::new(|_: &mut Playlist| Effects::none())
-                    as Box<dyn FnOnce(&mut Playlist) -> Effects<Playlist> + Send>
-            }
-        })
+        Self::player_pause_effect()
     }
 
     pub fn pause(&mut self) -> Effects<Self> {
@@ -885,13 +886,7 @@ impl Playlist {
             _ => return Effects::none(),
         };
 
-        Effects::new(|server: &crate::app::server::ArcServer| {
-            server.player.pause();
-            async move {
-                Box::new(|_: &mut Playlist| Effects::none())
-                    as Box<dyn FnOnce(&mut Playlist) -> Effects<Playlist> + Send>
-            }
-        })
+        Self::player_pause_effect()
     }
 
     pub fn stop(&mut self) -> Effects<Self> {
