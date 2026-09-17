@@ -1,7 +1,7 @@
 # Youtui Backlog
 
 **Build:** 0 errors, 0 warnings, 0 clippy
-**Tests:** 397 youtui bins green (2 ignored)
+**Tests:** 398 youtui bins green (2 ignored)
 **Last updated:** 2026-09-17
 
 This file is a working backlog only — no changelog, no session archaeology. Past work
@@ -157,6 +157,14 @@ The codebase is at a local optimum across the areas this project optimizes:
   call site (app.rs:94); the `false` branch built a subscriber with a Targets filter and no
   layer — unreachable and would silently swallow every event if ever taken. Function now always
   file-logs (matching the standing "File logging is always enabled" note). Net −7 lines.
+- **`flatten_tree` dedup onto `from_keybind_and_action_tree`.** `flatten_tree`'s Key row and Mode
+  trigger row duplicated `DisplayableKeyAction::from_keybind_and_action_tree` inline (the Mode arm
+  was byte-identical). Both arms now delegate to the shared constructor, which stays live at its
+  two other call sites (ui.rs:536 mode popup, actionhandler.rs:114 global header). Parity lock
+  `flatten_shows_visible_keys_and_mode_subkeys_and_drops_hidden` (keyaction.rs) added first — green
+  before and after: visible keys, mode trigger (named by mode), and visible sub-keys appear
+  (prefix `Enter → Space`), Hidden rows and sub-keys dropped. Net −12 lines. `effect.rs` and
+  `server.rs` app-layer scans were clean (no changes). (398 tests.)
 - **`apply_ytdlp_auth_args` duplicate skip-only branch collapsed** — the inner
   `else` (fallback requested but no pot provider) and the outer `else` (no
   fallback) emitted the byte-identical
