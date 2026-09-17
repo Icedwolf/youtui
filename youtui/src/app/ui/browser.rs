@@ -335,25 +335,22 @@ impl KeyRouter<AppAction> for Browser {
         &self,
         config: &'a Config,
     ) -> impl Iterator<Item = &'a Keymap<AppAction>> + 'a {
-        if self.dominant_keybinds_active() {
-            return Either::Left(self.get_dominant_keybinds(config));
-        }
-        // Need to handle search keybinds? Filter/search are handled as they are
-        // dominant.
-        Either::Right(
-            match self.variant {
-                BrowserVariant::Song => Either::Left(Either::Left(
-                    self.song_search_browser.get_active_keybinds(config),
-                )),
-                BrowserVariant::Artist => Either::Left(Either::Right(
-                    self.artist_search_browser.get_active_keybinds(config),
-                )),
-                BrowserVariant::Playlist => {
-                    Either::Right(self.playlist_search_browser.get_active_keybinds(config))
-                }
+        // No dominator gate here: `YoutuiWindow`'s DominantKeyRouter consumes the
+        // sort/filter-shown case with an early return before this is ever chained,
+        // so this method is only invoked in the non-dominant state. Replacing the
+        // whole chain with only the dominant (sort/filter) maps is the window's job.
+        match self.variant {
+            BrowserVariant::Song => Either::Left(Either::Left(
+                self.song_search_browser.get_active_keybinds(config),
+            )),
+            BrowserVariant::Artist => Either::Left(Either::Right(
+                self.artist_search_browser.get_active_keybinds(config),
+            )),
+            BrowserVariant::Playlist => {
+                Either::Right(self.playlist_search_browser.get_active_keybinds(config))
             }
-            .chain(std::iter::once(&config.keybinds.browser)),
-        )
+        }
+        .chain(std::iter::once(&config.keybinds.browser))
     }
 }
 impl DominantKeyRouter<AppAction> for Browser {
@@ -505,7 +502,7 @@ pub fn get_sort_keybinds(config: &Config) -> impl Iterator<Item = &Keymap<AppAct
 mod tests {
     use super::Browser;
     use super::artistsearch::songs_panel::BrowserArtistSongsAction;
-    use crate::app::component::actionhandler::{ActionHandler, KeyRouter};
+    use crate::app::component::actionhandler::{ActionHandler, DominantKeyRouter, KeyRouter};
     use crate::app::ui::action::AppAction;
     use crate::app::ui::browser::BrowserAction;
     use crate::app::ui::browser::shared_components::{BrowserSearchAction, SortFilterTable};
@@ -582,5 +579,34 @@ mod tests {
             .inspect(|kb| println!("{kb:#?}"))
             .any(|km| km.iter().contains(&expected_kb));
         assert!(kb_found);
+    }
+    #[test]
+    fn direct_get_active_keybinds_chains_browser_map_when_filter_shown() {
+        // Locks the consolidated dominator contract: `Browser::get_active_keybinds`
+        // has no internal dominator gate — `YoutuiWindow`'s DominantKeyRouter
+        // consumes the sort/filter-shown case before this is ever chained from
+        // the dispatch path. A direct call on a dominant browser therefore still
+        // yields the variant keybinds + the `browser` map; replacing the whole
+        // chain with only the dominant (sort/filter) maps happens solely at the
+        // window level.
+        let cfg = Config::default();
+        let mut b = Browser::new();
+        b.apply_action(BrowserArtistSongsAction::Filter);
+        assert!(
+            b.dominant_keybinds_active(),
+            "precondition: filter popup must activate the dominator"
+        );
+        let mut actual_kb = b.get_active_keybinds(&cfg);
+        let expected_kb = (
+            &Keybind::new_unmodified(crossterm::event::KeyCode::Tab),
+            &KeyActionTree::new_key_with_visibility(
+                AppAction::Browser(BrowserAction::ViewPlaylist),
+                KeyActionVisibility::Global,
+            ),
+        );
+        assert!(
+            actual_kb.any(|km| km.iter().contains(&expected_kb)),
+            "the browser keymap must still be chained by a direct call even when a filter popup is shown"
+        );
     }
 }
