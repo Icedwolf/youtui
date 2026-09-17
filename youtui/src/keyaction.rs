@@ -93,12 +93,16 @@ fn flatten_tree<'a, A: Action + 'static>(
     match tree {
         KeyActionTree::Key(k) => {
             if k.visibility != KeyActionVisibility::Hidden {
-                out.push(DisplayableKeyAction::from_keybind_and_action_tree(key, tree));
+                out.push(DisplayableKeyAction::from_keybind_and_action_tree(
+                    key, tree,
+                ));
             }
         }
         KeyActionTree::Mode { keys, .. } => {
             // Show the mode trigger as one row.
-            out.push(DisplayableKeyAction::from_keybind_and_action_tree(key, tree));
+            out.push(DisplayableKeyAction::from_keybind_and_action_tree(
+                key, tree,
+            ));
             // Show each sub-key, prefixed by the mode trigger.
             let prefix = key.to_string();
             for (sub_key, sub_tree) in keys.iter() {
@@ -144,10 +148,7 @@ mod tests {
         let mut map: Keymap<TestAction> = Keymap::new();
         map.insert(
             Keybind::new_unmodified(crossterm::event::KeyCode::Char('q')),
-            KeyActionTree::new_key_with_visibility(
-                TestAction("quit"),
-                KeyActionVisibility::Global,
-            ),
+            KeyActionTree::new_key_with_visibility(TestAction("quit"), KeyActionVisibility::Global),
         );
         map.insert(
             Keybind::new_unmodified(crossterm::event::KeyCode::Char('z')),

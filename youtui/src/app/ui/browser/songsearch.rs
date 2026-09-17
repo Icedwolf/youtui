@@ -147,10 +147,13 @@ impl KeyRouter<AppAction> for SongSearchBrowser {
         // Union of every map `get_active_keybinds` can route to (list,
         // search, filter, sort) so the help menu lists the sort/filter
         // shortcuts alongside the songs-list search bindings.
-        [&config.keybinds.browser_songs, &config.keybinds.browser_search]
-            .into_iter()
-            .chain(std::iter::once(&config.keybinds.filter))
-            .chain(get_sort_keybinds(config))
+        [
+            &config.keybinds.browser_songs,
+            &config.keybinds.browser_search,
+        ]
+        .into_iter()
+        .chain(std::iter::once(&config.keybinds.filter))
+        .chain(get_sort_keybinds(config))
     }
     fn get_active_keybinds<'a>(
         &self,
@@ -525,8 +528,7 @@ mod tests {
             ),
         );
         assert!(
-            all.iter()
-                .any(|km| km.iter().contains(&filter_close)),
+            all.iter().any(|km| km.iter().contains(&filter_close)),
             "get_all_keybinds must include the filter action map ('f' closes the popup)"
         );
 
@@ -538,8 +540,7 @@ mod tests {
             ),
         );
         assert!(
-            all.iter()
-                .any(|km| km.iter().contains(&sort_asc)),
+            all.iter().any(|km| km.iter().contains(&sort_asc)),
             "get_all_keybinds must include the sort action map (Enter sorts ascending)"
         );
     }

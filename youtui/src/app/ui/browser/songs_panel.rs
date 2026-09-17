@@ -433,8 +433,7 @@ mod tests {
             ),
         );
         assert!(
-            all.iter()
-                .any(|km| km.iter().contains(&filter_close)),
+            all.iter().any(|km| km.iter().contains(&filter_close)),
             "get_all_keybinds must include the filter action map ('f' closes the popup)"
         );
 
@@ -446,8 +445,7 @@ mod tests {
             ),
         );
         assert!(
-            all.iter()
-                .any(|km| km.iter().contains(&sort_asc)),
+            all.iter().any(|km| km.iter().contains(&sort_asc)),
             "get_all_keybinds must include the sort action map (Enter sorts ascending)"
         );
     }

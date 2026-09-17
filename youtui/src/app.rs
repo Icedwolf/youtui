@@ -389,13 +389,9 @@ async fn init_tracing(debug: bool) -> Result<()> {
     };
     let context_layer =
         tracing_subscriber::filter::Targets::new().with_target("youtui", tracing_log_level);
-    let (log_file, log_file_name) = get_limited_sequential_file(
-        &get_data_dir()?,
-        LOG_FILE_NAME,
-        LOG_FILE_EXT,
-        MAX_LOG_FILES,
-    )
-    .await?;
+    let (log_file, log_file_name) =
+        get_limited_sequential_file(&get_data_dir()?, LOG_FILE_NAME, LOG_FILE_EXT, MAX_LOG_FILES)
+            .await?;
     let log_file = log_file
         .try_into_std()
         .map_err(|_| anyhow::anyhow!("log file busy, cannot convert to std handle"))?;
