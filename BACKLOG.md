@@ -212,6 +212,15 @@ The codebase is at a local optimum across the areas this project optimizes:
   Also repaired a **pre-existing `cargo +nightly fmt` drift** (app.rs, keyaction.rs,
   songs_panel.rs, songsearch.rs) that earlier verification rounds had masked behind a `tail`
   pipeline — the fmt gate now uses the bare formatter exit status (`style:` commit `013efa1`).
+- **Dead `browser_search` suggestion keybinds dropped from defaults.**
+  `default_browser_search_keybinds()` shipped Up/Down → `Next/PrevSearchSuggestion` (retained
+  no-ops from the removed suggestions dropdown) — active no-ops in the search route and dead
+  help entries. Now returns an empty map; the category + `BrowserSearchAction` variants stay
+  for config-parse compat (user bindings parse and dispatch as no-ops; parse-time NoOp strip
+  unaffected). Search-route Up/Down: no-op key → unmapped (`NoMap`) — observably identical
+  (both clear the key stack). Example `config.toml` drops the suggestion section; two
+  browser.rs tests flipped to assert no dead suggestion bindings in the search-route active
+  chain; new red→green test asserts empty defaults. (keymap.rs sweep otherwise clean.)
 - **Vestigial `ResolveAudioTracks` stub reduced to a retained no-op.**
   The `PlaylistAction::ResolveAudioTracks` arm marked `ListSong::resolution_checked` (a field
   nothing read), spawned N no-op effect closures, and set/cleared
