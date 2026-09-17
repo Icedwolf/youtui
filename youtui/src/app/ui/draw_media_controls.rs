@@ -15,13 +15,7 @@ pub fn draw_app_media_controls(w: &YoutuiWindow) -> MediaControlsUpdate<'_> {
             .unwrap_or(0);
         progress = w.playlist.get_cur_played_dur().unwrap_or_default();
     }
-    let cur_active_song = match w.playlist.play_status {
-        PlayState::Error(id)
-        | PlayState::Playing(id)
-        | PlayState::Paused(id)
-        | PlayState::Buffering(id) => w.playlist.get_song_from_id(id),
-        PlayState::NotPlaying => None,
-    };
+    let cur_active_song = w.playlist.get_cur_playing_song();
     let song_title = cur_active_song
         .map(|s| s.title.as_str())
         .unwrap_or_default();

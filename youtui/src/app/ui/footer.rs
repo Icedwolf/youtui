@@ -118,13 +118,7 @@ fn refresh_footer_cache(
 }
 
 pub fn draw_footer(f: &mut Frame, w: &mut super::YoutuiWindow, chunk: Rect) {
-    let cur_active_id = match w.playlist.play_status {
-        PlayState::Error(id)
-        | PlayState::Playing(id)
-        | PlayState::Paused(id)
-        | PlayState::Buffering(id) => Some(id),
-        PlayState::NotPlaying => None,
-    };
+    let cur_active_id = w.playlist.get_cur_playing_id();
 
     let mut duration = 0;
     let mut progress = Duration::default();

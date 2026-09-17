@@ -95,8 +95,6 @@ fn draw_popup(f: &mut Frame, w: &YoutuiWindow, chunk: Rect) {
 
 /// Draw the help page. The help page should show all visible commands for the
 /// current page.
-/// Draw the help page. The help page should show all visible commands for the
-/// current page.
 fn draw_help(f: &mut Frame, w: &mut YoutuiWindow, chunk: Rect) {
     let mut s_len = 0usize;
     let mut c_len = 0usize;
