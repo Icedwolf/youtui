@@ -122,6 +122,15 @@ The codebase is at a local optimum across the areas this project optimizes:
   arm, mod.rs:343). No dead code; added a documenting comment and 2 parity locks
   (`text_enter_closes_search_and_is_consumed`, `text_esc_closes_search_and_is_consumed`) closing
   the untested Enter/Esc row of the state table.
+- **`is_text_handling` leaf impls audited — vestigial, never consulted.** Call-site map of all
+  12 `is_text_handling()` sites: none reach `FilterManager` (shared_components.rs) or
+  `SearchBlock` (shared_components.rs); every gating path routes through the route checks in
+  `SearchPanel` (route == Search) / `SongsPanel` (route == Filter) / custom and macro composite
+  browsers. The two always-`true` leaf impls are trait-required but never consulted — documented
+  as vestigial. A trait-default swap was rejected (adds an internal default to delete 2 lines,
+  net-zero, and would silently flip those leaves to `false` for any future caller). No behavior
+  change. Custom `SongSearchBrowser` guard (songsearch.rs:319) confirmed identical to the macro
+  composite (Filter route excluded from Submit via the extra `matches!`).
 - **`apply_ytdlp_auth_args` duplicate skip-only branch collapsed** — the inner
   `else` (fallback requested but no pot provider) and the outer `else` (no
   fallback) emitted the byte-identical
