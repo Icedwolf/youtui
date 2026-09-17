@@ -46,7 +46,6 @@ impl std::fmt::Display for MediaControlsError {
 
 pub struct NotificationController {
     last_notification: Option<(String, String)>,
-    cover_url: Option<String>,
 }
 
 impl Default for NotificationController {
@@ -59,7 +58,6 @@ impl NotificationController {
     pub fn new() -> Self {
         Self {
             last_notification: None,
-            cover_url: None,
         }
     }
 
@@ -80,15 +78,7 @@ impl NotificationController {
             return Ok(());
         }
 
-        let icon_path = if let Some(url) = cover_url {
-            if url.starts_with("file://") {
-                Some(url.to_string())
-            } else {
-                None
-            }
-        } else {
-            None
-        };
+        let icon_path = cover_url.filter(|url| url.starts_with("file://"));
 
         let mut notification = Notification::new()
             .summary(title)
@@ -97,13 +87,12 @@ impl NotificationController {
             .timeout(Timeout::Milliseconds(5000))
             .clone();
 
-        if let Some(path) = &icon_path {
-            notification.icon(path.as_str());
+        if let Some(path) = icon_path {
+            notification.icon(path);
         }
 
         notification.show()?;
         self.last_notification = Some((title.to_string(), body.to_string()));
-        self.cover_url = cover_url.map(String::from);
         Ok(())
     }
 }
@@ -403,7 +392,6 @@ mod tests {
     fn notification_controller_constructs() {
         let nc = NotificationController::new();
         assert!(nc.last_notification.is_none());
-        assert!(nc.cover_url.is_none());
     }
 
     /// A Playing->Paused transition within the position-delta throttle window
