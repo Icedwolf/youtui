@@ -11,7 +11,6 @@ pub struct TabGrid<'a> {
     selected: Option<usize>,
     constraint: TabGridConstraint,
     highlight_style: Option<Style>,
-    style: Style,
 }
 
 #[derive(PartialEq)]
@@ -32,7 +31,6 @@ impl<'a> TabGrid<'a> {
             selected: None,
             constraint: TabGridConstraint::MaxCols(cols),
             highlight_style: Default::default(),
-            style: Default::default(),
         }
     }
 
@@ -46,7 +44,6 @@ impl<'a> TabGrid<'a> {
             selected: None,
             constraint: TabGridConstraint::MaxRows(rows),
             highlight_style: Default::default(),
-            style: Default::default(),
         }
     }
 
@@ -139,9 +136,8 @@ impl<'a> Widget for TabGrid<'a> {
         let Self {
             titles,
             selected,
-            constraint,
             highlight_style,
-            style,
+            ..
         } = self;
 
         // Debug logging ONLY in extreme cases (too many titles for area)
@@ -155,72 +151,35 @@ impl<'a> Widget for TabGrid<'a> {
             );
         }
 
-        match constraint {
-            TabGridConstraint::MaxCols(_) => {
-                for (idx, title) in titles.into_iter().enumerate() {
-                    let row = idx.rem_euclid(rows);
-                    let col = idx.div_euclid(rows);
-                    let tab = if let Some(highlight_style) = highlight_style
-                        && selected == Some(idx)
-                    {
-                        Line::from(title).style(highlight_style)
-                    } else {
-                        Line::from(title).style(style)
-                    }
-                    .centered();
-
-                    // Safe math with overflow protection
-                    let x = area
-                        .x
-                        .saturating_add((col * (longest_title + 1)).try_into().unwrap_or(u16::MAX));
-                    let y = area.y.saturating_add(row.try_into().unwrap_or(u16::MAX));
-
-                    let render_area = Rect {
-                        x: x.min(area.x + area.width),
-                        y: y.min(area.y + area.height),
-                        width: longest_title.try_into().unwrap_or(u16::MAX).min(area.width),
-                        height: 1,
-                    }
-                    .intersection(area);
-
-                    // Only render if we have valid space
-                    if render_area.width > 0 && render_area.height > 0 {
-                        tab.render(render_area, buf);
-                    }
-                }
+        for (idx, title) in titles.into_iter().enumerate() {
+            let row = idx.rem_euclid(rows);
+            let col = idx.div_euclid(rows);
+            let tab = if let Some(highlight_style) = highlight_style
+                && selected == Some(idx)
+            {
+                Line::from(title).style(highlight_style)
+            } else {
+                Line::from(title)
             }
-            TabGridConstraint::MaxRows(_) => {
-                for (idx, title) in titles.into_iter().enumerate() {
-                    let row = idx.rem_euclid(rows);
-                    let col = idx.div_euclid(rows);
-                    let tab = if let Some(highlight_style) = highlight_style
-                        && selected == Some(idx)
-                    {
-                        Line::from(title).style(highlight_style)
-                    } else {
-                        Line::from(title).style(style)
-                    }
-                    .centered();
+            .centered();
 
-                    // Safe math with overflow protection
-                    let x = area
-                        .x
-                        .saturating_add((col * (longest_title + 1)).try_into().unwrap_or(u16::MAX));
-                    let y = area.y.saturating_add(row.try_into().unwrap_or(u16::MAX));
+            // Safe math with overflow protection
+            let x = area
+                .x
+                .saturating_add((col * (longest_title + 1)).try_into().unwrap_or(u16::MAX));
+            let y = area.y.saturating_add(row.try_into().unwrap_or(u16::MAX));
 
-                    let render_area = Rect {
-                        x: x.min(area.x + area.width),
-                        y: y.min(area.y + area.height),
-                        width: longest_title.try_into().unwrap_or(u16::MAX).min(area.width),
-                        height: 1,
-                    }
-                    .intersection(area);
+            let render_area = Rect {
+                x: x.min(area.x + area.width),
+                y: y.min(area.y + area.height),
+                width: longest_title.try_into().unwrap_or(u16::MAX).min(area.width),
+                height: 1,
+            }
+            .intersection(area);
 
-                    // Only render if we have valid space
-                    if render_area.width > 0 && render_area.height > 0 {
-                        tab.render(render_area, buf);
-                    }
-                }
+            // Only render if we have valid space
+            if render_area.width > 0 && render_area.height > 0 {
+                tab.render(render_area, buf);
             }
         }
     }
