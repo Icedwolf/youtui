@@ -21,15 +21,11 @@ impl ScrollingListState {
     }
 }
 
-pub struct ScrollingList<'a, I> {
+pub struct ScrollingList<I> {
     /// The items in the list
     items: I,
-    /// Style used as a base style for the widget
-    style: Style,
     /// Style used to render selected item
     highlight_style: Style,
-    /// Symbol in front of the selected item (Shift all items to the right)
-    highlight_symbol: Option<&'a str>,
     /// Monotonically increasing tick count
     cur_tick: u64,
     /// Gap between end of text and start of text (when wrapping around)
@@ -39,11 +35,11 @@ pub struct ScrollingList<'a, I> {
     max_times_to_scroll: Option<u16>,
 }
 
-impl<'a, I> ScrollingList<'a, I> {
+impl<I> ScrollingList<I> {
     /// `cur_tick` should represent a monotonically and periodically increasing
     /// tick count passed on every render, to determine list scroll frame.
     #[must_use]
-    pub fn new<II>(items: I, cur_tick: u64) -> ScrollingList<'a, I>
+    pub fn new<'a, II>(items: I, cur_tick: u64) -> ScrollingList<I>
     where
         I: IntoIterator<Item = II> + 'a,
         II: Into<Cow<'a, str>>,
@@ -53,9 +49,7 @@ impl<'a, I> ScrollingList<'a, I> {
             cur_tick,
             ticker_gap: DEFAULT_TICKER_GAP,
             max_times_to_scroll: None,
-            style: Default::default(),
             highlight_style: Default::default(),
-            highlight_symbol: Default::default(),
         }
     }
     #[must_use = "method moves the value of self and returns the modified value"]
@@ -79,7 +73,7 @@ impl<'a, I> ScrollingList<'a, I> {
     }
 }
 
-impl<'a, I, II> StatefulWidget for ScrollingList<'a, I>
+impl<'a, I, II> StatefulWidget for ScrollingList<I>
 where
     I: IntoIterator<Item = II> + 'a,
     II: Into<Cow<'a, str>>,
@@ -94,9 +88,7 @@ where
     ) {
         let Self {
             items,
-            style,
             highlight_style,
-            highlight_symbol,
             cur_tick,
             ticker_gap,
             max_times_to_scroll,
@@ -117,15 +109,9 @@ where
             }
             ListItem::from(item)
         });
-        let list = List::new(items)
-            .style(style)
-            .highlight_style(highlight_style);
-        let list = if let Some(highlight_symbol) = highlight_symbol {
-            list.highlight_symbol(highlight_symbol)
-        } else {
-            list
-        };
-        list.render(area, buf, &mut state.list_state);
+        List::new(items)
+            .highlight_style(highlight_style)
+            .render(area, buf, &mut state.list_state);
     }
 }
 
