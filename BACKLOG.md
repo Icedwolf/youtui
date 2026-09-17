@@ -1,7 +1,9 @@
 # Youtui Backlog
 
 **Build:** 0 errors, 0 warnings, 0 clippy
-**Tests:** 398 youtui bins green (2 ignored)
+**Tests:** 398 youtui bins green (2 ignored). Binary is NOT reinstalled to
+`~/.config/cargo/bin/youtui` anymore (user runs it actively) — `target/release/youtui` is the
+verification artifact only.
 **Last updated:** 2026-09-17
 
 This file is a working backlog only — no changelog, no session archaeology. Past work
@@ -189,6 +191,15 @@ The codebase is at a local optimum across the areas this project optimizes:
   already computed by constraint-dispatching helpers before the match, so the match was pure
   duplication; the single body now follows. Parity: `test_basic_tab_grid`/`_max_cols`/`_max_rows`
   pin exact cell output, green before/after. Net −41 lines.
+- **Draw-layer duplication cuts: reuse `get_cur_playing_id`/`get_cur_playing_song`.**
+  `draw_footer` (footer.rs:121) and `draw_app_media_controls` (draw_media_controls.rs:18) each
+  re-implemented the `play_status → active song` match inline even though
+  `Playlist::get_cur_playing_id()`/`get_cur_playing_song()` (playback.rs:737/747, 14 live call
+  sites) are byte-identical to those arms. Both now call the accessors; the duplicated
+  `draw_help` doc comment (ui/draw.rs) is gone. Behavior-preserving literal substitution — suite
+  parity before/after. Net −14 lines across 3 files. `ui/footer.rs` cache, `action.rs`
+  (`NoOp` = keybind-migration sentinel, live), `draw_media_controls.rs`, `ui/draw.rs`, and
+  `scrolling_table.rs` otherwise clean.
 - **`apply_ytdlp_auth_args` duplicate skip-only branch collapsed** — the inner
   `else` (fallback requested but no pot provider) and the outer `else` (no
   fallback) emitted the byte-identical
