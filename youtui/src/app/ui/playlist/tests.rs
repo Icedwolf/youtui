@@ -324,7 +324,7 @@ fn download_scope_max_2_songs() {
 
 #[cfg(test)]
 mod state_transitions {
-    use crate::app::component::actionhandler::{ActionHandler, TextHandler};
+    use crate::app::component::actionhandler::{ActionHandler, TextHandler, YoutuiEffect};
     use crate::app::structures::{
         DownloadStatus, ListSong, ListSongID, ListStatus, Percentage, PlayState, SongListComponent,
     };
@@ -1593,6 +1593,23 @@ mod state_transitions {
         assert!(
             p.cached_title.borrow().is_none(),
             "closing the search must invalidate the cached title"
+        );
+    }
+
+    #[test]
+    fn resolve_audio_tracks_is_retained_noop() {
+        let mut p = downloaded_songs(3);
+        let effect: YoutuiEffect<Playlist> =
+            p.apply_action(PlaylistAction::ResolveAudioTracks).into();
+        assert!(
+            effect.effect.is_empty(),
+            "resolve action must not spawn effect closures (vestigial stub)"
+        );
+        assert!(effect.callback.is_none());
+        assert_eq!(p.list.get_list_iter().len(), 3);
+        assert!(
+            !p.get_title().to_string().contains("[RESOLVING]"),
+            "no resolving indicator may appear in the title"
         );
     }
 

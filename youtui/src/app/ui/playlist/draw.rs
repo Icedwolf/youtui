@@ -95,12 +95,6 @@ impl HasTitle for Playlist {
             ""
         };
 
-        let resolve_indicator = if self.resolving_audio {
-            " [RESOLVING]"
-        } else {
-            ""
-        };
-
         let next_indicator = if !self.play_next_queue.is_empty() {
             format!(" [NEXT: {}]", self.play_next_queue.len())
         } else {
@@ -108,9 +102,8 @@ impl HasTitle for Playlist {
         };
 
         let song_count = self.list.get_list_iter().len();
-        let base = format!(
-            "Local playlist - {song_count} songs{shuffle_indicator}{resolve_indicator}{next_indicator}"
-        );
+        let base =
+            format!("Local playlist - {song_count} songs{shuffle_indicator}{next_indicator}");
 
         let title = if !self.search_text.is_empty() {
             let search_indicator = format!(" [SEARCH: {}]", self.search_text);

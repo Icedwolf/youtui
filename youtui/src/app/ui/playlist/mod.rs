@@ -133,8 +133,6 @@ pub struct Playlist {
     loaded_from_autosave: bool,
     preloaded_sources: HashMap<ListSongID, Box<dyn Source<Item = f32> + Send + 'static>>,
     play_next_queue: VecDeque<ListSongID>,
-    resolving_audio: bool,
-    resolve_remaining: usize,
     cached_title: RefCell<Option<Line<'static>>>,
     notifications_enabled: bool,
     auth_notif_last: Option<std::time::Instant>,
@@ -208,38 +206,15 @@ impl ActionHandler<PlaylistAction> for Playlist {
                 }
             },
             PlaylistAction::ResolveAudioTracks => {
-                if self.resolving_audio {
-                    return (Effects::none(), None);
-                }
-                let unchecked: Vec<ListSong> = self
-                    .list
-                    .get_list_iter_mut()
-                    .filter_map(|s| {
-                        if s.resolution_checked {
-                            None
-                        } else {
-                            s.resolution_checked = true;
-                            Some(s.clone())
-                        }
-                    })
-                    .collect();
-                if unchecked.is_empty() {
-                    return (Effects::none(), None);
-                }
-                self.resolve_remaining = unchecked.len();
-                self.resolving_audio = true;
-                let mut effect = Effects::none();
-                for _ in &unchecked {
-                    effect = effect.push(Effects::new(
-                        |_: &crate::app::server::ArcServer| async move {
-                            Box::new(|_: &mut Playlist| Effects::none())
-                                as Box<dyn FnOnce(&mut Playlist) -> Effects<Playlist> + Send>
-                        },
-                    ));
-                }
-                self.resolve_remaining = 0;
-                self.resolving_audio = false;
-                (effect, None)
+                // Vestigial stub, retained for config/keybind compatibility.
+                // The old implementation marked `resolution_checked` (a field
+                // nothing read), spawned N no-op effect closures, and reset
+                // `resolving_audio`/`resolve_remaining` synchronously — a
+                // `[RESOLVING]` title indicator could never render. The `r`
+                // keybind (Global/help) and this variant stay so user
+                // `resolve_audio_tracks` bindings keep parsing, mirroring the
+                // retained BrowserSearchAction no-op. (2026-09-17)
+                (Effects::none(), None)
             }
             PlaylistAction::AddToPlayNext => {
                 if !self.search_text.is_empty() && self.search_indices.is_empty() {

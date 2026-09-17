@@ -91,8 +91,6 @@ pub struct ListSong {
     pub artists_string: String,
     #[serde(skip)]
     pub track_no_string: String,
-    #[serde(default, skip)]
-    pub resolution_checked: bool,
     pub year: Option<Rc<String>>,
     pub artists: MaybeRc<Vec<ListSongArtist>>,
     pub album: Option<MaybeRc<ListSongAlbum>>,
@@ -335,7 +333,6 @@ impl ListSong {
             artists_lower,
             artists_string,
             track_no_string: String::new(),
-            resolution_checked: false,
             year: None,
             artists: MaybeRc::Owned(list_artists),
             album: list_album,
@@ -494,7 +491,6 @@ impl BrowserSongsList {
             artists_lower,
             artists_string,
             track_no_string,
-            resolution_checked: false,
         });
         id
     }
@@ -541,7 +537,6 @@ impl BrowserSongsList {
             artists_lower,
             artists_string,
             track_no_string,
-            resolution_checked: false,
         });
         id
     }
@@ -622,7 +617,6 @@ impl BrowserSongsList {
             artists_lower,
             artists_string,
             track_no_string,
-            resolution_checked: false,
         });
         Some(id)
     }

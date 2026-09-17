@@ -60,8 +60,6 @@ impl Playlist {
             loaded_from_autosave: false,
             preloaded_sources: HashMap::new(),
             play_next_queue: VecDeque::new(),
-            resolving_audio: false,
-            resolve_remaining: 0,
             cached_title: RefCell::new(None),
             notifications_enabled: true,
             auth_notif_last: None,
