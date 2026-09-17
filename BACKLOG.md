@@ -1,7 +1,7 @@
 # Youtui Backlog
 
 **Build:** 0 errors, 0 warnings, 0 clippy
-**Tests:** 394 youtui bins green (2 ignored)
+**Tests:** 395 youtui bins green (2 ignored)
 **Last updated:** 2026-09-17
 
 This file is a working backlog only — no changelog, no session archaeology. Past work
@@ -131,6 +131,16 @@ The codebase is at a local optimum across the areas this project optimizes:
   net-zero, and would silently flip those leaves to `false` for any future caller). No behavior
   change. Custom `SongSearchBrowser` guard (songsearch.rs:319) confirmed identical to the macro
   composite (Filter route excluded from Submit via the extra `matches!`).
+- **`Browser::get_active_keybinds` duplicate dominator gate removed.** The inner
+  `if self.dominant_keybinds_active()` early return (browser.rs) was unreachable from the
+  dispatch path: `YoutuiWindow`'s DominantKeyRouter consults the same
+  `browser.dominant_keybinds_active()` in the same immutable frame and early-returns before
+  `Browser::get_active_keybinds` is ever chained (ui.rs:136 vs :146). The three existing direct
+  callers (tests) were all non-dominant too. Dominance handling is now consolidated in one place
+  (the window); the `DominantKeyRouter` impl on Browser remains for the window's delegation.
+  Test-first: `direct_get_active_keybinds_chains_browser_map_when_filter_shown` — failed on the
+  old gate (keymap blocked), passes after; the direct-call contract (dominant still yields
+  variant + `browser` map) is locked. Net −16 lines. (395 tests.)
 - **`apply_ytdlp_auth_args` duplicate skip-only branch collapsed** — the inner
   `else` (fallback requested but no pot provider) and the outer `else` (no
   fallback) emitted the byte-identical
