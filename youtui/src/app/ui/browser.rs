@@ -530,37 +530,41 @@ mod tests {
         assert_eq!(panel.sort.cur, 1);
     }
     #[tokio::test]
-    async fn artist_search_panel_search_suggestions_has_correct_keybinds() {
+    async fn artist_search_panel_search_route_has_no_suggestion_bindings() {
         let cfg = Config::default();
         let b = Browser::new();
-        let actual_kb = b.get_active_keybinds(&cfg);
-        let expected_kb = (
+        let dead_binding = (
             &Keybind::new_unmodified(crossterm::event::KeyCode::Down),
             &KeyActionTree::new_key(AppAction::BrowserSearch(
                 BrowserSearchAction::NextSearchSuggestion,
             )),
         );
-        let kb_found = actual_kb
-            .inspect(|kb| println!("{kb:#?}"))
-            .any(|km| km.iter().contains(&expected_kb));
-        assert!(kb_found);
+        let absent = !b
+            .get_active_keybinds(&cfg)
+            .any(|km| km.iter().contains(&dead_binding));
+        assert!(
+            absent,
+            "search-route active keybinds must not ship dead suggestion bindings"
+        );
     }
     #[tokio::test]
-    async fn songs_search_panel_search_suggestions_has_correct_keybinds() {
+    async fn songs_search_panel_search_route_has_no_suggestion_bindings() {
         let cfg = Config::default();
         let mut b = Browser::new();
         b.apply_action(BrowserAction::ChangeSearchType);
-        let actual_kb = b.get_active_keybinds(&cfg);
-        let expected_kb = (
+        let dead_binding = (
             &Keybind::new_unmodified(crossterm::event::KeyCode::Down),
             &KeyActionTree::new_key(AppAction::BrowserSearch(
                 BrowserSearchAction::NextSearchSuggestion,
             )),
         );
-        let kb_found = actual_kb
-            .inspect(|kb| println!("{kb:#?}"))
-            .any(|km| km.iter().contains(&expected_kb));
-        assert!(kb_found);
+        let absent = !b
+            .get_active_keybinds(&cfg)
+            .any(|km| km.iter().contains(&dead_binding));
+        assert!(
+            absent,
+            "search-route active keybinds must not ship dead suggestion bindings"
+        );
     }
     #[tokio::test]
     async fn artist_songs_panel_has_correct_keybinds() {

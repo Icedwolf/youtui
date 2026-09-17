@@ -47,10 +47,6 @@ E = {action = "browser.change_search_type", visibility = "global"}
 [keybinds.browser_artists]
 enter = "browser_artists.display_selected_artist_albums"
 
-[keybinds.browser_search]
-down = "browser_search.next_search_suggestion"
-up = "browser_search.prev_search_suggestion"
-
 [keybinds.browser_artist_songs]
 f = {action = "browser_artist_songs.filter", visibility = "global"}
 o = {action = "browser_artist_songs.sort", visibility = "global"}

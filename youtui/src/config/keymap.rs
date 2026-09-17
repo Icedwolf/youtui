@@ -5,7 +5,7 @@ use crate::app::ui::browser::artistsearch::search_panel::BrowserArtistsAction;
 use crate::app::ui::browser::artistsearch::songs_panel::BrowserArtistSongsAction;
 use crate::app::ui::browser::playlistsearch::search_panel::BrowserPlaylistsAction;
 use crate::app::ui::browser::playlistsearch::songs_panel::BrowserPlaylistSongsAction;
-use crate::app::ui::browser::shared_components::{BrowserSearchAction, FilterAction, SortAction};
+use crate::app::ui::browser::shared_components::{FilterAction, SortAction};
 use crate::app::ui::browser::songsearch::BrowserSongsAction;
 use crate::app::ui::playlist::PlaylistAction::{self, ViewBrowser};
 use crate::keyaction::{KeyAction, KeyActionVisibility};
@@ -598,21 +598,14 @@ fn default_browser_playlists_keybinds() -> BTreeMap<Keybind, KeyActionTree<AppAc
         )),
     )])
 }
+/// The `browser_search` keybind category ships empty by default: the
+/// suggestion dropdown was removed (2026-09-14) and its Up/Down bindings were
+/// no-op dispatches that also surfaced as dead help entries. The category and
+/// `BrowserSearchAction` variants stay for config-parse compatibility
+/// (`deny_unknown_fields` on `YoutuiKeymapIR`) — user bindings still parse and
+/// dispatch as no-ops.
 fn default_browser_search_keybinds() -> BTreeMap<Keybind, KeyActionTree<AppAction>> {
-    FromIterator::from_iter([
-        (
-            Keybind::new_unmodified(crossterm::event::KeyCode::Down),
-            KeyActionTree::new_key(AppAction::BrowserSearch(
-                BrowserSearchAction::NextSearchSuggestion,
-            )),
-        ),
-        (
-            Keybind::new_unmodified(crossterm::event::KeyCode::Up),
-            KeyActionTree::new_key(AppAction::BrowserSearch(
-                BrowserSearchAction::PrevSearchSuggestion,
-            )),
-        ),
-    ])
+    BTreeMap::new()
 }
 fn default_browser_artist_songs_keybinds() -> BTreeMap<Keybind, KeyActionTree<AppAction>> {
     FromIterator::from_iter([
@@ -962,6 +955,19 @@ mod tests {
     use crate::app::ui::browser::artistsearch::songs_panel::BrowserArtistSongsAction;
     use crate::config::keymap::{Keymap, remove_action_from_keymap};
     use crate::keybind::Keybind;
+
+    #[test]
+    fn browser_search_defaults_bind_no_dead_suggestion_keys() {
+        // The suggestions dropdown was removed (2026-09-14); Up/Down bound to
+        // Next/PrevSearchSuggestion are retained no-ops that surface as dead
+        // help entries. The default map must stay empty — the category and
+        // BrowserSearchAction variants are retained only for config-parse
+        // compatibility (user bindings still parse and dispatch as no-ops).
+        assert!(
+            super::default_browser_search_keybinds().is_empty(),
+            "browser_search defaults must not ship dead suggestion bindings"
+        );
+    }
 
     #[test]
     fn test_add_key() {
