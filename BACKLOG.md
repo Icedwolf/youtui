@@ -171,6 +171,18 @@ The codebase is at a local optimum across the areas this project optimizes:
   (`file://` prefix gate unchanged). Behavior-preserving; full suite parity before/after. Net −12
   lines. `effect.rs`, `server.rs`, `view.rs`, and `ui/header.rs` scans were clean (no changes).
   (398 tests.)
+- **`ScrollingList` dead `style` + `highlight_symbol` members removed.** No builder exists for
+  either (only `new`, `highlight_style`, `ticker_gap`, `max_times_to_scroll`), so `style` was
+  always `Style::default()` passed straight through (no-op) and `highlight_symbol` was always
+  `None` — render's `if let Some` branch was structurally dead. Removing both dropped the field
+  init/destructure and collapsed `List::new(...).style(..).highlight_style(..)` +
+  conditional to a flat `List::new(...).highlight_style(..).render(..)`; the unused struct
+  lifetime param moved from the struct to the `new`/`StatefulWidget` impls (method-level, bounds
+  unchanged). Parity: the three render-output tests
+  (`test_basic_scrolling_list`, `test_max_times_to_scroll`, `test_scrolling_graphemes`) lock exact
+  cell output and never touch either member — green before/after. Net −14 lines.
+  `queue_persistence.rs` scan clean (`auto_load` is still the synchronous fallback; criterion
+  benches are old-vs-new baselines, deliberate).
 - **`apply_ytdlp_auth_args` duplicate skip-only branch collapsed** — the inner
   `else` (fallback requested but no pot provider) and the outer `else` (no
   fallback) emitted the byte-identical
