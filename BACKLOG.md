@@ -163,8 +163,14 @@ The codebase is at a local optimum across the areas this project optimizes:
   two other call sites (ui.rs:536 mode popup, actionhandler.rs:114 global header). Parity lock
   `flatten_shows_visible_keys_and_mode_subkeys_and_drops_hidden` (keyaction.rs) added first — green
   before and after: visible keys, mode trigger (named by mode), and visible sub-keys appear
-  (prefix `Enter → Space`), Hidden rows and sub-keys dropped. Net −12 lines. `effect.rs` and
-  `server.rs` app-layer scans were clean (no changes). (398 tests.)
+  (prefix `Enter → Space`), Hidden rows and sub-keys dropped. Net −12 lines.
+- **`NotificationController.cover_url` dead field removed + `icon_path` chain collapse.**
+  `cover_url` was written on every successful `notify_track_change` but the dedup gate keys on
+  `last_notification` (title+body) only — the stored field's only readers were the type-level
+  tests (dropped with it). The 7-line `icon_path` if-let chain collapses to `cover_url.filter`
+  (`file://` prefix gate unchanged). Behavior-preserving; full suite parity before/after. Net −12
+  lines. `effect.rs`, `server.rs`, `view.rs`, and `ui/header.rs` scans were clean (no changes).
+  (398 tests.)
 - **`apply_ytdlp_auth_args` duplicate skip-only branch collapsed** — the inner
   `else` (fallback requested but no pot provider) and the outer `else` (no
   fallback) emitted the byte-identical
