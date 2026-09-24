@@ -1,10 +1,10 @@
 # Youtui Backlog
 
 **Build:** 0 errors, 0 warnings, 0 clippy
-**Tests:** 403 youtui bins green (2 ignored). Binary is NOT reinstalled to
+**Tests:** 687 youtui bins green (2 ignored). Binary is NOT reinstalled to
 `~/.config/cargo/bin/youtui` anymore (user runs it actively) — `target/release/youtui` is the
 verification artifact only.
-**Last updated:** 2026-09-17
+**Last updated:** 2026-09-24
 
 This file is a working backlog only — no changelog, no session archaeology. Past work
 and its rationale live in git history and in the code comments / `DECISIONS.md`.
@@ -267,6 +267,14 @@ The codebase is at a local optimum across the areas this project optimizes:
   else `debug!` + noop), ~82 lines differing only in action type/variant/field/message. Now five
   `impl_browser_sub_action_handler!` invocations; new wrong-variant test locks the mismatch arm.
   Net −26 lines. 683 tests.
+- **Three song-list default keybind tables collapsed into one macro (config/keymap.rs).**
+  `default_browser_songs_keybinds` and `default_browser_playlist_songs_keybinds` were byte-identical
+  tables (same f/o/Enter-"Play" skeleton, differing only in the action-type path);
+  `default_browser_artist_songs_keybinds` was the same table + exactly two bindings
+  ('a'→PlayAlbum, 'A'→AddAlbumToPlaylist). Now one `default_song_list_keybinds!($category,
+  $action_ty [, extra-pairs])` macro: every key, action, visibility (Global on f/o, Standard on
+  mode subs) and the "Play" mode name preserved. New parity-lock test
+  `song_list_default_tables_share_one_skeleton`. Prod tables 160 → ~84 lines. 687 tests.
 - **TabGrid `MaxCols` constraint variant stripped (widgets/tab_grid.rs).** The only production
   caller (header.rs `TAB_ROWS`) uses the row-constrained path; `MaxCols` and its `#[cfg(test)]`-only
   `new_with_max_cols` existed solely for two unit tests. `TabGridConstraint` (enum) collapsed to a
