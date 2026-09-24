@@ -226,6 +226,15 @@ The codebase is at a local optimum across the areas this project optimizes:
   differs). Extracted private assoc fn `player_pause_effect()`; all three call it. `stop()`
   untouched (its block carries the `handle_all_stopped` mutation). Parity locked by the
   existing pause/resume state-transition tests; net −5 lines.
+- **Dead videos now flagged at ANY download failure.** Log review (debug15/16) showed the
+  same pattern for every permanently-unavailable video: `download_error` twice for one song —
+  once as a background prefetch/queued download, again after a re-resolve while buffering —
+  because `session_dead_videos` was only populated in the buffering branch. Every dead
+  successor thus cost one wasted yt-dlp resolve cycle (~2–4s) at auto-advance. The flag +
+  Song Unavailable notify now happen on any non-cancellation dead-video failure; the
+  buffering branch keeps skip/auth/halt duties with the same `is_dead`/`is_auth` reads.
+  Red→green: `dead_failure_flags_session_dead_even_when_not_buffering`. Full `playback.rs`
+  sweep now complete and clean.
 - **Vestigial `ResolveAudioTracks` stub reduced to a retained no-op.**
   The `PlaylistAction::ResolveAudioTracks` arm marked `ListSong::resolution_checked` (a field
   nothing read), spawned N no-op effect closures, and set/cleared
