@@ -1083,6 +1083,7 @@ mod bench {
 mod criterion_benches {
     use super::*;
     use criterion::Criterion;
+    use std::time::Duration;
     use ytmapi_rs::common::VideoID;
 
     fn make_songs(count: usize) -> Vec<ListSong> {
@@ -1102,7 +1103,12 @@ mod criterion_benches {
     #[test]
     fn criterion_get_field_hot_path() {
         let songs = make_songs(100);
-        let mut c = Criterion::default();
+        // Default criterion config (5s measure + 3s warm-up per bench) would
+        // dominate every `cargo test --release` run; 1s/0.5s keeps baseline
+        // visibility without the wall time.
+        let mut c = Criterion::default()
+            .measurement_time(Duration::from_millis(1000))
+            .warm_up_time(Duration::from_millis(500));
 
         c.bench_function("get_field/artists_cached", |b| {
             b.iter(|| {

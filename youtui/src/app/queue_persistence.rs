@@ -216,6 +216,7 @@ mod criterion_benches {
     use crate::app::structures::ListSong;
     use criterion::Criterion;
     use std::hint::black_box;
+    use std::time::Duration;
     use ytmapi_rs::common::{VideoID, YoutubeID};
 
     fn big_playlist(count: usize) -> Vec<ListSong> {
@@ -260,7 +261,12 @@ mod criterion_benches {
             shuffle_enabled: false,
             shuffle_seed: 0,
         };
-        let mut c = Criterion::default();
+        // Default criterion config (5s measure + 3s warm-up per bench) would
+        // dominate every `cargo test --release` run; 1s/0.5s keeps baseline
+        // visibility without the wall time.
+        let mut c = Criterion::default()
+            .measurement_time(Duration::from_millis(1000))
+            .warm_up_time(Duration::from_millis(500));
         c.bench_function("save/current_two_pass", |b| {
             b.iter(|| black_box(into_compact_two_pass(black_box(&songs))))
         });

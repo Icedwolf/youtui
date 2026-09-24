@@ -382,13 +382,19 @@ mod state_transitions {
         use super::*;
         use criterion::Criterion;
         use std::hint::black_box;
+        use std::time::Duration;
 
         #[test]
         fn criterion_playlist_get_song_from_idx() {
             const N: usize = 135_000;
             let p = undownloaded_songs(N);
             let last = N - 1;
-            let mut c = Criterion::default();
+            // Keep the release-suite wall time sane: default is 5s measure +
+            // 3s warm-up per bench_function. 1s/0.5s is plenty for baseline
+            // visibility (the `bench`/threshold guards remain authoritative).
+            let mut c = Criterion::default()
+                .measurement_time(Duration::from_millis(1000))
+                .warm_up_time(Duration::from_millis(500));
             c.bench_function("playlist/get_song_from_idx_last", |b| {
                 b.iter(|| black_box(p.get_song_from_idx(black_box(last))))
             });
