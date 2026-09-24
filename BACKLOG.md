@@ -252,6 +252,15 @@ The codebase is at a local optimum across the areas this project optimizes:
   first two lazily. All now call one `compute_cached_fields` helper with a documented
   `Option<track_no>` contract. Behavior-identical (state-table verified), locked by the suite.
   Net +22 lines — one-time helper scaffolding replacing 4× full derivations.
+- **Artist/playlist split-browser draw merged (draw.rs).** `draw_artist_search_browser` +
+  `draw_playlist_search_browser` were 71-line near-twins. Both are now thin wrappers over
+  `draw_split_search_browser_core`; the real differences are explicit params: left layout
+  (`[Max(30), Min(0)]` vs `[Percentage(30), Percentage(70)]`), search-box label, and a
+  `loadable_left` flag preserving the playlist's historical lack of the `draw_loadable`
+  overlay. The risky part — render code with zero tests — is locked by two new TestBackend
+  render-parity tests (snapshot fixture `draw_parity.txt`, captured from the pre-refactor
+  render; 6 states: loaded/popped/loading × artist/playlist). Production net −~60 lines;
+  +2 parity tests + fixture. 682 tests.
 - **Vestigial `ResolveAudioTracks` stub reduced to a retained no-op.**
   The `PlaylistAction::ResolveAudioTracks` arm marked `ListSong::resolution_checked` (a field
   nothing read), spawned N no-op effect closures, and set/cleared
