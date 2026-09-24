@@ -245,6 +245,13 @@ The codebase is at a local optimum across the areas this project optimizes:
   `SongSearchBrowser`) use the defaults; the four dispatch sites (macro songs_panel routing +
   songsearch.rs self-routing) are unchanged. Shared `handle_sort_cur(direction)` body, asc/desc
   become one-line delegators. Net −11 lines.
+- **`ListSong` cached-field derivation consolidated (R11 flag).** All four constructors
+  (`create_with_metadata`, `add_raw_album_song`, `add_raw_search_result_song`,
+  `add_raw_playlist_item`) recomputed the same caches: `compute_artists_string` + `track_no_string`
+  + the lowercase search triple; `ensure_cached_fields` was a fifth partial copy filling only the
+  first two lazily. All now call one `compute_cached_fields` helper with a documented
+  `Option<track_no>` contract. Behavior-identical (state-table verified), locked by the suite.
+  Net +22 lines — one-time helper scaffolding replacing 4× full derivations.
 - **Vestigial `ResolveAudioTracks` stub reduced to a retained no-op.**
   The `PlaylistAction::ResolveAudioTracks` arm marked `ListSong::resolution_checked` (a field
   nothing read), spawned N no-op effect closures, and set/cleared
