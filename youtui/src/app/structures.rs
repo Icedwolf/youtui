@@ -203,7 +203,7 @@ pub enum DownloadStatus {
     #[default]
     None,
     Queued,
-    Downloading(Percentage),
+    Downloading,
     Downloaded,
     Failed,
 }
@@ -223,7 +223,7 @@ impl DownloadStatus {
             Self::Failed => "X",
             Self::Queued => "↓",
             Self::None => " ",
-            Self::Downloading(_) => "↓",
+            Self::Downloading => "↓",
             Self::Downloaded => "✓",
         }
     }

@@ -550,7 +550,7 @@ Re-log into your browser, or check your cookie file / PO-token provider, then re
         debug!("download_song: {}", video_id);
 
         match &song.download_status {
-            DownloadStatus::Downloading(_) => {
+            DownloadStatus::Downloading => {
                 debug!("download_song: {} already downloading", video_id);
                 return Effects::none();
             }
@@ -1344,7 +1344,7 @@ impl Playlist {
             DownloadProgressUpdate::Downloading => {
                 debug!("download_started: song_id={}", video_id);
                 if let Some(song) = self.get_mut_song_from_id(id) {
-                    song.download_status = DownloadStatus::Downloading(Percentage(0));
+                    song.download_status = DownloadStatus::Downloading;
                 }
                 Effects::none()
             }

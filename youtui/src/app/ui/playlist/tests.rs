@@ -1264,7 +1264,7 @@ mod state_transitions {
         let mut p = downloaded_songs(3);
         p.play_status = PlayState::Playing(ListSongID(0));
         if let Some(song) = p.get_mut_song_from_id(ListSongID(0)) {
-            song.download_status = DownloadStatus::Downloading(Percentage(50));
+            song.download_status = DownloadStatus::Downloading;
         }
         assert_eq!(
             p.status_bar_icon(),
