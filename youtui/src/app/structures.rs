@@ -244,6 +244,31 @@ fn compute_lowercached(
     (title_lower, album_lower, artists_lower)
 }
 
+/// Derived display/search caches every `ListSong` constructor computes from
+/// its raw inputs: the joined artists string, the track-number string, and
+/// the three lowercase search keys (`title_lower`/`album_lower`/
+/// `artists_lower`). Single source of truth, replaces the per-constructor
+/// copies. `ensure_cached_fields` fills the first two lazily for songs that
+/// arrive fully-formed (e.g. `push_song_list`).
+fn compute_cached_fields(
+    title: &str,
+    album_name: Option<&str>,
+    artists: &[ListSongArtist],
+    track_no: Option<usize>,
+) -> (String, String, String, String, String) {
+    let artists_string = compute_artists_string(artists);
+    let track_no_string = track_no.map(|n| n.to_string()).unwrap_or_default();
+    let (title_lower, album_lower, artists_lower) =
+        compute_lowercached(title, album_name, &artists_string);
+    (
+        artists_string,
+        track_no_string,
+        title_lower,
+        album_lower,
+        artists_lower,
+    )
+}
+
 impl ListSong {
     pub fn ensure_cached_fields(&mut self) {
         if self.artists_string.is_empty() {
@@ -314,9 +339,8 @@ impl ListSong {
             })
         });
         let album_ref = list_album.as_ref().map(|a| a.as_ref().name.as_str());
-        let artists_string = compute_artists_string(&list_artists);
-        let (title_lower, album_lower, artists_lower) =
-            compute_lowercached(&title, album_ref, &artists_string);
+        let (artists_string, track_no_string, title_lower, album_lower, artists_lower) =
+            compute_cached_fields(&title, album_ref, &list_artists, None);
         ListSong {
             video_id,
             track_no: None,
@@ -332,7 +356,7 @@ impl ListSong {
             album_lower,
             artists_lower,
             artists_string,
-            track_no_string: String::new(),
+            track_no_string,
             year: None,
             artists: MaybeRc::Owned(list_artists),
             album: list_album,
@@ -468,10 +492,8 @@ impl BrowserSongsList {
             explicit,
             ..
         } = song;
-        let artists_string = compute_artists_string(&artists);
-        let track_no_string = track_no.to_string();
-        let (title_lower, album_lower, artists_lower) =
-            compute_lowercached(&title, Some(&album.name), &artists_string);
+        let (artists_string, track_no_string, title_lower, album_lower, artists_lower) =
+            compute_cached_fields(&title, Some(&album.name), &artists, Some(track_no));
         self.list.push(ListSong {
             download_status: DownloadStatus::None,
             id,
@@ -511,13 +533,13 @@ impl BrowserSongsList {
             name: artist,
             id: None,
         }];
-        let artists_string = compute_artists_string(&search_artists);
-        let track_no_string = String::new();
-        let (title_lower, album_lower, artists_lower) = compute_lowercached(
-            &title,
-            search_album.as_ref().map(|a| a.as_ref().name.as_str()),
-            &artists_string,
-        );
+        let (artists_string, track_no_string, title_lower, album_lower, artists_lower) =
+            compute_cached_fields(
+                &title,
+                search_album.as_ref().map(|a| a.as_ref().name.as_str()),
+                &search_artists,
+                None,
+            );
         self.list.push(ListSong {
             download_status: DownloadStatus::None,
             id,
@@ -591,13 +613,13 @@ impl BrowserSongsList {
                 None,
             ),
         };
-        let artists_string = compute_artists_string(&artists);
-        let track_no_string = track_no.to_string();
-        let (title_lower, album_lower, artists_lower) = compute_lowercached(
-            &title,
-            album.as_ref().map(|a: &ListSongAlbum| a.name.as_str()),
-            &artists_string,
-        );
+        let (artists_string, track_no_string, title_lower, album_lower, artists_lower) =
+            compute_cached_fields(
+                &title,
+                album.as_ref().map(|a: &ListSongAlbum| a.name.as_str()),
+                &artists,
+                Some(track_no),
+            );
         self.list.push(ListSong {
             download_status: DownloadStatus::None,
             id,
