@@ -274,6 +274,12 @@ The codebase is at a local optimum across the areas this project optimizes:
   else `debug!` + noop), ~82 lines differing only in action type/variant/field/message. Now five
   `impl_browser_sub_action_handler!` invocations; new wrong-variant test locks the mismatch arm.
   Net −26 lines. 683 tests.
+- **Play-button video id canonicalized (ytmapi-rs).** `PLAYLIST_ITEM_VIDEO_ID` already existed at
+  nav_consts.rs:81, but twelve sites in five modules re-expanded it as
+  `concatcp!(PLAY_BUTTON, "/playNavigationEndpoint", WATCH_VIDEO_ID)` or hand-rolled the literal
+  `"/playNavigationEndpoint/watchEndpoint/videoId"` (a string-identical const split). All now use
+  the const; unused `PLAY_BUTTON`/`WATCH_VIDEO_ID` imports dropped where the expansion was their
+  last user. −44 net lines; album/history/library/playlist/upload fixtures pass.
 - **Library tab list parsers share one skeleton (ytmapi-rs).** The seven `parse_library_*` /
   `parse_content_list_*` list fns each reimplemented the same continuation-params + iterate +
   collect shape. `parse_library_list<R, T>` (Fn-parameterized over the item parser) is now the
