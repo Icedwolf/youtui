@@ -274,6 +274,14 @@ The codebase is at a local optimum across the areas this project optimizes:
   else `debug!` + noop), ~82 lines differing only in action type/variant/field/message. Now five
   `impl_browser_sub_action_handler!` invocations; new wrong-variant test locks the mismatch arm.
   Net −26 lines. 683 tests.
+- **Two-column header description parse shared (ytmapi-rs).** The album and playlist detail
+  pages each carried the same nine-line description-shelf block (mirrored author notes
+  "NOTE: Similar code to get_album_2024"/"get_playlist_2024"). `take_description` in parse.rs is
+  now the single home; both sites route through it and the orphaned `CrawlerResult`/
+  `DESCRIPTION_SHELF_RUNS` imports are gone. This closes the parse-tree byte-twin hunt: every
+  remaining cross-site sequence (MRLIR-prepare prologue, feedback-token/duration/video_id menu
+  chains, item-prologue filler) is 2–5 lines with differing sentinels/contracts and stays
+  intentionally inline.
 - **Play-button video id canonicalized (ytmapi-rs).** `PLAYLIST_ITEM_VIDEO_ID` already existed at
   nav_consts.rs:81, but twelve sites in five modules re-expanded it as
   `concatcp!(PLAY_BUTTON, "/playNavigationEndpoint", WATCH_VIDEO_ID)` or hand-rolled the literal
