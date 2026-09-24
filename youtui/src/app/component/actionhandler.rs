@@ -115,7 +115,12 @@ pub fn get_global_keybinds_as_readable_iter<'a, A: Action + 'static>(
 }
 
 pub trait TextHandler: Component {
-    fn is_text_handling(&self) -> bool;
+    /// Whether this component currently claims text input. Defaults to `true`
+    /// (a leaf text widget always owns its input); composites override to
+    /// delegate to their routed child.
+    fn is_text_handling(&self) -> bool {
+        true
+    }
     fn handle_text_event_impl(&mut self, event: &Event) -> Option<Effects<Self>>
     where
         Self: Sized;

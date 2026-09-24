@@ -165,12 +165,6 @@ impl FilterManager {
     }
 }
 impl TextHandler for FilterManager {
-    fn is_text_handling(&self) -> bool {
-        // Vestigial: no caller consults this. The gate that actually decides
-        // whether filter text is handled lives in `SongsPanel::is_text_handling`
-        // (route == Filter) — this true is never reached.
-        true
-    }
     fn handle_text_event_impl(&mut self, event: &crossterm::event::Event) -> Option<Effects<Self>> {
         match handle_events(&mut self.filter_text, true, event) {
             rat_text::event::TextOutcome::Continue => None,
@@ -188,12 +182,6 @@ impl SearchBlock {
     }
 }
 impl TextHandler for SearchBlock {
-    fn is_text_handling(&self) -> bool {
-        // Vestigial: no caller consults this. The gate that actually decides
-        // whether search text is handled lives in `SearchPanel::is_text_handling`
-        // (route == Search) — this true is never reached.
-        true
-    }
     fn handle_text_event_impl(&mut self, event: &crossterm::event::Event) -> Option<Effects<Self>> {
         match handle_events(&mut self.search_contents, true, event) {
             rat_text::event::TextOutcome::Continue => None,
@@ -871,5 +859,16 @@ mod tests {
         assert_eq!(filter.get_text(), Some(""));
         filter.filter_text.set_text("album");
         assert_eq!(filter.get_text(), Some("album"));
+    }
+
+    #[test]
+    fn leaf_text_widgets_own_input_by_default() {
+        // TextHandler::is_text_handling defaults to true. The FilterManager /
+        // SearchBlock overrides were vestigial (never consulted — the route
+        // gates live in SongsPanel / SearchPanel), so their bodies now come
+        // from the trait default. Lock the default so a trait change cannot
+        // silently flip these widgets' input-ownership claim.
+        assert!(FilterManager::default().is_text_handling());
+        assert!(SearchBlock::default().is_text_handling());
     }
 }
