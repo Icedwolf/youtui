@@ -364,6 +364,35 @@ impl ListSong {
     }
 }
 
+/// Keep at most one song per key, preferring an audio track over a video
+/// (i.e. music video): a later audio entry displaces a non-audio occupant;
+/// nothing else displaces an existing occupant. Ties within a key keep the
+/// first entry. Shared by the album and search-result append paths.
+fn dedupe_preferring_audio<'a, K, S>(
+    songs: impl Iterator<Item = &'a S>,
+    key: impl Fn(&'a S) -> K,
+    is_audio: impl Fn(&'a S) -> bool,
+) -> std::collections::HashMap<K, &'a S>
+where
+    K: std::hash::Hash + Eq,
+{
+    use std::collections::hash_map::Entry;
+    let mut best: std::collections::HashMap<K, &S> = std::collections::HashMap::new();
+    for song in songs {
+        match best.entry(key(song)) {
+            Entry::Occupied(mut e) => {
+                if is_audio(song) && !is_audio(e.get()) {
+                    e.insert(song);
+                }
+            }
+            Entry::Vacant(e) => {
+                e.insert(song);
+            }
+        }
+    }
+    best
+}
+
 impl Default for BrowserSongsList {
     fn default() -> Self {
         BrowserSongsList {
@@ -406,7 +435,6 @@ impl BrowserSongsList {
         year: String,
         artists: Vec<ParsedSongArtist>,
     ) {
-        use std::collections::hash_map::Entry;
         for song in &raw_list {
             debug!(
                 "album_song: title={:?} video_id={:?} duration={:?} mvt={:?}",
@@ -416,20 +444,11 @@ impl BrowserSongsList {
                 song.music_video_type()
             );
         }
-        let mut best: std::collections::HashMap<&str, &AlbumSong> =
-            std::collections::HashMap::new();
-        for song in &raw_list {
-            match best.entry(song.title.as_str()) {
-                Entry::Occupied(mut e) => {
-                    if song.is_audio_track() && !e.get().is_audio_track() {
-                        e.insert(song);
-                    }
-                }
-                Entry::Vacant(e) => {
-                    e.insert(song);
-                }
-            }
-        }
+        let best = dedupe_preferring_audio(
+            raw_list.iter(),
+            |song| song.title.as_str(),
+            |song| song.is_audio_track(),
+        );
         let year = Rc::new(year);
         let album = Rc::new(ListSongAlbum::from(album));
         let artists = Rc::new(artists.into_iter().map(Into::into).collect::<Vec<_>>());
@@ -455,22 +474,11 @@ impl BrowserSongsList {
                 song.music_video_type()
             );
         }
-        use std::collections::hash_map::Entry;
-        let mut best: std::collections::HashMap<(&str, &str), &SearchResultSong> =
-            std::collections::HashMap::new();
-        for song in &raw_list {
-            let key = (song.title.as_str(), song.artist.as_str());
-            match best.entry(key) {
-                Entry::Occupied(mut e) => {
-                    if song.is_audio_track() && !e.get().is_audio_track() {
-                        e.insert(song);
-                    }
-                }
-                Entry::Vacant(e) => {
-                    e.insert(song);
-                }
-            }
-        }
+        let best = dedupe_preferring_audio(
+            raw_list.iter(),
+            |song| (song.title.as_str(), song.artist.as_str()),
+            |song| song.is_audio_track(),
+        );
         for song in best.into_values() {
             self.add_raw_search_result_song(song.clone());
         }
@@ -812,6 +820,104 @@ mod tests {
             elapsed.as_millis(),
         );
         assert_eq!(list.get_list_iter().count(), 116_000);
+    }
+
+    // --- append_raw_* prefer-audio dedupe fixtures (serde from_value bypasses
+    // #[non_exhaustive] on AlbumSong/SearchResultSong) ---
+
+    fn album_song(id: &str, title: &str, mvt: &str) -> AlbumSong {
+        serde_json::from_value(serde_json::json!({
+            "video_id": id,
+            "track_no": 1,
+            "duration": "3:00",
+            "plays": "0",
+            "title": title,
+            "like_status": "INDIFFERENT",
+            "explicit": "NotExplicit",
+            "music_video_type": mvt,
+        }))
+        .unwrap()
+    }
+
+    fn search_song(id: &str, title: &str, artist: &str, mvt: &str) -> SearchResultSong {
+        serde_json::from_value(serde_json::json!({
+            "title": title,
+            "artist": artist,
+            "album": null,
+            "duration": "3:00",
+            "plays": "0",
+            "explicit": "NotExplicit",
+            "video_id": id,
+            "thumbnails": [],
+            "music_video_type": mvt,
+        }))
+        .unwrap()
+    }
+
+    fn append_album_songs(list: &mut BrowserSongsList, raw: Vec<AlbumSong>) {
+        list.append_raw_album_songs(
+            raw,
+            ParsedSongAlbum {
+                name: "Album".into(),
+                id: AlbumID::from_raw(""),
+            },
+            "2026".into(),
+            vec![ParsedSongArtist {
+                name: "Artist".into(),
+                id: None,
+            }],
+        );
+    }
+
+    #[test]
+    fn append_raw_album_songs_audio_replaces_video_dupe() {
+        let mut list = BrowserSongsList::default();
+        append_album_songs(
+            &mut list,
+            vec![
+                album_song("video", "Dupe", "MUSIC_VIDEO_TYPE_OMV"),
+                album_song("audio", "Dupe", "MUSIC_VIDEO_TYPE_ATV"),
+            ],
+        );
+        assert_eq!(
+            collect_ids(&list),
+            vec!["audio"],
+            "audio track must displace the video dupe"
+        );
+    }
+
+    #[test]
+    fn append_raw_album_songs_keeps_first_audio_against_later_video() {
+        let mut list = BrowserSongsList::default();
+        append_album_songs(
+            &mut list,
+            vec![
+                album_song("audio", "Dupe", "MUSIC_VIDEO_TYPE_ATV"),
+                album_song("video", "Dupe", "MUSIC_VIDEO_TYPE_OMV"),
+            ],
+        );
+        assert_eq!(
+            collect_ids(&list),
+            vec!["audio"],
+            "a later video must not displace an audio track"
+        );
+    }
+
+    #[test]
+    fn append_raw_search_result_songs_audio_replaces_video_dupe() {
+        let mut list = BrowserSongsList::default();
+        list.append_raw_search_result_songs(vec![
+            search_song("video", "Dupe", "Artist", "MUSIC_VIDEO_TYPE_UGC"),
+            search_song("audio", "Dupe", "Artist", "MUSIC_VIDEO_TYPE_ATV"),
+            search_song("other", "Other", "Artist", "MUSIC_VIDEO_TYPE_ATV"),
+        ]);
+        let mut ids = collect_ids(&list);
+        ids.sort();
+        assert_eq!(
+            ids,
+            vec!["audio", "other"],
+            "audio wins the (title, artist) dupe; a distinct key passes through"
+        );
     }
 }
 
