@@ -274,6 +274,16 @@ The codebase is at a local optimum across the areas this project optimizes:
   else `debug!` + noop), ~82 lines differing only in action type/variant/field/message. Now five
   `impl_browser_sub_action_handler!` invocations; new wrong-variant test locks the mismatch arm.
   Net −26 lines. 683 tests.
+- **Dead `DownloadStatus::Downloading` payload dropped (youtui).** The tuple variant
+  (`Downloading(Percentage)`) was constructed with literals (`Percentage(0)`/`Percentage(50)`) and
+  only ever pattern-matched as `Downloading(_)` — the percentage was never read. Narrowed to a unit
+  `Downloading`; `DownloadStatus` never hits serde (queue persistence serializes `CompactSongRef`),
+  so no persisted shape changes. Existing icon-semantics test locks the change. 693 tests (unchanged).
+- **Re-checked and rejected: MRLIR-prepare prologue extraction (ytmapi-rs).** history/library/
+  playlist share a 5-line borrow-MRLIR + flex-title prologue (history/library byte-identical,
+  playlist 1-sentinel-diff "Song deleted"). Extracting `borrow_mrlir_title<'a, C: JsonCrawler>`
+  returning `Option<(C::BorrowTo<'a>, String)>` would save only 2 lines/site and add a lifetime-
+  generic helper (net +lines, more complex surface). Previous "kept inline" judgment confirmed.
 - **TextHandler::is_text_handling defaulted; two vestigial overrides cut (youtui).**
   FilterManager and SearchBlock each returned a tombstoned literal-`true` `is_text_handling` that
   no caller consults (input-ownership gates live in SongsPanel/SearchPanel route checks), but the
