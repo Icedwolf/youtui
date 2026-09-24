@@ -267,6 +267,12 @@ The codebase is at a local optimum across the areas this project optimizes:
   else `debug!` + noop), ~82 lines differing only in action type/variant/field/message. Now five
   `impl_browser_sub_action_handler!` invocations; new wrong-variant test locks the mismatch arm.
   Net −26 lines. 683 tests.
+- **TabGrid `MaxCols` constraint variant stripped (widgets/tab_grid.rs).** The only production
+  caller (header.rs `TAB_ROWS`) uses the row-constrained path; `MaxCols` and its `#[cfg(test)]`-only
+  `new_with_max_cols` existed solely for two unit tests. `TabGridConstraint` (enum) collapsed to a
+  plain `rows: u16` field, `new_with_max_rows` → `new`. The two max_cols snapshot tests ported to
+  row form with byte-identical expected strings (layout parity: `MaxCols(2)≡MaxRows(2)`,
+  `MaxCols(3)≡MaxRows(2)`); new zero-rows guard lock. Net −28 lines. 686 tests.
 - **Three duplicated volume-apply effect bodies merged (ui.rs).** `YoutuiWindow::new`'s startup
   volume init, `handle_increase_volume` and `handle_set_volume` each carried the same ~15-line
   async shape (`Effects::new` → Arc clone → player op → `handle_volume_update`). All three now
