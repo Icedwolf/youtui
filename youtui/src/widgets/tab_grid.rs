@@ -9,40 +9,19 @@ use tracing::debug;
 pub struct TabGrid<'a> {
     titles: Vec<Cow<'a, str>>,
     selected: Option<usize>,
-    constraint: TabGridConstraint,
+    /// Number of rows to pack the tabs into (`0` disables rendering).
+    rows: u16,
     highlight_style: Option<Style>,
 }
 
-#[derive(PartialEq)]
-enum TabGridConstraint {
-    MaxRows(u16),
-    MaxCols(u16),
-}
-
 impl<'a> TabGrid<'a> {
-    #[cfg(test)]
+    /// Layout the tabs in a column-major grid of at most `rows` rows.
     #[must_use]
-    pub fn new_with_max_cols(
-        titles: impl IntoIterator<Item = impl Into<Cow<'a, str>>>,
-        cols: u16,
-    ) -> Self {
+    pub fn new(titles: impl IntoIterator<Item = impl Into<Cow<'a, str>>>, rows: u16) -> Self {
         TabGrid {
             titles: titles.into_iter().map(Into::into).collect(),
             selected: None,
-            constraint: TabGridConstraint::MaxCols(cols),
-            highlight_style: Default::default(),
-        }
-    }
-
-    #[must_use]
-    pub fn new_with_max_rows(
-        titles: impl IntoIterator<Item = impl Into<Cow<'a, str>>>,
-        rows: u16,
-    ) -> Self {
-        TabGrid {
-            titles: titles.into_iter().map(Into::into).collect(),
-            selected: None,
-            constraint: TabGridConstraint::MaxRows(rows),
+            rows,
             highlight_style: Default::default(),
         }
     }
@@ -64,40 +43,23 @@ impl<'a> TabGrid<'a> {
         }
     }
 
-    /// Returns 0 if there are 0 cols or 0 titles.
+    /// Returns 0 if there are 0 rows or 0 titles.
     #[must_use]
     pub fn required_width(&self) -> usize {
-        match self.constraint {
-            TabGridConstraint::MaxCols(cols) => self
-                .longest_title()
-                .saturating_mul(cols as usize)
-                .saturating_add(cols as usize)
-                .saturating_sub(1),
-            TabGridConstraint::MaxRows(rows) => {
-                if rows == 0 {
-                    return 0;
-                }
-                let cols = self.titles.len().div_ceil(rows as usize);
-                self.longest_title()
-                    .saturating_mul(cols)
-                    .saturating_add(cols)
-                    .saturating_sub(1)
-            }
+        if self.rows == 0 {
+            return 0;
         }
+        let cols = self.titles.len().div_ceil(self.rows as usize);
+        self.longest_title()
+            .saturating_mul(cols)
+            .saturating_add(cols)
+            .saturating_sub(1)
     }
 
-    /// Returns 0 if there are 0 cols (instead of panicing)
+    /// Returns 0 if there are 0 rows (instead of panicking).
     #[must_use]
     pub fn required_height(&self) -> usize {
-        match self.constraint {
-            TabGridConstraint::MaxCols(cols) => {
-                if cols == 0 {
-                    return 0;
-                }
-                self.titles.len().div_ceil(cols as usize)
-            }
-            TabGridConstraint::MaxRows(rows) => self.titles.len().min(rows as usize),
-        }
+        self.titles.len().min(self.rows as usize)
     }
 
     fn longest_title(&self) -> usize {
@@ -115,9 +77,7 @@ impl<'a> Widget for TabGrid<'a> {
         Self: Sized,
     {
         // Validate constraints
-        if self.constraint == TabGridConstraint::MaxCols(0)
-            || self.constraint == TabGridConstraint::MaxRows(0)
-        {
+        if self.rows == 0 {
             debug!("TabGrid: Zero constraint, skipping render");
             return;
         }
@@ -192,7 +152,7 @@ mod tests {
 
     #[test]
     fn test_basic_tab_grid() {
-        let grid = TabGrid::new_with_max_cols(["AA", "BBBB", "CCCC", "DD"], 2);
+        let grid = TabGrid::new(["AA", "BBBB", "CCCC", "DD"], 2);
         assert_eq!(grid.required_width(), 9);
         assert_eq!(grid.required_height(), 2);
         let area = Rect::new(0, 0, 9, 2);
@@ -210,8 +170,8 @@ mod tests {
         assert_eq!(rendered_cells_as_string, expected_cells_as_string);
     }
     #[test]
-    fn test_basic_tab_grid_max_cols() {
-        let grid = TabGrid::new_with_max_cols(["AA", "BBBB", "CCCC", "DD", "EEEEE", "FF"], 3);
+    fn test_basic_tab_grid_three_columns() {
+        let grid = TabGrid::new(["AA", "BBBB", "CCCC", "DD", "EEEEE", "FF"], 2);
         assert_eq!(grid.required_width(), 17);
         assert_eq!(grid.required_height(), 2);
         let area = Rect::new(0, 0, 17, 2);
@@ -230,7 +190,7 @@ mod tests {
     }
     #[test]
     fn test_basic_tab_grid_max_rows() {
-        let grid = TabGrid::new_with_max_rows(["AA", "BBBB", "CCCC", "DD", "EEEEE", "FF"], 3);
+        let grid = TabGrid::new(["AA", "BBBB", "CCCC", "DD", "EEEEE", "FF"], 3);
         assert_eq!(grid.required_width(), 11);
         assert_eq!(grid.required_height(), 3);
         let area = Rect::new(0, 0, 11, 3);
@@ -247,5 +207,17 @@ mod tests {
         // |CCCC | FF  |
         let expected_cells_as_string = " AA    DD  BBBB  EEEEECCCC   FF  ".to_string();
         assert_eq!(rendered_cells_as_string, expected_cells_as_string);
+    }
+
+    #[test]
+    fn zero_rows_disables_layout_and_render() {
+        let grid = TabGrid::new(["AA", "BBBB"], 0);
+        assert_eq!(grid.required_width(), 0);
+        assert_eq!(grid.required_height(), 0);
+        let area = Rect::new(0, 0, 9, 2);
+        let mut buf = ratatui::buffer::Buffer::empty(area);
+        grid.render(area, &mut buf);
+        // Render is skipped entirely: every cell stays as the blank initialise.
+        assert!(buf.content.iter().all(|c| c.symbol() == " "));
     }
 }

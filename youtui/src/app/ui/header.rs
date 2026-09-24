@@ -64,7 +64,7 @@ pub fn draw_header(f: &mut Frame, w: &super::YoutuiWindow, chunk: Rect) {
     let items = w.browser.tab_items();
     let selected_item = w.browser.selected_tab_idx();
     let tabs_block = Block::default().borders(Borders::ALL).title(title);
-    let tabs_widget = crate::widgets::TabGrid::new_with_max_rows(items, TAB_ROWS)
+    let tabs_widget = crate::widgets::TabGrid::new(items, TAB_ROWS)
         .select(selected_item)
         .highlight_style(Style::new().fg(BUTTON_FG_COLOUR).bg(BUTTON_BG_COLOUR));
     let tabs_width = tabs_widget
