@@ -1,7 +1,7 @@
 use super::{
-    DESCRIPTION_SHELF_RUNS, EpisodeDate, EpisodeDuration, ParseFrom, ParsedSongAlbum,
-    ParsedUploadArtist, ParsedUploadSongAlbum, ProcessedResult, STRAPLINE_TEXT, TITLE_TEXT,
-    TWO_COLUMN, fixed_column_item_pointer, flex_column_item_pointer, parse_flex_column_item,
+    EpisodeDate, EpisodeDuration, ParseFrom, ParsedSongAlbum, ParsedUploadArtist,
+    ParsedUploadSongAlbum, ProcessedResult, STRAPLINE_TEXT, TITLE_TEXT, TWO_COLUMN,
+    fixed_column_item_pointer, flex_column_item_pointer, parse_flex_column_item,
     parse_library_management_items_from_menu, parse_upload_song_album, parse_upload_song_artists,
 };
 use crate::common::{
@@ -526,15 +526,7 @@ fn get_playlist_details(json_crawler: JsonCrawlerOwned) -> Result<GetPlaylistDet
     // STRAPLINE_TEXT to be deprecated in future.
     let author = header.take_value_pointers(&[STRAPLINE_TEXT, FACEPILE_TEXT])?;
     let author_avatar_url: Option<String> = header.take_value_pointer(FACEPILE_AVATAR_URL).ok();
-    let description = header
-        .borrow_pointer(DESCRIPTION_SHELF_RUNS)
-        .and_then(|d| d.try_into_iter())
-        .ok()
-        .map(|r| {
-            r.map(|mut r| r.take_value_pointer::<String>("/text"))
-                .collect::<std::result::Result<String, _>>()
-        })
-        .transpose()?;
+    let description = super::take_description(&mut header)?;
     let mut subtitle = header.borrow_pointer("/subtitle/runs")?;
     let subtitle_len = subtitle.try_iter_mut()?.len();
     let privacy = if subtitle_len == 5 {

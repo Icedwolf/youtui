@@ -12,9 +12,7 @@ use crate::nav_consts::*;
 use crate::query::*;
 use crate::youtube_enums::YoutubeMusicVideoType;
 use const_format::concatcp;
-use json_crawler::{
-    CrawlerResult, JsonCrawler, JsonCrawlerBorrowed, JsonCrawlerIterator, JsonCrawlerOwned,
-};
+use json_crawler::{JsonCrawler, JsonCrawlerBorrowed, JsonCrawlerIterator, JsonCrawlerOwned};
 use serde::{Deserialize, Serialize};
 
 /// In some contexts, dislike will also be classified as indifferent.
@@ -172,15 +170,7 @@ fn parse_album_query(p: ProcessedResult<GetAlbumQuery>) -> Result<GetAlbum> {
         .step_by(2)
         .map(|mut item| parse_song_artist(&mut item))
         .collect::<Result<Vec<ParsedSongArtist>>>()?;
-    let description = header
-        .borrow_pointer(DESCRIPTION_SHELF_RUNS)
-        .and_then(|d| d.try_into_iter())
-        .ok()
-        .map(|r| {
-            r.map(|mut r| r.take_value_pointer::<String>("/text"))
-                .collect::<CrawlerResult<String>>()
-        })
-        .transpose()?;
+    let description = super::take_description(&mut header)?;
     let duration = header.take_value_pointer("/secondSubtitle/runs/2/text")?;
     let track_count_text = header.take_value_pointer("/secondSubtitle/runs/0/text")?;
     let mut buttons = header.borrow_pointer("/buttons")?;

@@ -217,6 +217,21 @@ fn is_greyed_out(item: &mut impl JsonCrawler) -> bool {
         .unwrap_or(false)
 }
 
+/// Two-column page headers (album, playlist) carry an optional description
+/// shelf; a missing node simply means "no description".
+fn take_description(header: &mut impl JsonCrawler) -> Result<Option<String>> {
+    let description = header
+        .borrow_pointer(DESCRIPTION_SHELF_RUNS)
+        .and_then(|d| d.try_into_iter())
+        .ok()
+        .map(|r| {
+            r.map(|mut r| r.take_value_pointer::<String>("/text"))
+                .collect::<json_crawler::CrawlerResult<String>>()
+        })
+        .transpose()?;
+    Ok(description)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
