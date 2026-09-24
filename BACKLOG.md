@@ -21,6 +21,13 @@ share a single canonical body via the `SortFilterTable` trait in `shared_compone
 
 The codebase is at a local optimum across the areas this project optimizes:
 
+- **Release perf baseline (2026-09-24, `cargo test --release`, all threshold guards green):**
+  `get_field(Artists)` 1.2ns, `get_field(TrackNo)` 1.1ns, `get_fields(4col)` 14.5ns,
+  `compute_lowercached` 67.8ns, `create_with_metadata` 393.9ns per call; `push_song_list(58k
+  existing + 58k new)` 82ms. This is the before/after reference for any future perf round.
+  The release test suite runs in ~46s (was ~77s) since the criterion wrappers use 1s measure /
+  0.5s warm-up (R26); the hard `bench` thresholds remain the authoritative regression lock.
+
 - **Startup latency** — cookie export is conditional (fresh-file skip); the `ffmpeg -version`
   probe is warmed on the blocking pool so it overlaps the rest of startup; the autosave
   deserialize overlaps startup on the blocking pool and the load moves `CompactSongRef`
@@ -267,6 +274,11 @@ The codebase is at a local optimum across the areas this project optimizes:
   else `debug!` + noop), ~82 lines differing only in action type/variant/field/message. Now five
   `impl_browser_sub_action_handler!` invocations; new wrong-variant test locks the mismatch arm.
   Net −26 lines. 683 tests.
+- **Criterion benchmark windows capped (structures.rs, queue_persistence.rs, playlist tests).**
+  All three criterion-in-`#[test]` wrappers ran bare `Criterion::default()` — 3s warm-up + 5s
+  measurement per bench function; ten benches cost 64.5s of every `cargo test --release`. Now
+  0.5s/1s: same 10 bench_functions, baseline-visibility stats, release suite 76.9s → 46.2s
+  (−40%). Perf baseline recorded in "Current state" above.
 - **Prefer-audio-track dedupe loop extracted (structures.rs).** `append_raw_album_songs` and
   `append_raw_search_result_songs` each carried an inline HashMap dedupe (one song per key,
   audio track displaces a non-audio occupant) identical modulo the key type (title vs
