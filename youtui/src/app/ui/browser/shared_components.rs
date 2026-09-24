@@ -159,25 +159,6 @@ impl Action for BrowserSearchAction {
     }
 }
 
-impl SortManager {
-    pub fn new() -> Self {
-        SortManager {
-            sort_commands: Default::default(),
-            shown: Default::default(),
-            cur: Default::default(),
-            state: Default::default(),
-        }
-    }
-}
-impl FilterManager {
-    pub fn new() -> Self {
-        Self {
-            filter_text: Default::default(),
-            filter_commands: Default::default(),
-            shown: Default::default(),
-        }
-    }
-}
 impl FilterManager {
     pub fn get_text(&self) -> std::option::Option<&str> {
         Some(self.filter_text.text())
