@@ -116,11 +116,7 @@ fn parse_album_track(json: &mut JsonCrawlerBorrowed) -> Result<Option<AlbumSong>
     let title = super::parse_flex_column_item(&mut data, 0, 0)?;
     let library_management =
         parse_library_management_items_from_menu(data.borrow_pointer(MENU_ITEMS)?)?;
-    let video_id = data.take_value_pointer(concatcp!(
-        PLAY_BUTTON,
-        "/playNavigationEndpoint",
-        WATCH_VIDEO_ID
-    ))?;
+    let video_id = data.take_value_pointer(PLAYLIST_ITEM_VIDEO_ID)?;
     let video_type_path = concatcp!(
         PLAY_BUTTON,
         "/playNavigationEndpoint",

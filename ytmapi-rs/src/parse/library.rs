@@ -13,8 +13,8 @@ use crate::common::{
 use crate::continuations::ParseFromContinuable;
 use crate::nav_consts::{
     GRID, ITEM_SECTION, MENU_ITEMS, MRLIR, MTRIR, MUSIC_SHELF, NAVIGATION_BROWSE_ID,
-    NAVIGATION_PLAYLIST_ID, PLAY_BUTTON, SECTION_LIST, SECTION_LIST_ITEM, SINGLE_COLUMN_TAB,
-    SUBTITLE_BADGE_ICON, TITLE, TITLE_TEXT, WATCH_VIDEO_ID,
+    NAVIGATION_PLAYLIST_ID, PLAYLIST_ITEM_VIDEO_ID, SECTION_LIST, SECTION_LIST_ITEM,
+    SINGLE_COLUMN_TAB, SUBTITLE_BADGE_ICON, TITLE, TITLE_TEXT,
 };
 use crate::query::library::{GetLibraryChannelsQuery, GetLibraryPodcastsQuery};
 use crate::query::{
@@ -426,11 +426,7 @@ fn parse_content_list_channels(
 }
 
 fn parse_table_list_song(title: String, mut data: JsonCrawlerBorrowed) -> Result<TableListSong> {
-    let video_id = data.take_value_pointer(concatcp!(
-        PLAY_BUTTON,
-        "/playNavigationEndpoint",
-        WATCH_VIDEO_ID
-    ))?;
+    let video_id = data.take_value_pointer(PLAYLIST_ITEM_VIDEO_ID)?;
     let library_management =
         parse_library_management_items_from_menu(data.borrow_pointer(MENU_ITEMS)?)?;
     let like_status = data.take_value_pointer(MENU_LIKE_STATUS)?;

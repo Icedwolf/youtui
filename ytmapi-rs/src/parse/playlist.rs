@@ -13,10 +13,10 @@ use crate::nav_consts::{
     APPEND_CONTINUATION_ITEMS, BADGE_LABEL, CONTENT, CONTINUATION_RENDERER_COMMAND,
     DELETION_ENTITY_ID, FACEPILE_AVATAR_URL, FACEPILE_TEXT, LIVE_BADGE_LABEL, MENU_ITEMS,
     MENU_LIKE_STATUS, MRLIR, MUSIC_PLAYLIST_SHELF, NAVIGATION_BROWSE_ID, NAVIGATION_PLAYLIST_ID,
-    NAVIGATION_VIDEO_ID, NAVIGATION_VIDEO_TYPE, PLAY_BUTTON, PLAYLIST_PANEL_CONTINUATION, PPR,
-    RADIO_CONTINUATION_PARAMS, RESPONSIVE_HEADER, RUN_TEXT, SECOND_SUBTITLE_RUNS,
-    SECONDARY_SECTION_LIST_RENDERER, SECTION_LIST_ITEM, TAB_CONTENT, TEXT_RUN, TEXT_RUN_TEXT,
-    WATCH_NEXT_CONTENT, WATCH_VIDEO_ID,
+    NAVIGATION_VIDEO_ID, NAVIGATION_VIDEO_TYPE, PLAY_BUTTON, PLAYLIST_ITEM_VIDEO_ID,
+    PLAYLIST_PANEL_CONTINUATION, PPR, RADIO_CONTINUATION_PARAMS, RESPONSIVE_HEADER, RUN_TEXT,
+    SECOND_SUBTITLE_RUNS, SECONDARY_SECTION_LIST_RENDERER, SECTION_LIST_ITEM, TAB_CONTENT,
+    TEXT_RUN, TEXT_RUN_TEXT, WATCH_NEXT_CONTENT,
 };
 use crate::query::playlist::{
     CreatePlaylistType, GetPlaylistDetailsQuery, GetWatchPlaylistQueryID, PrivacyStatus,
@@ -288,11 +288,7 @@ pub(crate) fn parse_playlist_song(
     track_no: usize,
     mut data: impl JsonCrawler,
 ) -> Result<PlaylistSong> {
-    let video_id = data.take_value_pointer(concatcp!(
-        PLAY_BUTTON,
-        "/playNavigationEndpoint",
-        WATCH_VIDEO_ID
-    ))?;
+    let video_id = data.take_value_pointer(PLAYLIST_ITEM_VIDEO_ID)?;
     let library_management =
         parse_library_management_items_from_menu(data.borrow_pointer(MENU_ITEMS)?)?;
     let like_status = data.take_value_pointer(MENU_LIKE_STATUS)?;
@@ -345,10 +341,7 @@ pub(crate) fn parse_playlist_upload_song(
         .borrow_pointer(fixed_column_item_pointer(0))?
         .take_value_pointer(TEXT_RUN_TEXT)?;
     let like_status = data.take_value_pointer(MENU_LIKE_STATUS)?;
-    let video_id = data.take_value_pointer(concatcp!(
-        PLAY_BUTTON,
-        "/playNavigationEndpoint/watchEndpoint/videoId"
-    ))?;
+    let video_id = data.take_value_pointer(PLAYLIST_ITEM_VIDEO_ID)?;
     // An uploaded song may not have artists metadata
     let artists = parse_upload_song_artists(data.borrow_mut(), 1).unwrap_or_default();
     // An uploaded song may not have artists metadata
@@ -375,11 +368,7 @@ pub(crate) fn parse_playlist_episode(
     track_no: usize,
     mut data: impl JsonCrawler,
 ) -> Result<PlaylistEpisode> {
-    let video_id = data.take_value_pointer(concatcp!(
-        PLAY_BUTTON,
-        "/playNavigationEndpoint",
-        WATCH_VIDEO_ID
-    ))?;
+    let video_id = data.take_value_pointer(PLAYLIST_ITEM_VIDEO_ID)?;
     let like_status = data.take_value_pointer(MENU_LIKE_STATUS)?;
     let is_live = data.path_exists(LIVE_BADGE_LABEL);
     let (duration, date) = match is_live {
@@ -420,11 +409,7 @@ pub(crate) fn parse_playlist_video(
     track_no: usize,
     mut data: impl JsonCrawler,
 ) -> Result<PlaylistVideo> {
-    let video_id = data.take_value_pointer(concatcp!(
-        PLAY_BUTTON,
-        "/playNavigationEndpoint",
-        WATCH_VIDEO_ID
-    ))?;
+    let video_id = data.take_value_pointer(PLAYLIST_ITEM_VIDEO_ID)?;
     let like_status = data.take_value_pointer(MENU_LIKE_STATUS)?;
     let channel_name = parse_flex_column_item(&mut data, 1, 0)?;
     let channel_id = data

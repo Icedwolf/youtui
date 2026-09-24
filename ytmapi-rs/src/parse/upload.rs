@@ -9,9 +9,9 @@ use crate::common::{
 use crate::continuations::ParseFromContinuable;
 use crate::nav_consts::{
     CONTINUATION_PARAMS, GRID, GRID_CONTINUATION, INDEX_TEXT, MENU_ITEMS, MENU_LIKE_STATUS, MRLIR,
-    MUSIC_SHELF, MUSIC_SHELF_CONTINUATION, NAVIGATION_BROWSE_ID, PLAY_BUTTON, SECTION_LIST_ITEM,
-    SINGLE_COLUMN_TAB, SINGLE_COLUMN_TABS, SUBTITLE2, SUBTITLE3, TAB_RENDERER, TEXT_RUN_TEXT,
-    THUMBNAIL_ANIMATED_ICON, THUMBNAIL_BADGE_ICON, TITLE_TEXT, WATCH_VIDEO_ID,
+    MUSIC_SHELF, MUSIC_SHELF_CONTINUATION, NAVIGATION_BROWSE_ID, PLAYLIST_ITEM_VIDEO_ID,
+    SECTION_LIST_ITEM, SINGLE_COLUMN_TAB, SINGLE_COLUMN_TABS, SUBTITLE2, SUBTITLE3, TAB_RENDERER,
+    TEXT_RUN_TEXT, THUMBNAIL_ANIMATED_ICON, THUMBNAIL_BADGE_ICON, TITLE_TEXT,
 };
 use crate::parse::{parse_fixed_column_item, parse_flex_column_item};
 use crate::query::{
@@ -226,11 +226,7 @@ impl ParseFrom<GetLibraryUploadAlbumQuery<'_>> for GetLibraryUploadAlbum {
             let duration = parse_fixed_column_item(&mut data.borrow_mut(), 0)?;
             let track_no = data.borrow_pointer(INDEX_TEXT)?.take_and_parse_str()?;
             let like_status = data.take_value_pointer(MENU_LIKE_STATUS)?;
-            let video_id = data.take_value_pointer(concatcp!(
-                PLAY_BUTTON,
-                "/playNavigationEndpoint",
-                WATCH_VIDEO_ID
-            ))?;
+            let video_id = data.take_value_pointer(PLAYLIST_ITEM_VIDEO_ID)?;
             let entity_id = data
                 .borrow_pointer(MENU_ITEMS)?
                 .try_iter_mut()?
@@ -355,10 +351,7 @@ pub(crate) fn parse_table_list_upload_song(
     let duration =
         crawler.take_value_pointer(format!("{}{TEXT_RUN_TEXT}", fixed_column_item_pointer(0)))?;
     let like_status = crawler.take_value_pointer(MENU_LIKE_STATUS)?;
-    let video_id = crawler.take_value_pointer(concatcp!(
-        PLAY_BUTTON,
-        "/playNavigationEndpoint/watchEndpoint/videoId"
-    ))?;
+    let video_id = crawler.take_value_pointer(PLAYLIST_ITEM_VIDEO_ID)?;
     // An uploaded song may not have artists metadata
     let artists = parse_upload_song_artists(crawler.borrow_mut(), 1).unwrap_or_default();
     // An uploaded song may not have aalbum metadata

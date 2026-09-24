@@ -11,7 +11,8 @@ use crate::common::{
 };
 use crate::nav_consts::{
     FEEDBACK_TOKEN, LIVE_BADGE_LABEL, MENU_SERVICE, NAVIGATION_BROWSE_ID, NAVIGATION_PLAYLIST_ID,
-    NAVIGATION_VIDEO_TYPE, PLAY_BUTTON, SECTION_LIST, SINGLE_COLUMN_TAB, TEXT_RUN, WATCH_VIDEO_ID,
+    NAVIGATION_VIDEO_TYPE, PLAY_BUTTON, PLAYLIST_ITEM_VIDEO_ID, SECTION_LIST, SINGLE_COLUMN_TAB,
+    TEXT_RUN,
 };
 use crate::parse::parse_flex_column_item;
 use crate::query::{AddHistoryItemQuery, GetHistoryQuery, RemoveHistoryItemsQuery};
@@ -194,11 +195,7 @@ fn parse_history_item_episode(
     title: String,
     mut data: JsonCrawlerBorrowed,
 ) -> Result<HistoryItemEpisode> {
-    let video_id = data.take_value_pointer(concatcp!(
-        PLAY_BUTTON,
-        "/playNavigationEndpoint",
-        WATCH_VIDEO_ID
-    ))?;
+    let video_id = data.take_value_pointer(PLAYLIST_ITEM_VIDEO_ID)?;
     let like_status = data.take_value_pointer(MENU_LIKE_STATUS)?;
     let is_live = data.path_exists(LIVE_BADGE_LABEL);
     let (duration, date) = match is_live {
@@ -240,11 +237,7 @@ fn parse_history_item_video(
     title: String,
     mut data: JsonCrawlerBorrowed,
 ) -> Result<HistoryItemVideo> {
-    let video_id = data.take_value_pointer(concatcp!(
-        PLAY_BUTTON,
-        "/playNavigationEndpoint",
-        WATCH_VIDEO_ID
-    ))?;
+    let video_id = data.take_value_pointer(PLAYLIST_ITEM_VIDEO_ID)?;
     let like_status = data.take_value_pointer(MENU_LIKE_STATUS)?;
     let channel_name = parse_flex_column_item(&mut data, 1, 0)?;
     let channel_id = data
@@ -283,10 +276,7 @@ fn parse_history_item_upload_song(
         .borrow_pointer(fixed_column_item_pointer(0))?
         .take_value_pointer(TEXT_RUN_TEXT)?;
     let like_status = data.take_value_pointer(MENU_LIKE_STATUS)?;
-    let video_id = data.take_value_pointer(concatcp!(
-        PLAY_BUTTON,
-        "/playNavigationEndpoint/watchEndpoint/videoId"
-    ))?;
+    let video_id = data.take_value_pointer(PLAYLIST_ITEM_VIDEO_ID)?;
     let artists = parse_upload_song_artists(data.borrow_mut(), 1)?;
     let album = parse_upload_song_album(data.borrow_mut(), 2)?;
     let mut menu = data.navigate_pointer(MENU_ITEMS)?;
@@ -313,11 +303,7 @@ fn parse_history_item_song(
     title: String,
     mut data: JsonCrawlerBorrowed,
 ) -> Result<HistoryItemSong> {
-    let video_id = data.take_value_pointer(concatcp!(
-        PLAY_BUTTON,
-        "/playNavigationEndpoint",
-        WATCH_VIDEO_ID
-    ))?;
+    let video_id = data.take_value_pointer(PLAYLIST_ITEM_VIDEO_ID)?;
     let library_management =
         parse_library_management_items_from_menu(data.borrow_pointer(MENU_ITEMS)?)?;
     let like_status = data.take_value_pointer(MENU_LIKE_STATUS)?;
