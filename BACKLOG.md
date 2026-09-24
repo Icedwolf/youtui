@@ -274,6 +274,11 @@ The codebase is at a local optimum across the areas this project optimizes:
   else `debug!` + noop), ~82 lines differing only in action type/variant/field/message. Now five
   `impl_browser_sub_action_handler!` invocations; new wrong-variant test locks the mismatch arm.
   Net −26 lines. 683 tests.
+- **Grey-out display-policy check canonicalized (ytmapi-rs parse).** Ten sites in five parse
+  modules read `musicItemRendererDisplayPolicy` two ways (7× `is_available = != GREY_OUT`,
+  3× `if let Ok(GREY_OUT)` skip), most with the raw path literal instead of the `DISPLAY_POLICY`
+  const. `fn is_greyed_out` in parse.rs is now the one truth table (absent → false, GREY_OUT →
+  true, other → false), locked by a tri-state unit test; the const drift is gone.
 - **Playlist shelf parsers share one skeleton (ytmapi-rs).** The featured and community
   playlist parsers in `parse/search/mod.rs` were byte-identical except the (1,2) column name
   (songs/views) and output type. `take_playlist_shelf_fields` holds the single copy of the
