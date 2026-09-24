@@ -798,24 +798,16 @@ pub(crate) trait SortFilterTable: AdvancedTableView {
     }
 
     fn handle_sort_cur_asc(&mut self) {
-        let Some(column) = self
-            .get_sortable_columns()
-            .get(self.get_sort_manager().cur)
-            .copied()
-        else {
-            debug!("Tried to index sortable columns but was out of range");
-            return;
-        };
-        if let Err(e) = self.push_sort_command(TableSortCommand {
-            column,
-            direction: SortDirection::Asc,
-        }) {
-            debug!("Tried to sort a column that is not sortable - error {e}")
-        };
-        self.close_sort();
+        self.handle_sort_cur(SortDirection::Asc);
     }
 
     fn handle_sort_cur_desc(&mut self) {
+        self.handle_sort_cur(SortDirection::Desc);
+    }
+
+    /// Shared body of the asc/desc sort actions: sort the column selected in
+    /// the sort popup, then close it.
+    fn handle_sort_cur(&mut self, direction: SortDirection) {
         let Some(column) = self
             .get_sortable_columns()
             .get(self.get_sort_manager().cur)
@@ -824,10 +816,7 @@ pub(crate) trait SortFilterTable: AdvancedTableView {
             debug!("Tried to index sortable columns but was out of range");
             return;
         };
-        if let Err(e) = self.push_sort_command(TableSortCommand {
-            column,
-            direction: SortDirection::Desc,
-        }) {
+        if let Err(e) = self.push_sort_command(TableSortCommand { column, direction }) {
             debug!("Tried to sort a column that is not sortable - error {e}")
         };
         self.close_sort();
