@@ -1,7 +1,9 @@
 use super::{
     DISPLAY_POLICY, ParseFrom, ProcessedResult, flex_column_item_pointer, parse_flex_column_item,
 };
-use crate::common::{ContinuationParams, Explicit, SearchSuggestion, SuggestionType, TextRun};
+use crate::common::{
+    ContinuationParams, Explicit, PlaylistID, SearchSuggestion, SuggestionType, TextRun,
+};
 use crate::continuations::ParseFromContinuable;
 use crate::nav_consts::*;
 use crate::parse::{EpisodeDate, ParsedSongAlbum};
@@ -520,34 +522,49 @@ fn parse_episode_search_result_from_music_shelf_contents(
 }
 // TODO: Type safety
 // TODO: Tests
+/// Shared skeleton for the two playlist shelf item parsers (featured vs
+/// community): title (flex 0,0), author (1,0), song/views count (1,2) and
+/// the playlist browse id. One copy of the layout extraction so a YouTube
+/// Music layout-drift fix lands in both parsers at once.
+struct PlaylistShelfFields {
+    title: String,
+    author: String,
+    songs_or_views: String,
+    playlist_id: PlaylistID<'static>,
+}
+
+fn take_playlist_shelf_fields(
+    music_shelf_contents: JsonCrawlerBorrowed<'_>,
+) -> Result<PlaylistShelfFields> {
+    let mut mrlir = music_shelf_contents.navigate_pointer("/musicResponsiveListItemRenderer")?;
+    Ok(PlaylistShelfFields {
+        title: parse_flex_column_item(&mut mrlir, 0, 0)?,
+        author: parse_flex_column_item(&mut mrlir, 1, 0)?,
+        songs_or_views: parse_flex_column_item(&mut mrlir, 1, 2)?,
+        playlist_id: mrlir.take_value_pointer(NAVIGATION_BROWSE_ID)?,
+    })
+}
+
 fn parse_featured_playlist_search_result_from_music_shelf_contents(
     music_shelf_contents: JsonCrawlerBorrowed<'_>,
 ) -> Result<SearchResultFeaturedPlaylist> {
-    let mut mrlir = music_shelf_contents.navigate_pointer("/musicResponsiveListItemRenderer")?;
-    let title = parse_flex_column_item(&mut mrlir, 0, 0)?;
-    let author = parse_flex_column_item(&mut mrlir, 1, 0)?;
-    let songs = parse_flex_column_item(&mut mrlir, 1, 2)?;
-    let playlist_id = mrlir.take_value_pointer(NAVIGATION_BROWSE_ID)?;
+    let fields = take_playlist_shelf_fields(music_shelf_contents)?;
     Ok(SearchResultFeaturedPlaylist {
-        title,
-        author,
-        playlist_id,
-        songs,
+        title: fields.title,
+        author: fields.author,
+        playlist_id: fields.playlist_id,
+        songs: fields.songs_or_views,
     })
 }
 fn parse_community_playlist_search_result_from_music_shelf_contents(
     music_shelf_contents: JsonCrawlerBorrowed<'_>,
 ) -> Result<SearchResultCommunityPlaylist> {
-    let mut mrlir = music_shelf_contents.navigate_pointer("/musicResponsiveListItemRenderer")?;
-    let title = parse_flex_column_item(&mut mrlir, 0, 0)?;
-    let author = parse_flex_column_item(&mut mrlir, 1, 0)?;
-    let views = parse_flex_column_item(&mut mrlir, 1, 2)?;
-    let playlist_id = mrlir.take_value_pointer(NAVIGATION_BROWSE_ID)?;
+    let fields = take_playlist_shelf_fields(music_shelf_contents)?;
     Ok(SearchResultCommunityPlaylist {
-        title,
-        author,
-        playlist_id,
-        views,
+        title: fields.title,
+        author: fields.author,
+        playlist_id: fields.playlist_id,
+        views: fields.songs_or_views,
     })
 }
 
