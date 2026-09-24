@@ -274,6 +274,11 @@ The codebase is at a local optimum across the areas this project optimizes:
   else `debug!` + noop), ~82 lines differing only in action type/variant/field/message. Now five
   `impl_browser_sub_action_handler!` invocations; new wrong-variant test locks the mismatch arm.
   Net −26 lines. 683 tests.
+- **Library tab list parsers share one skeleton (ytmapi-rs).** The seven `parse_library_*` /
+  `parse_content_list_*` list fns each reimplemented the same continuation-params + iterate +
+  collect shape. `parse_library_list<R, T>` (Fn-parameterized over the item parser) is now the
+  single home; pointer, skip, and Option-vs-plain item contracts remain per-call-site. −21 net
+  lines; all library fixture suites (playlists/artists/albums/songs + continuations) pass.
 - **Grey-out display-policy check canonicalized (ytmapi-rs parse).** Ten sites in five parse
   modules read `musicItemRendererDisplayPolicy` two ways (7× `is_available = != GREY_OUT`,
   3× `if let Ok(GREY_OUT)` skip), most with the raw path literal instead of the `DISPLAY_POLICY`
