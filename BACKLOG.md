@@ -235,6 +235,11 @@ The codebase is at a local optimum across the areas this project optimizes:
   buffering branch keeps skip/auth/halt duties with the same `is_dead`/`is_auth` reads.
   Red→green: `dead_failure_flags_session_dead_even_when_not_buffering`. Full `playback.rs`
   sweep now complete and clean.
+- **`SortManager::new()`/`FilterManager::new()` dropped for `Default`.** Both hand-rolled
+  constructors re-implemented `Default` field-by-field (SortManager derives it; FilterManager
+  has a manual impl), sole callers were `SongsPanel::new` (songs_panel.rs:58-59). Net −19 lines;
+  the vestigial `is_text_handling() -> true` impls were checked and kept — `TextHandler` has no
+  trait default, so they're mandatory overrides.
 - **Vestigial `ResolveAudioTracks` stub reduced to a retained no-op.**
   The `PlaylistAction::ResolveAudioTracks` arm marked `ListSong::resolution_checked` (a field
   nothing read), spawned N no-op effect closures, and set/cleared
