@@ -240,6 +240,11 @@ The codebase is at a local optimum across the areas this project optimizes:
   has a manual impl), sole callers were `SongsPanel::new` (songs_panel.rs:58-59). Net −19 lines;
   the vestigial `is_text_handling() -> true` impls were checked and kept — `TextHandler` has no
   trait default, so they're mandatory overrides.
+- **`handle_sort_cur_asc`/`desc` merged.** The two `SortFilterTable` default methods were 18-line
+  twins differing only in the `SortDirection` literal. Both implementors (`SongsPanel`,
+  `SongSearchBrowser`) use the defaults; the four dispatch sites (macro songs_panel routing +
+  songsearch.rs self-routing) are unchanged. Shared `handle_sort_cur(direction)` body, asc/desc
+  become one-line delegators. Net −11 lines.
 - **Vestigial `ResolveAudioTracks` stub reduced to a retained no-op.**
   The `PlaylistAction::ResolveAudioTracks` arm marked `ListSong::resolution_checked` (a field
   nothing read), spawned N no-op effect closures, and set/cleared
