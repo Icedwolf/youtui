@@ -261,6 +261,12 @@ The codebase is at a local optimum across the areas this project optimizes:
   render-parity tests (snapshot fixture `draw_parity.txt`, captured from the pre-refactor
   render; 6 states: loaded/popped/loading × artist/playlist). Production net −~60 lines;
   +2 parity tests + fixture. 682 tests.
+- **Five per-browser `ActionHandler` impls generated from one macro (browser.rs).**
+  `BrowserArtistSongsAction`/`BrowserArtistsAction`/`BrowserSongsAction`/`BrowserPlaylistsAction`/
+  `BrowserPlaylistSongsAction` were identical-shape impls (match variant → `apply_action_mapped`,
+  else `debug!` + noop), ~82 lines differing only in action type/variant/field/message. Now five
+  `impl_browser_sub_action_handler!` invocations; new wrong-variant test locks the mismatch arm.
+  Net −26 lines. 683 tests.
 - **Vestigial `ResolveAudioTracks` stub reduced to a retained no-op.**
   The `PlaylistAction::ResolveAudioTracks` arm marked `ListSong::resolution_checked` (a field
   nothing read), spawned N no-op effect closures, and set/cleared
