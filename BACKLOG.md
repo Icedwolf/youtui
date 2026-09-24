@@ -1,7 +1,7 @@
 # Youtui Backlog
 
 **Build:** 0 errors, 0 warnings, 0 clippy
-**Tests:** 691 youtui bins green (2 ignored). Binary is NOT reinstalled to
+**Tests:** 693 workspace passed (whole workspace incl. ytmapi-rs + doctests). Binary is NOT reinstalled to
 `~/.config/cargo/bin/youtui` anymore (user runs it actively) — `target/release/youtui` is the
 verification artifact only.
 **Last updated:** 2026-09-24
@@ -274,6 +274,18 @@ The codebase is at a local optimum across the areas this project optimizes:
   else `debug!` + noop), ~82 lines differing only in action type/variant/field/message. Now five
   `impl_browser_sub_action_handler!` invocations; new wrong-variant test locks the mismatch arm.
   Net −26 lines. 683 tests.
+- **TextHandler::is_text_handling defaulted; two vestigial overrides cut (youtui).**
+  FilterManager and SearchBlock each returned a tombstoned literal-`true` `is_text_handling` that
+  no caller consults (input-ownership gates live in SongsPanel/SearchPanel route checks), but the
+  trait required the dead bodies. The trait method now defaults to `true` (value-identical to both
+  removed bodies at every call site — provably behavior-neutral); the two overrides and their
+  tombstone comments are gone. New lock test `leaf_text_widgets_own_input_by_default`. 692 → 693.
+- **Audit records (kept intentionally, not bugs):** the ytmapi-rs search-suggestion API
+  (`SearchSuggestion`/`SuggestionType`/`TextRun`/`GetSearchSuggestionsQuery`, ~150 lines) is NOT
+  dead — youtui's CLI diagnostic command `GetSearchSuggestions` (main.rs:106, querybuilder.rs:58)
+  backs onto it, so an attempted removal was reverted at pre-flight (enumerated call sites with a
+  head-truncated grep missed it). Dependency audit across both crates: every dependency has a
+  live, wired use (no unused deps to cut).
 - **Two-column header description parse shared (ytmapi-rs).** The album and playlist detail
   pages each carried the same nine-line description-shelf block (mirrored author notes
   "NOTE: Similar code to get_album_2024"/"get_playlist_2024"). `take_description` in parse.rs is
