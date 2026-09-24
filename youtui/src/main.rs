@@ -138,37 +138,31 @@ enum Command {
         #[arg(default_value_t = 1)]
         max_pages: usize,
     },
-    //TODO: Allow sorting
     GetLibraryArtists {
         /// Maximum number of pages that the API is allowed to return.
         #[arg(default_value_t = 1)]
         max_pages: usize,
     },
-    //TODO: Allow sorting
     GetLibrarySongs {
         /// Maximum number of pages that the API is allowed to return.
         #[arg(default_value_t = 1)]
         max_pages: usize,
     },
-    //TODO: Allow sorting
     GetLibraryAlbums {
         /// Maximum number of pages that the API is allowed to return.
         #[arg(default_value_t = 1)]
         max_pages: usize,
     },
-    //TODO: Allow sorting
     GetLibraryArtistSubscriptions {
         /// Maximum number of pages that the API is allowed to return.
         #[arg(default_value_t = 1)]
         max_pages: usize,
     },
-    //TODO: Allow sorting
     GetLibraryPodcasts {
         /// Maximum number of pages that the API is allowed to return.
         #[arg(default_value_t = 1)]
         max_pages: usize,
     },
-    //TODO: Allow sorting
     GetLibraryChannels {
         /// Maximum number of pages that the API is allowed to return.
         #[arg(default_value_t = 1)]
@@ -276,19 +270,16 @@ enum Command {
     EditSongLibraryStatus {
         feedback_tokens: Vec<String>,
     },
-    // TODO: Sorting
     GetLibraryUploadSongs {
         /// Maximum number of pages that the API is allowed to return.
         #[arg(default_value_t = 1)]
         max_pages: usize,
     },
-    // TODO: Sorting
     GetLibraryUploadArtists {
         /// Maximum number of pages that the API is allowed to return.
         #[arg(default_value_t = 1)]
         max_pages: usize,
     },
-    // TODO: Sorting
     GetLibraryUploadAlbums {
         /// Maximum number of pages that the API is allowed to return.
         #[arg(default_value_t = 1)]
