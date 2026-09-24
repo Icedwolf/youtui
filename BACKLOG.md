@@ -267,6 +267,11 @@ The codebase is at a local optimum across the areas this project optimizes:
   else `debug!` + noop), ~82 lines differing only in action type/variant/field/message. Now five
   `impl_browser_sub_action_handler!` invocations; new wrong-variant test locks the mismatch arm.
   Net −26 lines. 683 tests.
+- **`Config::default` route through `default_notifications_enabled` (config.rs).** The IR's
+  serde default used the fn while `Config::default` (and the test's Config literal) inlined
+  `true` — two sources of truth for the same policy. Now all three use the fn, matching
+  `volume`/`download_cache_size`. New alignment lock
+  `default_notifications_matches_fn`. 688 tests.
 - **Three song-list default keybind tables collapsed into one macro (config/keymap.rs).**
   `default_browser_songs_keybinds` and `default_browser_playlist_songs_keybinds` were byte-identical
   tables (same f/o/Enter-"Play" skeleton, differing only in the action-type path);
