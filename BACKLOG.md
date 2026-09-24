@@ -1,7 +1,7 @@
 # Youtui Backlog
 
 **Build:** 0 errors, 0 warnings, 0 clippy
-**Tests:** 687 youtui bins green (2 ignored). Binary is NOT reinstalled to
+**Tests:** 691 youtui bins green (2 ignored). Binary is NOT reinstalled to
 `~/.config/cargo/bin/youtui` anymore (user runs it actively) — `target/release/youtui` is the
 verification artifact only.
 **Last updated:** 2026-09-24
@@ -267,6 +267,12 @@ The codebase is at a local optimum across the areas this project optimizes:
   else `debug!` + noop), ~82 lines differing only in action type/variant/field/message. Now five
   `impl_browser_sub_action_handler!` invocations; new wrong-variant test locks the mismatch arm.
   Net −26 lines. 683 tests.
+- **Prefer-audio-track dedupe loop extracted (structures.rs).** `append_raw_album_songs` and
+  `append_raw_search_result_songs` each carried an inline HashMap dedupe (one song per key,
+  audio track displaces a non-audio occupant) identical modulo the key type (title vs
+  (title, artist)). Now one generic `dedupe_preferring_audio(key, is_audio)` the displacing
+  semantics exist in. 3 new lock tests via `serde_json::from_value` fixtures (bypasses
+  `#[non_exhaustive]`, same recipe as the api.rs `resolve_omv` tests). 691 tests.
 - **`Config::default` route through `default_notifications_enabled` (config.rs).** The IR's
   serde default used the fn while `Config::default` (and the test's Config literal) inlined
   `true` — two sources of truth for the same policy. Now all three use the fn, matching
