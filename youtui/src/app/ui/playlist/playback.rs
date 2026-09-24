@@ -1406,37 +1406,31 @@ impl Playlist {
                     debug!("download_error: song_id={}, error={}", video_id, e);
                 } else {
                     warn!("download_error: song_id={}, error={:#}", video_id, e);
-                }
-                if let Some(song) = self.get_mut_song_from_id(id) {
-                    song.download_status = DownloadStatus::Failed;
-                }
-                self.active_downloads
-                    .lock()
-                    .unwrap_or_warn()
-                    .retain(|(song_id, _)| *song_id != id);
-
-                let mut effect = Effects::none();
-                if matches!(self.play_status, PlayState::Buffering(target) if target == id) {
-                    if is_cancellation_error(&e) {
-                        debug!("download failed while buffering, skipping: {}", e);
-                    } else {
+                    let is_dead = is_dead_video_error(&e);
+                    // Flag permanently-dead videos at ANY download failure —
+                    // prefetch/queued or live playback. A dead successor that
+                    // failed in the background is then skipped by the
+                    // auto-advance (get_next_song_id / first_live_song_id)
+                    // without a wasted re-resolve at play time; before this,
+                    // the observed logs showed each dead successor failing
+                    // twice (background, then while buffering) before the
+                    // buffering branch finally flagged it.
+                    if is_dead {
+                        let (dead_video_id, title) = self
+                            .get_song_from_id(id)
+                            .map(|s| (s.video_id.get_raw().to_string(), s.title.clone()))
+                            .unwrap_or_default();
+                        self.list.session_dead_videos.insert(dead_video_id);
+                        if self.notifications_enabled && !title.is_empty() {
+                            let body = format!("{title} — no longer available on YouTube, skipped");
+                            spawn_notification("Song Unavailable", &body, 5000);
+                        }
+                    }
+                    if matches!(self.play_status, PlayState::Buffering(target) if target == id) {
                         warn!("download failed while buffering, skipping: {}", e);
-                        let is_dead = is_dead_video_error(&e);
                         let is_auth = is_auth_error(&e);
                         if is_auth {
                             self.notify_auth_error(&e);
-                        }
-                        if is_dead {
-                            let (video_id, title) = self
-                                .get_song_from_id(id)
-                                .map(|s| (s.video_id.get_raw().to_string(), s.title.clone()))
-                                .unwrap_or_default();
-                            self.list.session_dead_videos.insert(video_id);
-                            if self.notifications_enabled && !title.is_empty() {
-                                let body =
-                                    format!("{title} — no longer available on YouTube, skipped");
-                                spawn_notification("Song Unavailable", &body, 5000);
-                            }
                         }
                         // A dead video or auth failure is a definitive per-song /
                         // per-session condition, never a sign of a systemic
@@ -1452,6 +1446,20 @@ impl Playlist {
                                 return Effects::none();
                             }
                         }
+                    }
+                }
+                if let Some(song) = self.get_mut_song_from_id(id) {
+                    song.download_status = DownloadStatus::Failed;
+                }
+                self.active_downloads
+                    .lock()
+                    .unwrap_or_warn()
+                    .retain(|(song_id, _)| *song_id != id);
+
+                let mut effect = Effects::none();
+                if matches!(self.play_status, PlayState::Buffering(target) if target == id) {
+                    if is_cancellation_error(&e) {
+                        debug!("download failed while buffering, skipping: {}", e);
                     }
                     effect = effect.push(self.handle_set_to_error(id));
                 }

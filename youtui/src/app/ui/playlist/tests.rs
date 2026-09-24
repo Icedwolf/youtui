@@ -432,6 +432,26 @@ mod state_transitions {
     }
 
     #[test]
+    fn dead_failure_flags_session_dead_even_when_not_buffering() {
+        // A permanently-dead video that fails as a prefetch/queued download
+        // (a different song is the buffering target) must still be
+        // session-flagged. Otherwise the auto-advance re-resolves it at play
+        // time — the wasted yt-dlp cycle seen in the logs, where a dead
+        // successor failed twice (once as background download, again while
+        // buffering) before the buffering branch finally flagged it.
+        let mut p = downloaded_songs(2);
+        p.set_notifications_enabled(false);
+        p.play_status = PlayState::Buffering(ListSongID(0));
+        let _effect = p.handle_song_download_progress_update(
+            DownloadProgressUpdate::Error("video unavailable (yt-dlp error)".to_string()),
+            ListSongID(1),
+        );
+        assert!(p.list.session_dead_videos.contains("video1"));
+        // The playing song is untouched — the failure was not on the target.
+        assert_eq!(p.play_status, PlayState::Buffering(ListSongID(0)));
+    }
+
+    #[test]
     fn single_dead_song_stops_cleanly() {
         let mut p = downloaded_songs(1);
         p.set_notifications_enabled(false);
