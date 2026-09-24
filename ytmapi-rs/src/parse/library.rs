@@ -460,10 +460,7 @@ fn parse_table_list_song(title: String, mut data: JsonCrawlerBorrowed) -> Result
     let duration = data
         .borrow_pointer(fixed_column_item_pointer(0))?
         .take_value_pointers(&["/text/simpleText", "/text/runs/0/text"])?;
-    let is_available = data
-        .take_value_pointer::<String>("/musicItemRendererDisplayPolicy")
-        .map(|m| m != "MUSIC_ITEM_RENDERER_DISPLAY_POLICY_GREY_OUT")
-        .unwrap_or(true);
+    let is_available = !super::is_greyed_out(&mut data);
 
     let explicit = if data.path_exists(BADGE_LABEL) {
         Explicit::IsExplicit

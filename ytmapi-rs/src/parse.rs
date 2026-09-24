@@ -208,3 +208,37 @@ fn parse_fixed_column_item<T: DeserializeOwned>(
     let pointer = format!("{}/text/runs/0/text", fixed_column_item_pointer(col_idx));
     Ok(item.take_value_pointer(pointer)?)
 }
+
+/// YouTube Music greys out items that are unavailable to play; available items
+/// simply don't carry the display-policy path at all.
+fn is_greyed_out(item: &mut impl JsonCrawler) -> bool {
+    item.take_value_pointer::<String>(DISPLAY_POLICY)
+        .map(|m| m == "MUSIC_ITEM_RENDERER_DISPLAY_POLICY_GREY_OUT")
+        .unwrap_or(false)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn with_policy(policy: Option<&str>) -> JsonCrawlerOwned {
+        let value = match policy {
+            Some(policy) => serde_json::json!({ "musicItemRendererDisplayPolicy": policy }),
+            None => serde_json::json!({}),
+        };
+        JsonCrawlerOwned::new(String::new(), value)
+    }
+
+    #[test]
+    fn is_greyed_out_handles_absent_grey_and_other_policy() {
+        // Absent path — available (what the old sites' `.unwrap_or(true)` /
+        // `if let Ok(...)` forms produced).
+        assert!(!is_greyed_out(&mut with_policy(None)));
+        // Grey-out policy — unavailable (skip).
+        assert!(is_greyed_out(&mut with_policy(Some(
+            "MUSIC_ITEM_RENDERER_DISPLAY_POLICY_GREY_OUT"
+        ))));
+        // Any other policy value — available.
+        assert!(!is_greyed_out(&mut with_policy(Some("some_other_policy"))));
+    }
+}

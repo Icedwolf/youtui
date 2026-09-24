@@ -11,12 +11,12 @@ use crate::common::{
 use crate::continuations::ParseFromContinuable;
 use crate::nav_consts::{
     APPEND_CONTINUATION_ITEMS, BADGE_LABEL, CONTENT, CONTINUATION_RENDERER_COMMAND,
-    DELETION_ENTITY_ID, DISPLAY_POLICY, FACEPILE_AVATAR_URL, FACEPILE_TEXT, LIVE_BADGE_LABEL,
-    MENU_ITEMS, MENU_LIKE_STATUS, MRLIR, MUSIC_PLAYLIST_SHELF, NAVIGATION_BROWSE_ID,
-    NAVIGATION_PLAYLIST_ID, NAVIGATION_VIDEO_ID, NAVIGATION_VIDEO_TYPE, PLAY_BUTTON,
-    PLAYLIST_PANEL_CONTINUATION, PPR, RADIO_CONTINUATION_PARAMS, RESPONSIVE_HEADER, RUN_TEXT,
-    SECOND_SUBTITLE_RUNS, SECONDARY_SECTION_LIST_RENDERER, SECTION_LIST_ITEM, TAB_CONTENT,
-    TEXT_RUN, TEXT_RUN_TEXT, WATCH_NEXT_CONTENT, WATCH_VIDEO_ID,
+    DELETION_ENTITY_ID, FACEPILE_AVATAR_URL, FACEPILE_TEXT, LIVE_BADGE_LABEL, MENU_ITEMS,
+    MENU_LIKE_STATUS, MRLIR, MUSIC_PLAYLIST_SHELF, NAVIGATION_BROWSE_ID, NAVIGATION_PLAYLIST_ID,
+    NAVIGATION_VIDEO_ID, NAVIGATION_VIDEO_TYPE, PLAY_BUTTON, PLAYLIST_PANEL_CONTINUATION, PPR,
+    RADIO_CONTINUATION_PARAMS, RESPONSIVE_HEADER, RUN_TEXT, SECOND_SUBTITLE_RUNS,
+    SECONDARY_SECTION_LIST_RENDERER, SECTION_LIST_ITEM, TAB_CONTENT, TEXT_RUN, TEXT_RUN_TEXT,
+    WATCH_NEXT_CONTENT, WATCH_VIDEO_ID,
 };
 use crate::query::playlist::{
     CreatePlaylistType, GetPlaylistDetailsQuery, GetWatchPlaylistQueryID, PrivacyStatus,
@@ -310,10 +310,7 @@ pub(crate) fn parse_playlist_song(
     let duration = data
         .borrow_pointer(fixed_column_item_pointer(0))?
         .take_value_pointers(&["/text/simpleText", "/text/runs/0/text"])?;
-    let is_available = data
-        .take_value_pointer::<String>("/musicItemRendererDisplayPolicy")
-        .map(|m| m != "MUSIC_ITEM_RENDERER_DISPLAY_POLICY_GREY_OUT")
-        .unwrap_or(true);
+    let is_available = !super::is_greyed_out(&mut data);
 
     let explicit = if data.path_exists(BADGE_LABEL) {
         Explicit::IsExplicit
@@ -405,10 +402,7 @@ pub(crate) fn parse_playlist_episode(
     let podcast_id = data
         .borrow_pointer(flex_column_item_pointer(1))?
         .take_value_pointer(concatcp!(TEXT_RUN, NAVIGATION_BROWSE_ID))?;
-    let is_available = data
-        .take_value_pointer::<String>("/musicItemRendererDisplayPolicy")
-        .map(|m| m != "MUSIC_ITEM_RENDERER_DISPLAY_POLICY_GREY_OUT")
-        .unwrap_or(true);
+    let is_available = !super::is_greyed_out(&mut data);
     Ok(PlaylistEpisode {
         episode_id: video_id,
         duration,
@@ -439,10 +433,7 @@ pub(crate) fn parse_playlist_video(
     let duration = data
         .borrow_pointer(fixed_column_item_pointer(0))?
         .take_value_pointers(&["/text/simpleText", "/text/runs/0/text"])?;
-    let is_available = data
-        .take_value_pointer::<String>("/musicItemRendererDisplayPolicy")
-        .map(|m| m != "MUSIC_ITEM_RENDERER_DISPLAY_POLICY_GREY_OUT")
-        .unwrap_or(true);
+    let is_available = !super::is_greyed_out(&mut data);
 
     let playlist_id = data.take_value_pointer(concatcp!(
         MENU_ITEMS,
@@ -480,11 +471,9 @@ pub(crate) fn parse_playlist_item(
         return Ok(None);
     }
     // Handle not available case
-    if let Ok("MUSIC_ITEM_RENDERER_DISPLAY_POLICY_GREY_OUT") =
-        data.take_value_pointer::<String>(DISPLAY_POLICY).as_deref()
-    {
+    if super::is_greyed_out(&mut data) {
         return Ok(None);
-    };
+    }
     let video_type_path = concatcp!(
         PLAY_BUTTON,
         "/playNavigationEndpoint",

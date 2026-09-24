@@ -110,10 +110,7 @@ fn parse_album_track(json: &mut JsonCrawlerBorrowed) -> Result<Option<AlbumSong>
     let mut data = json.borrow_pointer(MRLIR)?;
     // A playlist item could be greyed out, and in this case we'll ignore the song
     // from the list of tracks.
-    if let Ok("MUSIC_ITEM_RENDERER_DISPLAY_POLICY_GREY_OUT") = data
-        .take_value_pointer::<String>("/musicItemRendererDisplayPolicy")
-        .as_deref()
-    {
+    if super::is_greyed_out(&mut data) {
         return Ok(None);
     }
     let title = super::parse_flex_column_item(&mut data, 0, 0)?;

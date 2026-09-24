@@ -218,10 +218,7 @@ fn parse_history_item_episode(
     let podcast_id = data
         .borrow_pointer(flex_column_item_pointer(1))?
         .take_value_pointer(concatcp!(TEXT_RUN, NAVIGATION_BROWSE_ID))?;
-    let is_available = data
-        .take_value_pointer::<String>("/musicItemRendererDisplayPolicy")
-        .map(|m| m != "MUSIC_ITEM_RENDERER_DISPLAY_POLICY_GREY_OUT")
-        .unwrap_or(true);
+    let is_available = !super::is_greyed_out(&mut data);
     let feedback_token_remove = data
         .navigate_pointer(MENU_ITEMS)?
         .try_into_iter()?
@@ -256,10 +253,7 @@ fn parse_history_item_video(
     let duration = data
         .borrow_pointer(fixed_column_item_pointer(0))?
         .take_value_pointers(&["/text/simpleText", "/text/runs/0/text"])?;
-    let is_available = data
-        .take_value_pointer::<String>("/musicItemRendererDisplayPolicy")
-        .map(|m| m != "MUSIC_ITEM_RENDERER_DISPLAY_POLICY_GREY_OUT")
-        .unwrap_or(true);
+    let is_available = !super::is_greyed_out(&mut data);
     let mut menu = data.navigate_pointer(MENU_ITEMS)?;
     let playlist_id = menu.take_value_pointer(concatcp!(
         "/0/menuNavigationItemRenderer",
@@ -332,10 +326,7 @@ fn parse_history_item_song(
     let duration = data
         .borrow_pointer(fixed_column_item_pointer(0))?
         .take_value_pointers(&["/text/simpleText", "/text/runs/0/text"])?;
-    let is_available = data
-        .take_value_pointer::<String>("/musicItemRendererDisplayPolicy")
-        .map(|m| m != "MUSIC_ITEM_RENDERER_DISPLAY_POLICY_GREY_OUT")
-        .unwrap_or(true);
+    let is_available = !super::is_greyed_out(&mut data);
     let explicit = if data.path_exists(BADGE_LABEL) {
         Explicit::IsExplicit
     } else {

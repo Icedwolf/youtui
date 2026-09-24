@@ -1,5 +1,5 @@
 use super::{
-    DISPLAY_POLICY, ParseFrom, ProcessedResult, flex_column_item_pointer, parse_flex_column_item,
+    ParseFrom, ProcessedResult, flex_column_item_pointer, is_greyed_out, parse_flex_column_item,
 };
 use crate::common::{
     ContinuationParams, Explicit, PlaylistID, SearchSuggestion, SuggestionType, TextRun,
@@ -406,12 +406,9 @@ fn parse_video_search_result_from_music_shelf_contents(
 ) -> Result<Option<SearchResultVideo>> {
     let mut mrlir = music_shelf_contents.navigate_pointer("/musicResponsiveListItemRenderer")?;
     // Handle not available case
-    if let Ok("MUSIC_ITEM_RENDERER_DISPLAY_POLICY_GREY_OUT") = mrlir
-        .take_value_pointer::<String>(DISPLAY_POLICY)
-        .as_deref()
-    {
+    if is_greyed_out(&mut mrlir) {
         return Ok(None);
-    };
+    }
     let title = parse_flex_column_item(&mut mrlir, 0, 0)?;
     let first_field: String = parse_flex_column_item(&mut mrlir, 1, 0)?;
     match first_field.as_str() {
