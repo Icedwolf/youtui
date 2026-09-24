@@ -274,6 +274,11 @@ The codebase is at a local optimum across the areas this project optimizes:
   else `debug!` + noop), ~82 lines differing only in action type/variant/field/message. Now five
   `impl_browser_sub_action_handler!` invocations; new wrong-variant test locks the mismatch arm.
   Net −26 lines. 683 tests.
+- **Playlist shelf parsers share one skeleton (ytmapi-rs).** The featured and community
+  playlist parsers in `parse/search/mod.rs` were byte-identical except the (1,2) column name
+  (songs/views) and output type. `take_playlist_shelf_fields` holds the single copy of the
+  MRLIR extraction (title/author/count/browse id) so a layout-drift fix lands once. Covered by
+  the 6 search fixture tests + 2 drop-junk cases.
 - **Stale sorting TODOs pruned from the CLI enum (main.rs).** The 9 `//TODO: Allow sorting` /
   `// TODO: Sorting` comments above the `GetLibrary*`/`GetLibraryUpload*` variants aspired to
   CLI sort flags — rejected by the product vision, and misleading since interactive sort
