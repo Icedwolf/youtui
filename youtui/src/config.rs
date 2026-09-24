@@ -67,7 +67,7 @@ impl Default for Config {
             yt_dlp_command: default_yt_dlp_command(),
             keybinds: Default::default(),
             volume: default_volume(),
-            notifications_enabled: true,
+            notifications_enabled: default_notifications_enabled(),
             download_cache_size: default_cache_size(),
         }
     }
@@ -181,6 +181,16 @@ mod tests {
         // ALAC buffer playing + one cached ≈ 32MB. 3 would be ~48MB.
         assert_eq!(Config::default().download_cache_size, 1);
     }
+    #[test]
+    fn default_notifications_matches_fn() {
+        // Guard against re-inlining the literal in Config::default() while the
+        // ConfigIR serde default keeps using the fn — the two would drift and
+        // silently change behavior only for configs omitting the key.
+        assert_eq!(
+            Config::default().notifications_enabled,
+            super::default_notifications_enabled()
+        );
+    }
     #[tokio::test]
     async fn test_unknown_keybind_parameters() {
         let config_file = r#"[keybinds.global]
@@ -210,7 +220,7 @@ raisevolume = {action = "vol_up", visiblity = "hidden"}"#;
             keybinds,
             yt_dlp_command,
             volume: super::default_volume(),
-            notifications_enabled: true,
+            notifications_enabled: super::default_notifications_enabled(),
             download_cache_size: super::default_cache_size(),
         };
         assert_eq!(config, Config::default());
