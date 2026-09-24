@@ -105,89 +105,56 @@ impl ActionHandler<BrowserSearchAction> for Browser {
         }
     }
 }
-impl ActionHandler<BrowserArtistSongsAction> for Browser {
-    fn apply_action(&mut self, action: BrowserArtistSongsAction) -> impl Into<YoutuiEffect<Self>> {
-        match self.variant {
-            BrowserVariant::Artist => {
-                return apply_action_mapped(self, action, |this: &mut Self| {
-                    &mut this.artist_search_browser
-                });
+/// One `ActionHandler` per per-browser action type: route to the matching
+/// browser via `apply_action_mapped`, or debug-log + noop when a different
+/// browser is active.
+macro_rules! impl_browser_sub_action_handler {
+    ($action:ty, $variant:ident, $field:ident, $label:literal) => {
+        impl ActionHandler<$action> for Browser {
+            fn apply_action(&mut self, action: $action) -> impl Into<YoutuiEffect<Self>> {
+                match self.variant {
+                    BrowserVariant::$variant => {
+                        return apply_action_mapped(self, action, |this: &mut Self| {
+                            &mut this.$field
+                        });
+                    }
+                    _ => debug!("Received action {:?} but {} not active", action, $label),
+                };
+                YoutuiEffect::new_no_op()
             }
-            _ => debug!(
-                "Received action {:?} but artist search browser not active",
-                action
-            ),
-        };
-        YoutuiEffect::new_no_op()
-    }
-}
-impl ActionHandler<BrowserArtistsAction> for Browser {
-    fn apply_action(&mut self, action: BrowserArtistsAction) -> impl Into<YoutuiEffect<Self>> {
-        match self.variant {
-            BrowserVariant::Artist => {
-                return apply_action_mapped(self, action, |this: &mut Self| {
-                    &mut this.artist_search_browser
-                });
-            }
-            _ => debug!(
-                "Received action {:?} but artist search browser not active",
-                action
-            ),
         }
-        YoutuiEffect::new_no_op()
-    }
+    };
 }
-impl ActionHandler<BrowserSongsAction> for Browser {
-    fn apply_action(&mut self, action: BrowserSongsAction) -> impl Into<YoutuiEffect<Self>> {
-        match self.variant {
-            BrowserVariant::Song => {
-                return apply_action_mapped(self, action, |this: &mut Self| {
-                    &mut this.song_search_browser
-                });
-            }
-            _ => debug!(
-                "Received action {:?} but song search browser not active",
-                action
-            ),
-        }
-        YoutuiEffect::new_no_op()
-    }
-}
-impl ActionHandler<BrowserPlaylistsAction> for Browser {
-    fn apply_action(&mut self, action: BrowserPlaylistsAction) -> impl Into<YoutuiEffect<Self>> {
-        match self.variant {
-            BrowserVariant::Playlist => {
-                return apply_action_mapped(self, action, |this: &mut Self| {
-                    &mut this.playlist_search_browser
-                });
-            }
-            _ => debug!(
-                "Received action {:?} but playlist search browser not active",
-                action
-            ),
-        }
-        YoutuiEffect::new_no_op()
-    }
-}
-impl ActionHandler<BrowserPlaylistSongsAction> for Browser {
-    fn apply_action(
-        &mut self,
-        action: BrowserPlaylistSongsAction,
-    ) -> impl Into<YoutuiEffect<Self>> {
-        match self.variant {
-            BrowserVariant::Playlist => {
-                return apply_action_mapped(self, action, |this: &mut Self| {
-                    &mut this.playlist_search_browser
-                });
-            }
-            _ => debug!(
-                "Received action {:?} but playlist search browser not active",
-                action
-            ),
-        }
-        YoutuiEffect::new_no_op()
-    }
-}
+impl_browser_sub_action_handler!(
+    BrowserArtistSongsAction,
+    Artist,
+    artist_search_browser,
+    "artist search browser"
+);
+impl_browser_sub_action_handler!(
+    BrowserArtistsAction,
+    Artist,
+    artist_search_browser,
+    "artist search browser"
+);
+impl_browser_sub_action_handler!(
+    BrowserSongsAction,
+    Song,
+    song_search_browser,
+    "song search browser"
+);
+impl_browser_sub_action_handler!(
+    BrowserPlaylistsAction,
+    Playlist,
+    playlist_search_browser,
+    "playlist search browser"
+);
+impl_browser_sub_action_handler!(
+    BrowserPlaylistSongsAction,
+    Playlist,
+    playlist_search_browser,
+    "playlist search browser"
+);
 impl ActionHandler<BrowserAction> for Browser {
     fn apply_action(&mut self, action: BrowserAction) -> impl Into<YoutuiEffect<Self>> {
         match action {
@@ -502,6 +469,7 @@ pub fn get_sort_keybinds(config: &Config) -> impl Iterator<Item = &Keymap<AppAct
 mod tests {
     use super::Browser;
     use super::artistsearch::songs_panel::BrowserArtistSongsAction;
+    use super::songsearch::BrowserSongsAction;
     use crate::app::component::actionhandler::{ActionHandler, DominantKeyRouter, KeyRouter};
     use crate::app::ui::action::AppAction;
     use crate::app::ui::browser::BrowserAction;
@@ -612,5 +580,16 @@ mod tests {
             actual_kb.any(|km| km.iter().contains(&expected_kb)),
             "the browser keymap must still be chained by a direct call even when a filter popup is shown"
         );
+    }
+    #[test]
+    fn wrong_variant_sub_action_noops_without_touching_active_browser() {
+        // Locks the `_ =>` arms of `impl_browser_sub_action_handler!`: a
+        // song-browser action received while the artist browser is active must
+        // not route into (or otherwise touch) the artist panels.
+        let mut b = Browser::new();
+        b.apply_action(BrowserSongsAction::Sort);
+        b.apply_action(BrowserSongsAction::Filter);
+        assert!(!b.artist_search_browser.songs_panel.filter.shown);
+        assert!(!b.artist_search_browser.songs_panel.sort.shown);
     }
 }
