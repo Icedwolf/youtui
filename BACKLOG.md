@@ -267,6 +267,13 @@ The codebase is at a local optimum across the areas this project optimizes:
   else `debug!` + noop), ~82 lines differing only in action type/variant/field/message. Now five
   `impl_browser_sub_action_handler!` invocations; new wrong-variant test locks the mismatch arm.
   Net −26 lines. 683 tests.
+- **Three duplicated volume-apply effect bodies merged (ui.rs).** `YoutuiWindow::new`'s startup
+  volume init, `handle_increase_volume` and `handle_set_volume` each carried the same ~15-line
+  async shape (`Effects::new` → Arc clone → player op → `handle_volume_update`). All three now
+  route through `apply_volume_effect(mutate_visual, op)`; the op closure takes the cloned `Arc`
+  by value and returns a boxed `+ Send + 'static` future (the `Effects::new` `'static` constraint
+  drove the shape). Two lock tests assert the synchronous visual volume + clamp through both
+  public wrappers. 685 tests.
 - **Vestigial `ResolveAudioTracks` stub reduced to a retained no-op.**
   The `PlaylistAction::ResolveAudioTracks` arm marked `ListSong::resolution_checked` (a field
   nothing read), spawned N no-op effect closures, and set/cleared
