@@ -9,6 +9,7 @@ use super::structures::{ListSong, Percentage};
 use crate::app::effect::Effects;
 use crate::app::server::ArcServer;
 use crate::app::ui::footer::FooterCache;
+use crate::async_rodio_sink::VolumeUpdate;
 use crate::config::Config;
 use crate::config::keymap::Keymap;
 use crate::keyaction::{DisplayableKeyAction, DisplayableMode, flatten_keybinds_as_readable};
@@ -16,7 +17,11 @@ use crate::widgets::ScrollingTableState;
 use action::{AppAction, ListAction, PAGE_KEY_LINES, TextEntryAction};
 use crossterm::event::{Event, KeyEvent};
 use itertools::Either;
+use std::future::Future;
 use std::sync::Arc;
+
+/// Future returned by a volume op (the `async_rodio_sink` player methods).
+type VolumeOpFuture = std::pin::Pin<Box<dyn Future<Output = Option<VolumeUpdate>> + Send>>;
 
 pub mod action;
 pub mod browser;
@@ -248,7 +253,7 @@ impl YoutuiWindow {
         let startup_volume = config.volume;
         let (mut playlist, task) = Playlist::new(Percentage(config.volume));
         playlist.set_notifications_enabled(config.notifications_enabled);
-        let this = YoutuiWindow {
+        let mut this = YoutuiWindow {
             context: WindowContext::Browser,
             playlist,
             config,
@@ -262,19 +267,12 @@ impl YoutuiWindow {
         // Apply the configured volume to the actual audio device at startup,
         // so the footer's number and the audible level agree from the first
         // frame (rodio's Player otherwise defaults to 1.0 regardless of config).
-        effects = effects.push(Effects::new(move |server: &ArcServer| {
-            let server = Arc::clone(server);
-            async move {
-                let update = server.player.set_volume(startup_volume).await;
-                Box::new(move |this: &mut YoutuiWindow| {
-                    if let Some(update) = update {
-                        this.playlist.handle_volume_update(update);
-                    }
-                    Effects::none()
-                })
-                    as Box<dyn FnOnce(&mut YoutuiWindow) -> Effects<YoutuiWindow> + Send>
-            }
-        }));
+        // The visual volume is already set at `Playlist::new` construction, so
+        // only the server op is needed here.
+        effects = effects.push(this.apply_volume_effect(
+            |_| {},
+            move |server| Box::pin(async move { server.player.set_volume(startup_volume).await }),
+        ));
         (this, effects)
     }
     pub fn get_help_list_items(&self) -> impl Iterator<Item = DisplayableKeyAction<'_>> {
@@ -426,27 +424,32 @@ impl YoutuiWindow {
             .map(|this: &mut Self| &mut this.playlist)
     }
     pub fn handle_increase_volume(&mut self, inc: i8) -> Effects<Self> {
-        self.increase_volume(inc);
-        Effects::new(move |server: &ArcServer| {
-            let server = Arc::clone(server);
-            async move {
-                let update = server.player.increase_volume(inc).await;
-                Box::new(move |this: &mut YoutuiWindow| {
-                    if let Some(update) = update {
-                        this.playlist.handle_volume_update(update);
-                    }
-                    Effects::none()
-                })
-                    as Box<dyn FnOnce(&mut YoutuiWindow) -> Effects<YoutuiWindow> + Send>
-            }
-        })
+        self.apply_volume_effect(
+            |this| this.increase_volume(inc),
+            move |server| Box::pin(async move { server.player.increase_volume(inc).await }),
+        )
     }
     pub fn handle_set_volume(&mut self, new_vol: u8) -> Effects<Self> {
-        self.set_volume(new_vol);
+        self.apply_volume_effect(
+            |this| this.set_volume(new_vol),
+            move |server| Box::pin(async move { server.player.set_volume(new_vol).await }),
+        )
+    }
+    /// Apply a volume change: mutate the visual volume synchronously, then run
+    /// the same change on the audio server and feed the reported update back
+    /// into the playlist. Shared by startup volume init, VolUp/VolDown and
+    /// MPRIS SetVolume — the three call sites were byte-identical except for
+    /// the visual mutation and the player op.
+    fn apply_volume_effect(
+        &mut self,
+        mutate_visual: impl FnOnce(&mut Self),
+        op: impl FnOnce(ArcServer) -> VolumeOpFuture + Send + 'static,
+    ) -> Effects<Self> {
+        mutate_visual(self);
         Effects::new(move |server: &ArcServer| {
             let server = Arc::clone(server);
             async move {
-                let update = server.player.set_volume(new_vol).await;
+                let update = op(server).await;
                 Box::new(move |this: &mut YoutuiWindow| {
                     if let Some(update) = update {
                         this.playlist.handle_volume_update(update);
@@ -538,5 +541,36 @@ impl YoutuiWindow {
             displayable_commands,
             description: name.into(),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The synchronous visual half of a volume change runs immediately; the
+    /// server op only executes when the returned effect is driven (needs an
+    /// ArcServer). These lock the playlist-side mutation of the shared
+    /// `apply_volume_effect` body without a server. Start from a lowered
+    /// volume so the 0-100 clamp does not mask the relative assert (the
+    /// config default is 100).
+    #[test]
+    fn handle_increase_volume_mutates_visual_volume_synchronously() {
+        let (mut w, _effects) = YoutuiWindow::new(Config::default());
+        let _ = w.handle_set_volume(50);
+        let _ = w.handle_increase_volume(7);
+        assert_eq!(w.playlist.volume().0, 57);
+        // Clamp still applies through the wrapper.
+        let _ = w.handle_increase_volume(100);
+        assert_eq!(w.playlist.volume().0, 100);
+    }
+
+    #[test]
+    fn handle_set_volume_mutates_visual_volume_synchronously() {
+        let (mut w, _effects) = YoutuiWindow::new(Config::default());
+        let _ = w.handle_set_volume(37);
+        assert_eq!(w.playlist.volume().0, 37);
+        let _ = w.handle_set_volume(101);
+        assert_eq!(w.playlist.volume().0, 100);
     }
 }
