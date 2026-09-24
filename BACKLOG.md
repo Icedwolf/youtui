@@ -274,6 +274,11 @@ The codebase is at a local optimum across the areas this project optimizes:
   else `debug!` + noop), ~82 lines differing only in action type/variant/field/message. Now five
   `impl_browser_sub_action_handler!` invocations; new wrong-variant test locks the mismatch arm.
   Net −26 lines. 683 tests.
+- **Stale sorting TODOs pruned from the CLI enum (main.rs).** The 9 `//TODO: Allow sorting` /
+  `// TODO: Sorting` comments above the `GetLibrary*`/`GetLibraryUpload*` variants aspired to
+  CLI sort flags — rejected by the product vision, and misleading since interactive sort
+  exists. The `CreatePlaylist`/`GetWatchPlaylist` capability notes remain (genuine gaps on
+  existing debug surfaces).
 - **Criterion benchmark windows capped (structures.rs, queue_persistence.rs, playlist tests).**
   All three criterion-in-`#[test]` wrappers ran bare `Criterion::default()` — 3s warm-up + 5s
   measurement per bench function; ten benches cost 64.5s of every `cargo test --release`. Now
