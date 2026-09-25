@@ -319,6 +319,15 @@ The codebase is at a local optimum across the areas this project optimizes:
   facade over `AsyncRodio`. List-vs-table render strategies are genuinely
   different (List delegates to ratatui; Table manages windowing manually) —
   the const was the only cross-file drift point.
+- **Whole-crate mechanical sweep (consts + fn liveness): clean.** Const scan:
+  no duplicate same-name consts remain anywhere (R40 was the last). Liveness
+  scan of every `pub(crate) fn`/`fn`: every low-caller lead resolved live —
+  note two scanner blind spots to re-check by hand on future sweeps:
+  turbofish calls (`fn::<T>(`) and serde string paths
+  (`deserialize_with = "crate::core::string_or_struct"`). Send-helper trio
+  (`send_or_error` async-tokio / `blocking_send_or_error` sync-tokio /
+  `std_send_or_error` std-mpsc) kept — distinct channel types and execution
+  contexts; merging needs a send-strategy flag, worse than three clear fns.
 - **Log review 2026-09-24/25: no new in-app pattern.** debug17 is 100% the
   known 403-throttle→relay-retry wave (every case resolved on attempt 2);
   debug16 shows one attempt-3 halt (eDrGiP1UVfk, the external per-video
