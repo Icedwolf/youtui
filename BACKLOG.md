@@ -1,10 +1,10 @@
 # Youtui Backlog
 
 **Build:** 0 errors, 0 warnings, 0 clippy
-**Tests:** 693 workspace passed (whole workspace incl. ytmapi-rs + doctests). Binary is NOT reinstalled to
+**Tests:** 692 workspace passed (whole workspace incl. ytmapi-rs + doctests; composition 417 youtui bin + 113 ytmapi lib + 77 doctests + 13 debug_dump + 70 live_integration + 2 json_crawler doctests). Binary is NOT reinstalled to
 `~/.config/cargo/bin/youtui` anymore (user runs it actively) — `target/release/youtui` is the
 verification artifact only.
-**Last updated:** 2026-09-24
+**Last updated:** 2026-09-25
 
 This file is a working backlog only — no changelog, no session archaeology. Past work
 and its rationale live in git history and in the code comments / `DECISIONS.md`.
@@ -278,7 +278,28 @@ The codebase is at a local optimum across the areas this project optimizes:
   (`Downloading(Percentage)`) was constructed with literals (`Percentage(0)`/`Percentage(50)`) and
   only ever pattern-matched as `Downloading(_)` — the percentage was never read. Narrowed to a unit
   `Downloading`; `DownloadStatus` never hits serde (queue persistence serializes `CompactSongRef`),
-  so no persisted shape changes. Existing icon-semantics test locks the change. 693 tests (unchanged).
+  so no persisted shape changes. Existing icon-semantics test locks the change. 692 tests (unchanged).
+- **Live `_stream`/`_stream_source` renamed (youtui).** Both-token streaming
+  variants on `DynamicYtMusic` were underscore-prefixed like dead code, but
+  cli/querybuilder.rs calls both (`get_string_output_of_streaming_query`). The
+  lie invites the false-dead-code trap — a sweep nearly deleted them this
+  session. Renamed to `stream`/`stream_source` (both names free — no conflict
+  with the `stream_browser_or_oauth` siblings).
+- **Live API drift 2026-09-25: anonymous featured-playlists continuation caps
+  at 2 pages with an empty terminal page** (no `continuationContents/
+  musicShelfContinuation`), erroring the parsed stream on page 3. Raw dump
+  measured: page 1 full shelf, page 2 full continuation, page 3 = 531 B
+  `responseContext`-only doc. Browser auth still serves 5 full shelves, so the
+  browser variant stays live; only the noauth variant is `#[ignore]`d — the
+  shared macro would have ignored both, losing browser coverage. App path
+  unaffected (browser auth; `FeaturedPlaylistsFilter` is CLI-diagnostic-only).
+- **`continuations.rs` stream vs `raw_json_stream` verdict (ytmapi-rs): keep
+  separate.** Parallel unfold skeletons (first query then continuation chain)
+  but different yields (parsed `Q::Output` vs cloned raw JSON `String`) and
+  different continuation-extraction error policies (propagate vs swallow-and-
+  stop), and both back live, separately-called APIs (api.rs:83/104 vs 139/164).
+  A merge needs a yield-mapper closure + error-mode branch — more complex than
+  the ~15-line shared skeleton saves. Same judgment as the watch-playlist pair.
 - **Re-checked and rejected: MRLIR-prepare prologue extraction (ytmapi-rs).** history/library/
   playlist share a 5-line borrow-MRLIR + flex-title prologue (history/library byte-identical,
   playlist 1-sentinel-diff "Song deleted"). Extracting `borrow_mrlir_title<'a, C: JsonCrawler>`
