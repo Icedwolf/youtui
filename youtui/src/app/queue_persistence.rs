@@ -233,11 +233,6 @@ mod criterion_benches {
             .collect()
     }
 
-    fn into_compact_two_pass(songs: &[ListSong]) -> Vec<CompactSongRef> {
-        let raw: Vec<ListSong> = songs.iter().cloned().collect();
-        raw.iter().map(CompactSongRef::from).collect()
-    }
-
     fn into_compact_single_pass(songs: &[ListSong]) -> Vec<CompactSongRef> {
         songs.iter().map(CompactSongRef::from).collect()
     }
@@ -267,9 +262,6 @@ mod criterion_benches {
         let mut c = Criterion::default()
             .measurement_time(Duration::from_millis(1000))
             .warm_up_time(Duration::from_millis(500));
-        c.bench_function("save/current_two_pass", |b| {
-            b.iter(|| black_box(into_compact_two_pass(black_box(&songs))))
-        });
         c.bench_function("save/single_pass", |b| {
             b.iter(|| black_box(into_compact_single_pass(black_box(&songs))))
         });

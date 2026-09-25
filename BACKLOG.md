@@ -28,13 +28,20 @@ The codebase is at a local optimum across the areas this project optimizes:
   ~290ns isolated (287.8–298.9; 393.9 on 09-24 — mid-suite it reads ~768ns due to allocator/
   thermal contamination after the 58k/135k fixture tests, isolate for the true number),
   `push_song_list(58k existing + 58k new)` 77ms, `playlist/get_song_from_idx_last` 1.73ns;
-  save serialization (informational, 135k): two-pass 234ms / single-pass 60.7ms / to_string
-  23.4ms / to_writer 19.4ms. R39/R40 additions to the suite: none (api.rs/querybuilder.rs/
-  widgets.rs only; zero bench code).
-  The warm release suite runs ~1:04.65 — drift from the R26-era ~46s is the later-added
-  criterion benches (4× queue_persistence save + `get_fields/7col` + playlist index, ≈2–3s
-  each) plus live network tests, all pre-session; the hard `bench` thresholds remain the
-  authoritative regression lock (guards pass with ≤2% of their bound at the tightest).
+  save serialization (informational, 135k): single-pass 60.7ms / to_string 23.4ms / to_writer
+  19.4ms (the abandoned 2-pass variant read 234.25ms pre-removal, 2026-09-25). R39/R40
+  additions to the suite: none (api.rs/querybuilder.rs/widgets.rs only; zero bench code).
+  The warm release suite measured 1:04.65 and 1:14.65 on 2026-09-25 (network-jitter-dominated
+  via the live integration tests) — drift from the R26-era ~46s is the later-added criterion
+  benches (3× queue_persistence save + `get_fields/7col` + playlist index, ≈2–3s each), all
+  pre-session; the hard `bench` thresholds remain the authoritative regression lock (guards
+  pass with ≤2% of their bound at the tightest).
+
+- **Bench-only `into_compact_two_pass` dead path removed (queue_persistence.rs, 2026-09-25)**
+  — the 2-pass accumulation and its `save/current_two_pass` criterion bench modeled an approach
+  production never uses (`save_queue` inlines single-pass); zero production refs. Before/after:
+  the removed bench read 234.25ms vs single-pass 60.7ms (baseline above); the isolated
+  save-serialization criterion test now runs 20.92s. 692 debug + 700 release green.
 
 - **Startup latency** — cookie export is conditional (fresh-file skip); the `ffmpeg -version`
   probe is warmed on the blocking pool so it overlaps the rest of startup; the autosave
