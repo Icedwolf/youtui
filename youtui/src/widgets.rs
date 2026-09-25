@@ -8,6 +8,12 @@ mod scrolling_list;
 mod scrolling_table;
 mod tab_grid;
 
+/// Default gap (in columns) between the end and restart of the scrolling
+/// ticker text in both scrolling widgets. Lives here — next to
+/// `get_scrolled_line` — so the list and table widgets share one value
+/// (duplicated per-widget consts would drift).
+pub const DEFAULT_TICKER_GAP: u16 = 6;
+
 /// Returns a Line, scrolled like a stock ticker, with `blank_chars` between end
 /// of text and start of text (unless `max_times_to_wrap` has been reached).
 ///
