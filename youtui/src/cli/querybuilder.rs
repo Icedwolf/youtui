@@ -731,11 +731,11 @@ where
         CliQuery {
             query_type: QueryType::FromApi,
             show_source: true,
-        } => yt._stream_source(q.borrow(), max_pages).await,
+        } => yt.stream_source(q.borrow(), max_pages).await,
         CliQuery {
             query_type: QueryType::FromApi,
             show_source: false,
-        } => yt._stream(q, max_pages).await.map(|r| format!("{r:#?}")),
+        } => yt.stream(q, max_pages).await.map(|r| format!("{r:#?}")),
         CliQuery {
             query_type: QueryType::FromSourceFiles(sources),
             show_source: true,

@@ -70,7 +70,7 @@ impl DynamicYtMusic {
         Ok(try_auth!(self, Q, yt, yt.query(query).await?))
     }
 
-    pub async fn _stream<Q, O>(&self, query: impl Borrow<Q>, max_pages: usize) -> Result<Vec<O>>
+    pub async fn stream<Q, O>(&self, query: impl Borrow<Q>, max_pages: usize) -> Result<Vec<O>>
     where
         Q: Query<BrowserToken, Output = O>,
         Q: Query<NoAuthToken, Output = O>,
@@ -123,7 +123,7 @@ impl DynamicYtMusic {
         Ok(try_auth!(self, Q, yt, yt.raw_json_query(query).await?))
     }
 
-    pub async fn _stream_source<Q, O>(&self, query: &Q, max_pages: usize) -> Result<String>
+    pub async fn stream_source<Q, O>(&self, query: &Q, max_pages: usize) -> Result<String>
     where
         Q: Query<BrowserToken, Output = O>,
         Q: Query<NoAuthToken, Output = O>,
