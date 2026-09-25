@@ -21,12 +21,20 @@ share a single canonical body via the `SortFilterTable` trait in `shared_compone
 
 The codebase is at a local optimum across the areas this project optimizes:
 
-- **Release perf baseline (2026-09-24, `cargo test --release`, all threshold guards green):**
-  `get_field(Artists)` 1.2ns, `get_field(TrackNo)` 1.1ns, `get_fields(4col)` 14.5ns,
-  `compute_lowercached` 67.8ns, `create_with_metadata` 393.9ns per call; `push_song_list(58k
-  existing + 58k new)` 82ms. This is the before/after reference for any future perf round.
-  The release test suite runs in ~46s (was ~77s) since the criterion wrappers use 1s measure /
-  0.5s warm-up (R26); the hard `bench` thresholds remain the authoritative regression lock.
+- **Release perf baseline (2026-09-25, HEAD `1e51888`, `cargo test --release -- --nocapture`,
+  all threshold guards green, 700 passed):** `get_field(Artists)` 1.1ns, `get_field(TrackNo)`
+  1.0ns (manual loop), `get_fields(4col)` 14.96ns/call (criterion, 100 songs/iter; tight-loop
+  harness reads 4.5ns — harness-dependent), `compute_lowercached` 66.0ns, `create_with_metadata`
+  ~290ns isolated (287.8–298.9; 393.9 on 09-24 — mid-suite it reads ~768ns due to allocator/
+  thermal contamination after the 58k/135k fixture tests, isolate for the true number),
+  `push_song_list(58k existing + 58k new)` 77ms, `playlist/get_song_from_idx_last` 1.73ns;
+  save serialization (informational, 135k): two-pass 234ms / single-pass 60.7ms / to_string
+  23.4ms / to_writer 19.4ms. R39/R40 additions to the suite: none (api.rs/querybuilder.rs/
+  widgets.rs only; zero bench code).
+  The warm release suite runs ~1:04.65 — drift from the R26-era ~46s is the later-added
+  criterion benches (4× queue_persistence save + `get_fields/7col` + playlist index, ≈2–3s
+  each) plus live network tests, all pre-session; the hard `bench` thresholds remain the
+  authoritative regression lock (guards pass with ≤2% of their bound at the tightest).
 
 - **Startup latency** — cookie export is conditional (fresh-file skip); the `ffmpeg -version`
   probe is warmed on the blocking pool so it overlaps the rest of startup; the autosave
