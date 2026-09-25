@@ -311,6 +311,14 @@ The codebase is at a local optimum across the areas this project optimizes:
   semantically meaningless (the channel closes at task-end either way) and a
   normalization has zero behavior delta → no fail-first test possible (rule 6),
   zero lines saved — rejected at preflight like the MRLIR prologue.
+- **`DEFAULT_TICKER_GAP` canonicalized to widgets.rs (R40).** Was duplicated
+  1:1 (`pub const ... = 6;`) across scrolling_list.rs and scrolling_table.rs —
+  drift risk (editing one widget's gap leaves the other stale). Both widgets
+  already import `get_scrolled_line` from the widgets root; the const now lives
+  beside it and both import it. Player.rs also closed: clean 34-line delegating
+  facade over `AsyncRodio`. List-vs-table render strategies are genuinely
+  different (List delegates to ratatui; Table manages windowing manually) —
+  the const was the only cross-file drift point.
 - **Log review 2026-09-24/25: no new in-app pattern.** debug17 is 100% the
   known 403-throttle→relay-retry wave (every case resolved on attempt 2);
   debug16 shows one attempt-3 halt (eDrGiP1UVfk, the external per-video
