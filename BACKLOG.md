@@ -300,6 +300,27 @@ The codebase is at a local optimum across the areas this project optimizes:
   stop), and both back live, separately-called APIs (api.rs:83/104 vs 139/164).
   A merge needs a yield-mapper closure + error-mode branch — more complex than
   the ~15-line shared skeleton saves. Same judgment as the watch-playlist pair.
+- **`server/api.rs` structural audit (youtui): clean.** `resolve_omv_crossref`
+  is the single shared crossref core (two thin map-building wrappers —
+  already factorized); `search_artists`/`fuse_artist_search`/`wait_artist_results`
+  concurrency is deliberate and documented; `get_artist_songs` vs
+  `get_playlist_songs` share only a ~15-line channel/spawn/Loading preamble
+  while their bodies diverge 240 vs 50 lines — below the twin threshold, kept
+  inline. Marginal-kept: `send_or_error`'s `S: Borrow<mpsc::Sender<T>>` bound
+  absorbs 5 owned-tx vs 9 borrowed-tx call forms, but owned-vs-borrowed is
+  semantically meaningless (the channel closes at task-end either way) and a
+  normalization has zero behavior delta → no fail-first test possible (rule 6),
+  zero lines saved — rejected at preflight like the MRLIR prologue.
+- **Log review 2026-09-24/25: no new in-app pattern.** debug17 is 100% the
+  known 403-throttle→relay-retry wave (every case resolved on attempt 2);
+  debug16 shows one attempt-3 halt (eDrGiP1UVfk, the external per-video
+  PO-token gap) plus a correctly-classified `Video unavailable` graceful skip
+  (bdf_ll68Z8o). debug18 (today) empty — app running, not disturbed.
+- **Start-fast buffer threshold: no lever (already optimal).**
+  `STREAM_INIT_THRESHOLD = 512` measured against ffmpeg's first atomic flush
+  (the ~700 B empty_moov header write) — the gate sits below the first flush by
+  design, so init can't start earlier than the flush exists; the threshold is a
+  wake-up gate, not a latency control. Closed with measurement.
 - **Re-checked and rejected: MRLIR-prepare prologue extraction (ytmapi-rs).** history/library/
   playlist share a 5-line borrow-MRLIR + flex-title prologue (history/library byte-identical,
   playlist 1-sentinel-diff "Song deleted"). Extracting `borrow_mrlir_title<'a, C: JsonCrawler>`
