@@ -70,6 +70,19 @@ The codebase is at a local optimum across the areas this project optimizes:
   `ttf` sums are test-only instrumentation. Verdict: the misfire class has **no**
   remaining instantiations — no code change warranted.
 
+- **Log review debug20 (2026-09-28, WARN session)** — first session after the gapless
+  fix; captured at WARN level only (the app defaults to WARN unless `youtui --debug`).
+  Surfaces: 9 403-throttle relays (9 unique songs, each throttled exactly once,
+  self-healed on retry attempt 2/3 — no re-throttle loops, zero halts, zero spawn
+  failures), 1 stale-cookie auth bail (graceful early abort), 2 video-unavailable
+  skips (graceful), and 6 `get_artist_albums` continuation-key misses + 1 album
+  `musicResponsiveHeaderRenderer` parse miss — a recurring ytmapi-rs API-response
+  shape gap, graceful first-page fallback, kept as honest WARNs (they flag real
+  artist-discography truncation; NOT actionable in youtui — upstream). The fills/play
+  metric is NOT measurable at WARN level: it needs one `youtui --debug` session on the
+  rebuilt binary (next debug.log, ratio ≈ 1 expected); the unit-level proof
+  (structural None-invariant + fail-first locks) is the standing guarantee meanwhile.
+
 - **Startup latency** — cookie export is conditional (fresh-file skip); the `ffmpeg -version`
   probe is warmed on the blocking pool so it overlaps the rest of startup; the autosave
   deserialize overlaps startup on the blocking pool and the load moves `CompactSongRef`
