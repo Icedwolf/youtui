@@ -57,6 +57,19 @@ The codebase is at a local optimum across the areas this project optimizes:
   path; two parity locks (`..._near_end_queues_next`, `..._far_from_end...`) pin the intended
   M4A rows. Expected in the next debug session: fills/play ≈ 1 (was ≈ 2).
 
+- **Zero-sentinel audit (2026-09-28, docs-only)** — after making the duration
+  "unknown = None" invariant structural, swept the codebase for the same bug class
+  ("numeric `0` or `Some(0)` meaning *unknown* fed into arithmetic"). Traced every
+  `Duration`/`Option<Duration>` producer→consumer: `duration_secs` (0 = no metadata)
+  is display-only through `resolve_display_duration` (treats 0 honestly, pinned);
+  `cur_played_dur` is display + the now-unarmed near-end gate; decoder
+  `total_duration` → sink `cur_song_duration` feeds only `handle_playing` (single
+  writer, normalized); MPRIS `duration` is forwarded verbatim to souvlaki (µs
+  conversion lives in the dep — no youtui arithmetic); `shuffle_seed`'s
+  `unwrap_or_default().as_secs()` zero is a valid RNG seed (cosmetic); downloader
+  `ttf` sums are test-only instrumentation. Verdict: the misfire class has **no**
+  remaining instantiations — no code change warranted.
+
 - **Startup latency** — cookie export is conditional (fresh-file skip); the `ffmpeg -version`
   probe is warmed on the blocking pool so it overlaps the rest of startup; the autosave
   deserialize overlaps startup on the blocking pool and the load moves `CompactSongRef`
