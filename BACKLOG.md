@@ -1,10 +1,10 @@
 # Youtui Backlog
 
 **Build:** 0 errors, 0 warnings, 0 clippy
-**Tests:** 692 workspace passed (whole workspace incl. ytmapi-rs + doctests; composition 417 youtui bin + 113 ytmapi lib + 77 doctests + 13 debug_dump + 70 live_integration + 2 json_crawler doctests). Binary is NOT reinstalled to
+**Tests:** 695 workspace passed (whole workspace incl. ytmapi-rs + doctests; composition 420 youtui bin + 113 ytmapi lib + 77 doctests + 13 debug_dump + 70 live_integration + 2 json_crawler doctests). Binary is NOT reinstalled to
 `~/.config/cargo/bin/youtui` anymore (user runs it actively) — `target/release/youtui` is the
 verification artifact only.
-**Last updated:** 2026-09-25
+**Last updated:** 2026-09-28
 
 This file is a working backlog only — no changelog, no session archaeology. Past work
 and its rationale live in git history and in the code comments / `DECISIONS.md`.
@@ -42,6 +42,19 @@ The codebase is at a local optimum across the areas this project optimizes:
   production never uses (`save_queue` inlines single-pass); zero production refs. Before/after:
   the removed bench read 234.25ms vs single-pass 60.7ms (baseline above); the isolated
   save-serialization criterion test now runs 20.92s. 692 debug + 700 release green.
+
+- **Gapless-gate misfire fixed (playback.rs, 2026-09-28)** — debug19's 13/17 unused fills
+  traced to race-free but wrong behavior: streamed ALAC reports `Some(0ns)` duration
+  (symphonia inits with `n_frames=0`), so the gate
+  `actual_duration.saturating_sub(cur_played_dur).saturating_sub(1s).is_zero()` computed
+  `0 − 0 = 0` at the *first* progress tick and pre-filled the next song ~0.13s in —
+  a 1-deep cascade that burned bandwidth/CPU on a song never played. Fix: `actual_duration`
+  is `.filter(|d| !d.is_zero())` before the remaining-time math — `Some(0)` means *unknown*,
+  not "within 1s of the end". M4A (known duration) gapless behavior is byte-identical.
+  Test-first: `play_progress_zero_duration_streamed_does_not_queue_next` failed on HEAD
+  (misfire) and passes now; two parity locks (`..._near_end_queues_next`, `..._far_from_end...`)
+  pin the intended M4A rows. Expected effect in the next debug session: fills/play ≈ 1
+  (was ≈ 2).
 
 - **Startup latency** — cookie export is conditional (fresh-file skip); the `ffmpeg -version`
   probe is warmed on the blocking pool so it overlaps the rest of startup; the autosave
