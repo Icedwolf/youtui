@@ -2188,6 +2188,73 @@ mod state_transitions {
     }
 
     #[test]
+    fn play_progress_zero_duration_streamed_does_not_queue_next() {
+        let mut p = undownloaded_songs(3);
+        p.set_notifications_enabled(false);
+        let id0 = p.get_id_from_index(0).expect("song 0");
+        p.play_status = PlayState::Playing(id0);
+
+        // Streamed ALAC arrives with an unknown duration: handle_playing stores
+        // Some(0ns) (symphonia inits with n_frames=0). The gapless gate must not
+        // treat "0s remaining" as "within 1s of the end" and pre-fill the next
+        // song at the very first progress tick (debug19: 13/17 fills unused).
+        p.get_mut_song_from_id(id0).expect("song 0").actual_duration =
+            Some(std::time::Duration::ZERO);
+
+        let effect = p.handle_set_song_play_progress(std::time::Duration::ZERO, id0);
+
+        assert_eq!(
+            p.queue_status,
+            QueueState::NotQueued,
+            "zero/unknown duration must not trigger the gapless prefill"
+        );
+        assert!(
+            effect.is_empty(),
+            "zero/unknown duration must not start a download effect"
+        );
+    }
+
+    #[test]
+    fn play_progress_known_duration_near_end_queues_next() {
+        let mut p = undownloaded_songs(3);
+        p.set_notifications_enabled(false);
+        let id0 = p.get_id_from_index(0).expect("song 0");
+        p.play_status = PlayState::Playing(id0);
+        p.get_mut_song_from_id(id0).expect("song 0").actual_duration =
+            Some(std::time::Duration::from_secs(180));
+
+        // 179.6s played of 180s: 0.4s remaining, within the 1s threshold.
+        let effect = p.handle_set_song_play_progress(
+            std::time::Duration::from_secs(179)
+                .checked_add(std::time::Duration::from_millis(600))
+                .expect("179.6s"),
+            id0,
+        );
+
+        assert!(
+            !effect.is_empty(),
+            "within 1s of the end, the gapless prefill must queue the next song"
+        );
+    }
+
+    #[test]
+    fn play_progress_known_duration_far_from_end_does_not_queue() {
+        let mut p = undownloaded_songs(3);
+        p.set_notifications_enabled(false);
+        let id0 = p.get_id_from_index(0).expect("song 0");
+        p.play_status = PlayState::Playing(id0);
+        p.get_mut_song_from_id(id0).expect("song 0").actual_duration =
+            Some(std::time::Duration::from_secs(180));
+
+        let effect = p.handle_set_song_play_progress(std::time::Duration::from_secs(30), id0);
+
+        assert!(
+            effect.is_empty() && p.queue_status == QueueState::NotQueued,
+            "150s remaining must not trigger the gapless prefill"
+        );
+    }
+
+    #[test]
     fn debounce_fire_clears_own_token_not_a_newer_one() {
         let mut p = undownloaded_songs(3);
         p.set_notifications_enabled(false);

@@ -1485,7 +1485,12 @@ impl Playlist {
         if let Some(duration_dif) = {
             let cur_dur = self
                 .get_cur_playing_song()
-                .and_then(|song| song.actual_duration);
+                .and_then(|song| song.actual_duration)
+                // Streamed ALAC reports Some(0) (symphonia inits with
+                // n_frames=0) — "0s remaining" is *unknown*, not "within 1s
+                // of the end". Without this, the gate pre-fills the next song
+                // at the first progress tick (debug19: 13/17 fills unused).
+                .filter(|d| !d.is_zero());
             self.cur_played_dur
                 .as_ref()
                 .zip(cur_dur)
