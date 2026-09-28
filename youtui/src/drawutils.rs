@@ -34,9 +34,11 @@ pub(crate) fn resolve_display_duration(
     actual: Option<std::time::Duration>,
     meta_secs: usize,
 ) -> usize {
+    // actual_duration is normalized at the writer (handle_playing): None means
+    // "unknown" (fall back to metadata); a known duration is always > 0.
     actual
         .map(|d| d.as_secs() as usize)
-        .filter(|&secs| secs > 0 && (secs < MAX_PLAUSIBLE_DURATION_S || secs <= meta_secs * 2))
+        .filter(|&secs| secs < MAX_PLAUSIBLE_DURATION_S || secs <= meta_secs * 2)
         .unwrap_or(meta_secs)
 }
 
@@ -122,10 +124,6 @@ mod tests {
     use ratatui::layout::Rect;
     use std::time::Duration;
 
-    #[test]
-    fn resolve_display_duration_zero_actual_falls_back_to_metadata() {
-        assert_eq!(resolve_display_duration(Some(Duration::ZERO), 185), 185);
-    }
     #[test]
     fn resolve_display_duration_none_falls_back_to_metadata() {
         assert_eq!(resolve_display_duration(None, 185), 185);

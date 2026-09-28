@@ -1483,14 +1483,14 @@ impl Playlist {
         self.cur_played_dur = Some(d);
 
         if let Some(duration_dif) = {
+            // actual_duration is None for streamed ALAC (Some(0) is normalized
+            // away at handle_playing) — None means "unknown", which must not
+            // read as "0s remaining"; the near-end gate stays unarmed until a
+            // real duration exists (debug19: zero-duration misfire prefilled
+            // the next song at the first progress tick).
             let cur_dur = self
                 .get_cur_playing_song()
-                .and_then(|song| song.actual_duration)
-                // Streamed ALAC reports Some(0) (symphonia inits with
-                // n_frames=0) — "0s remaining" is *unknown*, not "within 1s
-                // of the end". Without this, the gate pre-fills the next song
-                // at the first progress tick (debug19: 13/17 fills unused).
-                .filter(|d| !d.is_zero());
+                .and_then(|song| song.actual_duration);
             self.cur_played_dur
                 .as_ref()
                 .zip(cur_dur)
@@ -1530,7 +1530,11 @@ impl Playlist {
 
     pub fn handle_playing(&mut self, duration: Option<Duration>, id: ListSongID) -> Effects<Self> {
         if let Some(song) = self.get_mut_song_from_id(id) {
-            song.actual_duration = duration;
+            // Streamed ALAC arrives as Some(0ns) (symphonia inits with
+            // n_frames=0) — normalize it away so "unknown" has ONE app-wide
+            // representation: None. Some(0) must never be stored (the gapless
+            // gate and the UI fallback both rely on None = "not known yet").
+            song.actual_duration = duration.filter(|d| !d.is_zero());
         }
 
         if matches!(self.play_status, PlayState::Paused(p) | PlayState::Buffering(p) if p == id) {

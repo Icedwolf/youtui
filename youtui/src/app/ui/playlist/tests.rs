@@ -2188,18 +2188,38 @@ mod state_transitions {
     }
 
     #[test]
+    fn handle_playing_zero_duration_stores_none() {
+        let mut p = undownloaded_songs(3);
+        p.set_notifications_enabled(false);
+        let id0 = p.get_id_from_index(0).expect("song 0");
+        p.play_status = PlayState::Playing(id0);
+
+        // Streamed ALAC reports Some(0ns) (symphonia inits with n_frames=0).
+        // The writer must normalize it away so "unknown" has ONE app-wide
+        // representation (None); gate, UI fallback and persistence all treat
+        // None as "not known yet".
+        let _effect = p.handle_playing(Some(std::time::Duration::ZERO), id0);
+        assert!(
+            p.get_song_from_id(id0)
+                .expect("song 0")
+                .actual_duration
+                .is_none(),
+            "handle_playing must store None, not Some(0)"
+        );
+    }
+
+    #[test]
     fn play_progress_zero_duration_streamed_does_not_queue_next() {
         let mut p = undownloaded_songs(3);
         p.set_notifications_enabled(false);
         let id0 = p.get_id_from_index(0).expect("song 0");
         p.play_status = PlayState::Playing(id0);
 
-        // Streamed ALAC arrives with an unknown duration: handle_playing stores
-        // Some(0ns) (symphonia inits with n_frames=0). The gapless gate must not
-        // treat "0s remaining" as "within 1s of the end" and pre-fill the next
-        // song at the very first progress tick (debug19: 13/17 fills unused).
-        p.get_mut_song_from_id(id0).expect("song 0").actual_duration =
-            Some(std::time::Duration::ZERO);
+        // A streamed song reports Some(0ns) (normalized to None on write): the
+        // gate must not treat "0s remaining" as "within 1s of the end" and
+        // pre-fill the next song at the very first progress tick (debug19:
+        // 13/17 fills unused).
+        let _effect = p.handle_playing(Some(std::time::Duration::ZERO), id0);
 
         let effect = p.handle_set_song_play_progress(std::time::Duration::ZERO, id0);
 
