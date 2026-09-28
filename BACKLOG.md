@@ -43,18 +43,19 @@ The codebase is at a local optimum across the areas this project optimizes:
   the removed bench read 234.25ms vs single-pass 60.7ms (baseline above); the isolated
   save-serialization criterion test now runs 20.92s. 692 debug + 700 release green.
 
-- **Gapless-gate misfire fixed (playback.rs, 2026-09-28)** — debug19's 13/17 unused fills
-  traced to race-free but wrong behavior: streamed ALAC reports `Some(0ns)` duration
-  (symphonia inits with `n_frames=0`), so the gate
-  `actual_duration.saturating_sub(cur_played_dur).saturating_sub(1s).is_zero()` computed
-  `0 − 0 = 0` at the *first* progress tick and pre-filled the next song ~0.13s in —
-  a 1-deep cascade that burned bandwidth/CPU on a song never played. Fix: `actual_duration`
-  is `.filter(|d| !d.is_zero())` before the remaining-time math — `Some(0)` means *unknown*,
-  not "within 1s of the end". M4A (known duration) gapless behavior is byte-identical.
-  Test-first: `play_progress_zero_duration_streamed_does_not_queue_next` failed on HEAD
-  (misfire) and passes now; two parity locks (`..._near_end_queues_next`, `..._far_from_end...`)
-  pin the intended M4A rows. Expected effect in the next debug session: fills/play ≈ 1
-  (was ≈ 2).
+- **Gapless-gate misfire fixed (playback.rs/drawutils.rs, 2026-09-28)** — debug19's 13/17
+  unused fills traced to race-free but wrong behavior: streamed ALAC reports `Some(0ns)`
+  duration (symphonia inits with `n_frames=0`), so the gate computed `0 − 0 = 0` at the
+  *first* progress tick and pre-filled the next song ~0.13s in — a 1-deep cascade burning
+  bandwidth/CPU on a song never played. Final fix makes the invariant structural instead of a
+  gate-guard patch: the single writer `handle_playing` normalizes `Some(0)` → `None`
+  (`None` = "unknown") so `actual_duration` never carries a fake zero-length; the near-end
+  gate then needs no filter and `resolve_display_duration` drops its now-dead `secs > 0`
+  filter clause + pinned test (net −18 lines). M4A (known duration) gapless behavior
+  byte-identical. Test-first: `handle_playing_zero_duration_stores_none` failed on HEAD and
+  passes now; `play_progress_zero_duration_streamed_does_not_queue_next` locks the end-to-end
+  path; two parity locks (`..._near_end_queues_next`, `..._far_from_end...`) pin the intended
+  M4A rows. Expected in the next debug session: fills/play ≈ 1 (was ≈ 2).
 
 - **Startup latency** — cookie export is conditional (fresh-file skip); the `ffmpeg -version`
   probe is warmed on the blocking pool so it overlaps the rest of startup; the autosave
