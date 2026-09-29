@@ -508,11 +508,12 @@ Re-log into your browser, or check your cookie file / PO-token provider, then re
     }
 
     pub fn download_song(&mut self, id: ListSongID) -> Effects<Self> {
-        let Some(song_index) = self.get_index_from_id(id) else {
-            debug!("download_song: song id {:?} not found", id);
-            self.play_status = PlayState::NotPlaying;
-            return Effects::none();
-        };
+        let song_index = self.get_index_from_id(id).expect(
+            "cache-consistent id: every download_song caller validates its id \
+             against the live list (play_song :176, scope walk :406/:420/:429, \
+             single-source download_queue :470) before reaching here; the cache \
+             is rebuilt on every list mutation",
+        );
 
         // Rapid-switch coalescing window: engage the full settle only when a
         // download burst may be in progress. Two signals catch the two burst
