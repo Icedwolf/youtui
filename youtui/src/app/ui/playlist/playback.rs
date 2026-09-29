@@ -1448,9 +1448,6 @@ impl Playlist {
 
                 let mut effect = Effects::none();
                 if matches!(self.play_status, PlayState::Buffering(target) if target == id) {
-                    if is_cancellation_error(&e) {
-                        debug!("download failed while buffering, skipping: {}", e);
-                    }
                     effect = effect.push(self.handle_set_to_error(id));
                 }
                 effect
