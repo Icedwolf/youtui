@@ -90,20 +90,19 @@ impl SymphoniaDecoder {
 
         let buffer = SampleBuffer::new(0u64, spec);
 
+        // Single init-time line per decoder (replaces the old two-line block,
+        // 136 lines/session at debug level). n_frames=0 marks the streamed-ALAC
+        // "unknown duration" case — the field must stay on this line.
         debug!(
             codec_sample_rate = codec_params.sample_rate,
             decoder_sample_rate = spec.rate,
             decoder_channels = spec.channels.count(),
             duration_s = duration.map(|d: std::time::Duration| d.as_secs_f64()),
-            "SymphoniaDecoder created"
-        );
-        // Log detailed codec tracking info for isomp4 debugging
-        debug!(
             n_frames = codec_params.n_frames.map(|f| f as i64),
             time_base_num = codec_params.time_base.map(|t| t.numer as i64),
             time_base_den = codec_params.time_base.map(|t| t.denom as i64),
             codec = %codec_params.codec,
-            "SymphoniaDecoder codec params"
+            "SymphoniaDecoder created"
         );
 
         Ok(SymphoniaDecoder {
