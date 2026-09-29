@@ -146,6 +146,16 @@ The codebase is at a local optimum across the areas this project optimizes:
   (~−82/session at debug21 volume), zero diagnostic loss in any reachable branch;
   no test pins the strings. Net −2 source lines.
 
+- **Log review debug26 (2026-09-29) — measured-after for the sink trim** —
+  sink trim binary in the wild: `Inside PlaySong`=0, `Now playing`=0,
+  `Received request to play`=8 = plays 8 (kept line 1:1). Decoder lines 10
+  (1/init, was 2), prefill queue lines 0, `Queuing up song!`=0, fills/play 1.63
+  (debug25: 1.18 — small-sample scatter around the debug21 baseline 1.22),
+  `ERROR`=0, 0 halts. Single WARN = the known 60s ffmpeg no-progress watchdog:
+  `16gZm9oeLtI` stalled after its first chunk (12:41:39 → 12:42:40), killed clean,
+  successor download spawned instantly, user superseded — one song lost to a stall,
+  no loop, no throttle wave. All three narrowings stand in production.
+
 - **Startup latency** — cookie export is conditional (fresh-file skip); the `ffmpeg -version`
   probe is warmed on the blocking pool so it overlaps the rest of startup; the autosave
   deserialize overlaps startup on the blocking pool and the load moves `CompactSongRef`
@@ -587,6 +597,16 @@ These are deliberately out of scope. Rationale in `AGENTS.md` scope and `DECISIO
 | symphonia 0.6 upgrade | rodio pins 0.5.5; a bump would duplicate the codec stack |
 | Daemonizing yt-dlp to shave ~2s song start | complexity vs a single external cost |
 | `cargo fmt` tree-wide | older-rustfmt drift (272 hunks), cosmetic, not a correctness gate |
+
+## Known issues (not currently actionable)
+
+External-root-cause items tracked so future sessions don't re-diagnose them. Evidence in
+`DECISIONS.md` (line refs) and the debug-log reviews in this file.
+
+| Issue | Root cause | Status |
+|-------|-----------|--------|
+| Intermittent CDN 403 on the direct-URL fetch (debug18: 2, debug19: 2, debug20: 9, debug21: 1) — mostly self-heals on the credential-carrying relay attempt; a throttle wave can still halt via the transient-failure counter | Fresh per-video GVS PO token churn (`bgutil-pot` disk cache invalidation; DECISIONS.md:29-30,32-33) | Needs an external fix (per-video GVS token); the plugin `--bypass-cache` patch (DECISIONS.md:33) is the standing mitigation |
+| Missing artist-albums continuation (6×/session in debug21, graceful first-page fallback) | Upstream ytmapi-rs response-shape gap; not fixable inside youtui | Flagged upstream; youtui side is already correct (optional section list, no R2 crash) |
 
 ## When adding work here
 
