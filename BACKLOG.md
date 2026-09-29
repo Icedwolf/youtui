@@ -708,6 +708,36 @@ External-root-cause items tracked so future sessions don't re-diagnose them. Evi
   Expected next session: identical fills/WARN behavior vs debug28 baseline (the
   per-line WARN budget is byte-identical), with one fewer structural layer to
   re-derive on review.
+- **debug29 (complete, 54 min, 17:59:40→18:53:16Z, 1107 lines) —
+  measured-after for DECISIONS.md:47 (verdict handoff) in the wild** —
+  46 download starts / 34 `download_done` (fills 1:1), 18 cache reuses, 31
+  `audio_output_started` → fills/play ≈ **1.10**, 0 cancels (debug28: 365 — a
+  calm session by contrast). **11 WARNs / 0 `ERROR`, 0 halts**, every WARN a
+  known class per the item 45 budget: 10 = auth incidents
+  (`Sign in to confirm your age`/`not a bot` — `ONPcY8iTXGs` ×2: 3 WARNs at
+  18:00 + 4 at 18:05 incl. the live-buffering skip; `-XZSIcQWEy0` ×1: 3 WARNs
+  at 18:32, then played fine at 18:35 — a transient bot-check), the unchanged
+  3-layer pattern (stderr classifier → class bail → UI `download_error`); 1 =
+  the single throttle incident (`39aJTyR8zcU`: classifier WARN + DEBUG
+  failing-buffer + DEBUG retry note attempt 2/3 → streaming init →
+  `download_done` — the **1-WARN-per-throttle contract confirmed**, was 2 per
+  incident pre-cut). Verdict handoff: identical fills/WARN behavior to the
+  debug28 baseline, retry recovered on the fresh resolve exactly as designed,
+  zero race-yield noise, no flag machinery re-derivable from the log.
+- **Full-download fallback deduped across both shells (2026-09-29)** — the
+  post-streaming-init-failure tail (await full download → classify final exit →
+  `decoder_from_buffer`) was written twice with divergent exit handling: the
+  ALAC relay reaped the stderr verdict (dead/auth classified, throttle retried
+  — item 47's never-lost-class guarantee), the M4A fallback bailed with a bare
+  `yt-dlp exited with code N` (the class lost again at that site). One function,
+  `decode_after_full_download`, now owns the tail; the two shells differ only in
+  policy args: `retry_throttle` (true = relay, false = M4A no-retry), `byte_len`
+  (None / `Some(total_len)`), `label` ("ffmpeg"/"yt-dlp"), and the fallback
+  `pipeline` ("mp4-fallback"/"m4a-fallback"). The M4A exit site now classifies
+  dead/auth too (the same bonus fix item 47 applied to the relay). One concept
+  instead of two divergent copies; both shells' success and the relay's
+  throttle-retry paths stay pinned by the existing E2E fake-binary suite.
+  686 tests green, clippy 0.
 
 ## Cancel-class audit (2026-09-29) — characterized benign, no gap
 

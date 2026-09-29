@@ -834,6 +834,55 @@ async fn await_full_download(
     child.wait().await.with_context(|| format!("wait {label}"))
 }
 
+/// Finish the full download when a streaming init fails and decode from the
+/// completed buffer — the shared tail of both shells. Reaps the stderr verdict
+/// for the child's final exit (the writer task resolving on stdout EOF implies
+/// the child exited, so the handler has read to EOF): its
+/// `Ok(None)` return signals a throttled relay retried with a fresh resolve —
+/// the caller must `continue 'attempt` — and Dead/Auth surface their class
+/// errors here too instead of a bare "exited with code" bail (the flag-based
+/// code lost the class on any nonzero exit). `retry_throttle` is true only for
+/// the ALAC relay; the M4A fallback passes `false` and never retries
+/// (DECISIONS.md:40-46).
+#[allow(clippy::too_many_arguments)]
+async fn decode_after_full_download(
+    cfg: &DownloadConfig,
+    buffer: &Arc<SharedBuffer>,
+    child: &mut tokio::process::Child,
+    yt_child: &mut Option<tokio::process::Child>,
+    stdout_handle: tokio::task::JoinHandle<()>,
+    stderr_handle: &mut tokio::task::JoinHandle<Option<RelayFailure>>,
+    relay_attempts: usize,
+    retry_throttle: bool,
+    t0: tokio::time::Instant,
+    label: &'static str,
+    byte_len: Option<u64>,
+    pipeline: &'static str,
+) -> anyhow::Result<Option<(SymphoniaDecoder, bool)>> {
+    let status = await_full_download(cfg, child, yt_child, stdout_handle, label).await?;
+    if !status.success() {
+        let code = exit_code_string(&status);
+        if act_on_stderr_verdict(
+            stderr_handle,
+            relay_attempts,
+            retry_throttle,
+            &cfg.video_id,
+            t0,
+            label,
+            &format!("{label} exited with code {code}"),
+        )
+        .await?
+        {
+            return Ok(None);
+        }
+    }
+    debug!(%cfg.video_id, "{label} completed successfully");
+    debug!(%cfg.video_id, buf_len = buffer.len(),
+        "Creating decoder from completed download (fallback)");
+    let d = decoder_from_buffer(buffer, byte_len, pipeline)?;
+    Ok(Some((d, true)))
+}
+
 async fn ytdlp_pipeline(
     cfg: &DownloadConfig,
     ffmpeg_avail: bool,
@@ -1064,44 +1113,25 @@ async fn ytdlp_pipeline(
                 Err(stream_err) => {
                     debug!(%cfg.video_id, error = %stream_err,
                         "Streaming decoder init failed, waiting for ffmpeg relay stream to complete");
-                    let status = await_full_download(
+                    match decode_after_full_download(
                         cfg,
+                        &buffer,
                         &mut child,
                         &mut yt_child,
                         stdout_handle,
+                        &mut stderr_handle,
+                        relay_attempts,
+                        true,
+                        t0,
                         "ffmpeg",
+                        None,
+                        "mp4-fallback",
                     )
-                    .await?;
-                    if !status.success() {
-                        let code = exit_code_string(&status);
-                        // The stderr handler owns the verdict; reap it (the
-                        // writer task resolving on stdout EOF implies the
-                        // yt-dlp child exited, so the handler has read to
-                        // EOF). This also classifies a dead video or stale
-                        // cookies here — the flag-based code bailed generically
-                        // on any nonzero ffmpeg exit, losing the class. On a
-                        // clean yt-dlp stderr (verdict `None`), the relay
-                        // genuinely failed and the ffmpeg code names it.
-                        if act_on_stderr_verdict(
-                            &mut stderr_handle,
-                            relay_attempts,
-                            true,
-                            &cfg.video_id,
-                            t0,
-                            "ffmpeg relay exited",
-                            &format!("ffmpeg exited with code {code}"),
-                        )
-                        .await?
-                        {
-                            continue 'attempt;
-                        }
+                    .await?
+                    {
+                        Some(dc) => dc,
+                        None => continue 'attempt,
                     }
-                    debug!(%cfg.video_id, "ffmpeg completed successfully");
-
-                    debug!(%cfg.video_id, buf_len = buffer.len(),
-                        "Creating decoder from completed download (fallback)");
-                    let d = decoder_from_buffer(&buffer, None, "mp4-fallback")?;
-                    (d, true)
                 }
             }
         } else {
@@ -1175,31 +1205,29 @@ async fn ytdlp_pipeline(
                 Err(stream_err) => {
                     debug!(%cfg.video_id, error = %stream_err,
                     "Streaming decoder init failed, waiting for yt-dlp stream to complete");
-                    // No retry ladder here: the M4A path is the no-ffmpeg
-                    // fallback and the throttle/client-fallback retries are
-                    // ALAC-relay-specific (see DECISIONS.md:40-42). On a
-                    // no-ffmpeg host a throttle or format-refusal skips the song
-                    // rather than retrying — degraded by design, and unreachable
-                    // here because `ffmpeg_avail` is true whenever ffmpeg is
-                    // installed.
-                    let status = await_full_download(
+                    // No retry ladder here (`retry_throttle = false`): the M4A
+                    // path is the no-ffmpeg fallback, degraded by design
+                    // (DECISIONS.md:40-42) — `Ok(None)` is therefore unreachable
+                    // but keeps the shell shape uniform with the relay path.
+                    match decode_after_full_download(
                         cfg,
+                        &buffer,
                         &mut child,
                         &mut yt_child,
                         stdout_handle,
+                        &mut stderr_handle,
+                        relay_attempts,
+                        false,
+                        t0,
                         "yt-dlp",
+                        Some(total_len),
+                        "m4a-fallback",
                     )
-                    .await?;
-                    if !status.success() {
-                        let code = exit_code_string(&status);
-                        bail!("yt-dlp exited with code {code}");
+                    .await?
+                    {
+                        Some(dc) => dc,
+                        None => continue 'attempt,
                     }
-                    debug!(%cfg.video_id, "yt-dlp completed successfully");
-
-                    debug!(%cfg.video_id, buf_len = buffer.len(),
-                    "Creating decoder from completed download (fallback)");
-                    let d = decoder_from_buffer(&buffer, Some(total_len), "m4a-fallback")?;
-                    (d, true)
                 }
             }
         };
