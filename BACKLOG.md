@@ -102,6 +102,16 @@ The codebase is at a local optimum across the areas this project optimizes:
   line. Measurable after: next `--debug` session should show ~68 decoder lines
   for comparable volume.
 
+- **Prefill debug-log narrowing (playback.rs, 2026-09-29)** — removed the two
+  queue-state `debug!` lines from `download_upcoming_from_id`: `queue BEFORE
+  clear` (always `[]` — the queue is unconditionally cleared immediately after)
+  and `queue AFTER filtering` (derivable from the per-song skip logs + the
+  STARTING/no-download outcome line). debug21 showed 44×3 = 132 lines/session
+  for the trio; each prefill pass now emits only its breadcrumbs (START for /
+  scope_song / per-song skips / outcome). −10 source lines; no test pins the
+  strings. Measurable after: next `--debug` session shows ~44 prefill lines for
+  comparable volume (with the decoder merge, ~180 fewer log lines/session total).
+
 - **Startup latency** — cookie export is conditional (fresh-file skip); the `ffmpeg -version`
   probe is warmed on the blocking pool so it overlaps the rest of startup; the autosave
   deserialize overlaps startup on the blocking pool and the load moves `CompactSongRef`
