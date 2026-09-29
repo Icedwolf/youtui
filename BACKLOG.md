@@ -658,6 +658,22 @@ to reverse); docs record closes the query.
   (same mutation channel, ordered). −3 source lines; `is_cancellation_error` still
   used at :1395; 695 tests green, clippy 0, release build clean.
 
+- **Cancel-mechanism dual audit (2026-09-29) — benign, no consolidation** — the
+  two cancel predicates are *not* a duplication. `drop_unscoped_from_id` (:682)
+  is a positional window `{idx, idx+1}` on the list, run once per `play_song`
+  (:174→:149); `cancel_out_of_scope_downloads` (:1215) is an explicit set
+  `{current} ∪ {successors}` where successors come from a shuffle-aware walk
+  (:416-426), run per prefill/regen. In shuffle mode the successor lives at
+  `shuffle_indices[visual+1]` and is *rarely* list-adjacent — a window-based drop
+  would cancel an in-flight shuffle-successor prebuffer (wasted yt-dlp per song
+  start), exactly the regression the :1251-1256 comment warns the regen path
+  avoids. The set-based path also drains `download_queue` + resets status.
+  Consolidating = regression; keep both. Log families re-audited in the same
+  pass: `finishing buffer` is a single legit writer-EOF site (fires per spawned
+  writer incl. killed/cancelled — that's the debug26 23-vs-15 inflation; anchor
+  `ffmpeg completed successfully` already corrected), `Stream task finished` is
+  the load-bearing stream-drain breadcrumb (stall/hang detection). Keep.
+
 ## When adding work here
 
 - State the item, the severity/type (bug / complexity / perf), and the evidence.
