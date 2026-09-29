@@ -30,7 +30,6 @@ impl<I: Debug + PartialEq + Copy> PlaybackState<I> {
         song_id: I,
         tx: &mpsc::Sender<AsyncRodioResponse>,
     ) {
-        debug!("Inside PlaySong");
         self.cur_song_duration = song.total_duration();
         debug!(
             "Received request to play {song_id:?} of duration {:?}",
@@ -49,7 +48,6 @@ impl<I: Debug + PartialEq + Copy> PlaybackState<I> {
         if sink.is_paused() {
             sink.play();
         }
-        debug!("Now playing {:?}", song_id);
         let _ = tx.try_send(AsyncRodioResponse::StartedPlaying(self.cur_song_duration));
         self.cur_song_id = Some(song_id);
     }
