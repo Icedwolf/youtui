@@ -449,11 +449,6 @@ Re-log into your browser, or check your cookie file / PO-token provider, then re
         cancel_scope.extend(&song_ids);
         self.cancel_out_of_scope_downloads(&cancel_scope);
 
-        debug!(
-            "download_upcoming_from_id: queue BEFORE clear: {:?}",
-            self.download_queue
-        );
-
         self.download_queue.clear();
         for song_id in &song_ids {
             let status = self.get_song_from_id(*song_id).map(|s| &s.download_status);
@@ -476,11 +471,6 @@ Re-log into your browser, or check your cookie file / PO-token provider, then re
                 }
             }
         }
-
-        debug!(
-            "download_upcoming_from_id: queue AFTER filtering: {:?}",
-            self.download_queue
-        );
 
         let mut combined_effect = Effects::none();
         if let Some(first_id) = self.download_queue.pop_front() {
