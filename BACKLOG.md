@@ -605,7 +605,7 @@ External-root-cause items tracked so future sessions don't re-diagnose them. Evi
 
 | Issue | Root cause | Status |
 |-------|-----------|--------|
-| Intermittent CDN 403 on the direct-URL fetch (debug18: 2, debug19: 2, debug20: 9, debug21: 1, debug27: 7) — mostly self-heals on the credential-carrying relay attempt; a throttle wave can still halt via the transient-failure counter | Fresh per-video GVS PO token churn (`bgutil-pot` disk cache invalidation; DECISIONS.md:29-30,32-33) | Needs an external fix (per-video GVS token); the plugin `--bypass-cache` patch (DECISIONS.md:33) is the standing mitigation; debug27 showed all 7 self-healed in 4-6s, 0 lost plays |
+| Intermittent CDN 403 on the relay's first attempt (debug18: 2, debug19: 2, debug20: 9, debug21: 1, debug27: 7) — mostly self-heals on the retry; a throttle wave can still halt via the transient-failure counter | Fresh per-video GVS PO token churn (`bgutil-pot` disk cache invalidation; DECISIONS.md:29-30,32-33) | Needs an external fix (per-video GVS token); the plugin `--bypass-cache` patch (DECISIONS.md:33) is the standing mitigation; debug27 showed all 7 self-healed in 4-6s, 0 lost plays |
 | Missing artist-albums continuation (6×/session in debug21, graceful first-page fallback) | Upstream ytmapi-rs response-shape gap; not fixable inside youtui | Flagged upstream; youtui side is already correct (optional section list, no R2 crash) |
 
 ## Log reviews (2026-09-29)
@@ -616,7 +616,7 @@ External-root-cause items tracked so future sessions don't re-diagnose them. Evi
   `finishing buffer`, which fires twice per download; the load-bearing anchors are
   `ffmpeg completed successfully` + `download_done` (each fired once). 6 WARNs, all
   known classes: the 60s watchdog kill (`16gZm9oeLtI`, stall after first chunk,
-  self-healed), a **self-healed 403 throttle** (`d8JXbgjILys`: direct-URL 403 at
+  self-healed), a **self-healed 403 throttle** (`d8JXbgjILys`: relay first-attempt 403 at
   12:47:20 → relay attempt 2/3 → first chunk 6.4s, streamed, cached 79MB, later
   reused from cache), and a `Video unavailable` graceful skip (`sM3Pc9hDLJI`).
   11 `download cancelled` = normal supersede churn (each prefilled successor is
@@ -625,7 +625,7 @@ External-root-cause items tracked so future sessions don't re-diagnose them. Evi
   fills (fills/play 1.14 incl. top-up churn; the appended tail 13:26→14:57 alone
   adds 36 plays / 39 fills ≈ 1.08), 31 cache reuses, 18 cancels. **20 WARNs /
   0 `ERROR`**, all known classes: **PO-token CDN 403 churn** (known-issue row
-  below) — 7 direct-URL 403s spread across the tail (13:39, 13:51, 14:03, 14:18,
+  below) — 7 relay first-attempt 403s spread across the tail (13:39, 13:51, 14:03, 14:18,
   14:41, 14:51, ~1 per 10 min), every one self-healed via the relay/fresh-resolve
   (48-111MB fill completing 4-6s after the 403; e.g. 6Ge21BOyips 84MB, Dc1aVHdz5uY
   111MB); one adjacent auth bot-check (`fG047b1uE9I`: "Sign in to confirm you're
@@ -654,6 +654,21 @@ External-root-cause items tracked so future sessions don't re-diagnose them. Evi
   `--bypass-cache` plugin patch is present and active — the churn is genuine
   first-fetch GVS rejection (fresh resolve each incident; all 7 recovered in
   ~2s; all prefills, user impact ≈ 0).
+- **AGENTS.md staleness fix (2026-09-29)** — AGENTS.md still documented the
+  **removed** direct-URL architecture (`build_ffmpeg_command(FfmpegInput::Url)`,
+  `throttled_url_retry`, URL-cache eviction, `player_client=web_music` forced on
+  the primary, `bestaudio[ext=webm]`, "URL pre-resolution outside semaphore"
+  invariant) — despite DECISIONS.md:39 removing the entire path on 2026-09-09.
+  The drift cost a full wrong-model session today (analysis built on the stale
+  direct-URL theory before the relay-only code was re-verified). Rewritten to
+  the verified relay-only reality: `ba/bestaudio` relay → ffmpeg `pipe:0` ALAC,
+  auth via yt-dlp `--ignore-config` + `--add-header Cookie:`, primary = token-free
+  default clients with `web_music`+POT only as the bounded fallback (item 42),
+  throttle = in-place relay retry capped at 3 (items 39-40). Also appended
+  DECISIONS.md:45 (retry-note WARN→debug policy, amends item 36) and corrected
+  the `direct-URL 403` mislabels in this file (the 403s always hit the relay's
+  first attempt). AGENTS.md is untracked (local-only); DECISIONS.md + BACKLOG
+  are committed.
 
 ## Cancel-class audit (2026-09-29) — characterized benign, no gap
 
