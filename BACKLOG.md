@@ -642,6 +642,18 @@ External-root-cause items tracked so future sessions don't re-diagnose them. Evi
   dead-video incident (`9REO_JI0exY`: yt-dlp stderr fail → `download_error` → the
   live `:1421` "download failed while buffering" skip). The `:1421` warn firing
   confirms the removed `debug!` branch was a distinct unreachable site.
+- **Throttle-WARN consolidation (2026-09-29, `74ba3f6`)** — the
+  `Relay throttled (403) — retrying with a fresh resolve (attempt n/3)` warn
+  (`relay_throttle_retry`) was redundant with the stderr classifier's
+  `yt-dlp 403 (throttled)` warn (`:509`, the deliberate wave detector): both
+  fired per incident in debug27 (14 of its 20 WARNs = 2 sites echoing 1 event,
+  7 incidents). The retry outcome is logged downstream either way. Downgraded
+  to `debug!` (attempt n/3 + elapsed evidence preserved at review level);
+  WARN now means definitive failure only (exhausted retry/halt, dead video,
+  auth). Expected: ~7 WARNs/session for the same churn. Field note: the
+  `--bypass-cache` plugin patch is present and active — the churn is genuine
+  first-fetch GVS rejection (fresh resolve each incident; all 7 recovered in
+  ~2s; all prefills, user impact ≈ 0).
 
 ## Cancel-class audit (2026-09-29) — characterized benign, no gap
 
