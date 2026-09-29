@@ -4,7 +4,7 @@
 **Tests:** 695 workspace passed (whole workspace incl. ytmapi-rs + doctests; composition 420 youtui bin + 113 ytmapi lib + 77 doctests + 13 debug_dump + 70 live_integration + 2 json_crawler doctests). Binary is NOT reinstalled to
 `~/.config/cargo/bin/youtui` anymore (user runs it actively) — `target/release/youtui` is the
 verification artifact only.
-**Last updated:** 2026-09-28
+**Last updated:** 2026-09-29
 
 This file is a working backlog only — no changelog, no session archaeology. Past work
 and its rationale live in git history and in the code comments / `DECISIONS.md`.
@@ -82,6 +82,25 @@ The codebase is at a local optimum across the areas this project optimizes:
   metric is NOT measurable at WARN level: it needs one `youtui --debug` session on the
   rebuilt binary (next debug.log, ratio ≈ 1 expected); the unit-level proof
   (structural None-invariant + fail-first locks) is the standing guarantee meanwhile.
+
+- **Log review debug21 (2026-09-29) — wild verification of the gapless fix** —
+  77-min fixed-binary session (18:42→19:59Z): 41 plays / 50 completed fills =
+  fills/play **1.22** (was 4.25 in debug19); `Queuing up song!` = **0** (was 17);
+  8 WARNs, all known classes (2 stale-cookie bails, 1 video-unavailable skip,
+  1 self-healed 403 throttle, 1 album parse fallback), zero halts/spawn failures.
+  The N+2 prefill cascade is gone in the wild; the 1-deep successor prefill is at
+  steady state (44 launches / 39 solo plays).
+
+- **Decoder debug-log line narrowing (decoder/mod.rs, 2026-09-29)** — the two
+  consecutive init-time `debug!` blocks (`SymphoniaDecoder created` +
+  `SymphoniaDecoder codec params`) merged into one emitting all 8 fields
+  (codec_sample_rate, decoder_sample_rate, decoder_channels, duration_s, n_frames,
+  time_base_num, time_base_den, codec). debug21 showed 68×2 = 136
+  lines/session for this family (~9% of a 1599-line log); the merged line halves
+  it with zero diagnostic loss — `n_frames=0` (the streamed-ALAC "unknown
+  duration" marker) stays on the line. No test pins the strings; net −1 source
+  line. Measurable after: next `--debug` session should show ~68 decoder lines
+  for comparable volume.
 
 - **Startup latency** — cookie export is conditional (fresh-file skip); the `ffmpeg -version`
   probe is warmed on the blocking pool so it overlaps the rest of startup; the autosave
