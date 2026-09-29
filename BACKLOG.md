@@ -605,7 +605,7 @@ External-root-cause items tracked so future sessions don't re-diagnose them. Evi
 
 | Issue | Root cause | Status |
 |-------|-----------|--------|
-| Intermittent CDN 403 on the direct-URL fetch (debug18: 2, debug19: 2, debug20: 9, debug21: 1) — mostly self-heals on the credential-carrying relay attempt; a throttle wave can still halt via the transient-failure counter | Fresh per-video GVS PO token churn (`bgutil-pot` disk cache invalidation; DECISIONS.md:29-30,32-33) | Needs an external fix (per-video GVS token); the plugin `--bypass-cache` patch (DECISIONS.md:33) is the standing mitigation |
+| Intermittent CDN 403 on the direct-URL fetch (debug18: 2, debug19: 2, debug20: 9, debug21: 1, debug27: 7) — mostly self-heals on the credential-carrying relay attempt; a throttle wave can still halt via the transient-failure counter | Fresh per-video GVS PO token churn (`bgutil-pot` disk cache invalidation; DECISIONS.md:29-30,32-33) | Needs an external fix (per-video GVS token); the plugin `--bypass-cache` patch (DECISIONS.md:33) is the standing mitigation; debug27 showed all 7 self-healed in 4-6s, 0 lost plays |
 | Missing artist-albums continuation (6×/session in debug21, graceful first-page fallback) | Upstream ytmapi-rs response-shape gap; not fixable inside youtui | Flagged upstream; youtui side is already correct (optional section list, no R2 crash) |
 
 ## Log reviews (2026-09-29)
@@ -621,11 +621,27 @@ External-root-cause items tracked so future sessions don't re-diagnose them. Evi
   reused from cache), and a `Video unavailable` graceful skip (`sM3Pc9hDLJI`).
   11 `download cancelled` = normal supersede churn (each prefilled successor is
   cancelled when the user picks elsewhere). `ERROR`=0, 0 halts, 0 loops.
-- **debug27 (live at review, 7 min, 12:56:30→13:03:35Z+) — same profile**: 8 plays,
-  13 real fills; the >1 ratio is manual-supersede churn (rapid selections
-  superseding prefills, incl. a 4-start burst 13:03:16-18 — only one played), not a
-  prefill regression. In-session `Reusing cached buffer` replay verified
-  (TU8OVVs3-TU, 38.5MB). 0 WARNs, 0 `ERROR`, 0 halts.
+- **debug27 (complete, 2h, 12:56:30→14:57:01Z, 1902 lines)** — 51 plays / 58 real
+  fills (fills/play 1.14 incl. top-up churn; the appended tail 13:26→14:57 alone
+  adds 36 plays / 39 fills ≈ 1.08), 31 cache reuses, 18 cancels. **20 WARNs /
+  0 `ERROR`**, all known classes: **PO-token CDN 403 churn** (known-issue row
+  below) — 7 direct-URL 403s spread across the tail (13:39, 13:51, 14:03, 14:18,
+  14:41, 14:51, ~1 per 10 min), every one self-healed via the relay/fresh-resolve
+  (48-111MB fill completing 4-6s after the 403; e.g. 6Ge21BOyips 84MB, Dc1aVHdz5uY
+  111MB); one adjacent auth bot-check (`fG047b1uE9I`: "Sign in to confirm you're
+  not a bot" → stale-cookies bail → notified + skipped, separate cookie-staleness
+  class; its retry was superseded-cancelled — the only song that didn't recover,
+  not via the 403 path); one dead video (`MG80av83nxA`, flagged session-dead).
+  Removed branch wild-confirmed dead: `DEBUG download failed while buffering` = 0
+  in this pre-cut binary, and `song id not found` = 0 → the new `expect()` is
+  safe. 0 halts, 0 loops.
+- **debug28 (live at review, 14:57:03Z+) — heavy rapid-skip session**: 196 download
+  starts / 360 cancels in the first minute across ~165 distinct songs (24× the
+  baseline ratio) — but coalesced by the settle window exactly as designed: only
+  10 real fills, semaphore=1 held, no parallel yt-dlp, 0 `ERROR`. 3 WARNs = one
+  dead-video incident (`9REO_JI0exY`: yt-dlp stderr fail → `download_error` → the
+  live `:1421` "download failed while buffering" skip). The `:1421` warn firing
+  confirms the removed `debug!` branch was a distinct unreachable site.
 
 ## Cancel-class audit (2026-09-29) — characterized benign, no gap
 
