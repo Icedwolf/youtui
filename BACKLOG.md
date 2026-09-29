@@ -627,6 +627,27 @@ External-root-cause items tracked so future sessions don't re-diagnose them. Evi
   prefill regression. In-session `Reusing cached buffer` replay verified
   (TU8OVVs3-TU, 38.5MB). 0 WARNs, 0 `ERROR`, 0 halts.
 
+## Cancel-class audit (2026-09-29) — characterized benign, no gap
+
+**All 8 cancel bail sites** in `song_downloader/mod.rs` (`before start` :1206,
+`during settle` :1227, `before semaphore` :1235, `after semaphore` :1244, `during
+buffering` :966, `empty-pipe wait` :1015, `M4A total_len wait` :1132, `fallback
+wait` :826) are gated on the per-download `cancel_token`, and every consumer
+branch falls through `is_cancellation_error` (test-pinned: never increments the
+halt ladder, never notifies, never dead-video-flags). The **selected song's token
+is unreachable by supersede**: `download_upcoming_from_id` rebuilds the scope as
+inclusive `{current, successor}` (:450-461, :1250-1254), the P0 fix — so the
+buffering-skip guard (`Buffering(target)==id`, :1419/:1450) fires only on genuine
+errors, never on a cancel of the current song. The remaining two triggers are
+safe by ordering: `stop()` sets `NotPlaying` before `cancel_all_downloads`
+(:883-886), and `cancel_song_download` only runs when the user deletes a song that
+was already stopped (:928-936). The stale-cancel race (an old cancelled task's
+`Error` landing after a replay of the same id with a fresh token live) is
+impossible: the cancel `Error` and any replay keypress drain the same mutation
+channel in order. Observed cancels (debug26: 11, debug27: 3) are all supersede
+churn on prefilled successors — never the current target. No test added (nothing
+to reverse); docs record closes the query.
+
 ## When adding work here
 
 - State the item, the severity/type (bug / complexity / perf), and the evidence.
