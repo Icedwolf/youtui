@@ -673,6 +673,20 @@ to reverse); docs record closes the query.
   writer incl. killed/cancelled — that's the debug26 23-vs-15 inflation; anchor
   `ffmpeg completed successfully` already corrected), `Stream task finished` is
   the load-bearing stream-drain breadcrumb (stall/hang detection). Keep.
+  Dead-message sweep (same pass): playback.rs/app.rs/sink/song_downloader
+  `debug!`/`warn!` families all sit on live branches — the dead-message class
+  had exactly one member (the cancel branch removed above).
+
+- **Dead download_song not-found arm narrowed to expect() (playback.rs,
+  2026-09-29)** — the `id not found` arm (`debug!` + `play_status = NotPlaying`
+  + return, :511-514) was provably unreachable: every caller validates its id
+  against the live list before `download_song` runs (`play_song` :176, scope
+  walk :406/:420/:429, single-source `download_queue` :470 with delete-retain
+  :937 and reset/stop/cancel clears; no test passes an absent id). Same
+  cache-invariant argument as the sibling OOB arm already converted at
+  :531-537 (test-pinned by `direct_list_mutation_does_not_populate_cache`).
+  Converted to `expect()`; −3 lines, one dead `debug!` removed. 695 tests
+  green, clippy 0, release build clean.
 
 ## When adding work here
 
