@@ -673,7 +673,12 @@ fn relay_throttle_retry(
     t0: tokio::time::Instant,
 ) -> bool {
     if buffer.is_throttled() && relay_attempts <= 2 {
-        warn!(%video_id, elapsed = ?t0.elapsed(),
+        // The stderr classifier already WARNed this 403 (the wave detector at
+        // the throttle-line site); the retry is the designed recovery and its
+        // outcome is logged downstream (`first chunk` / `Caching completed` /
+        // halt). This note is retry evidence at debug level, not a
+        // warning-grade event — keep the WARN channel for definitive failures.
+        debug!(%video_id, elapsed = ?t0.elapsed(),
             "Relay throttled (403) — retrying with a fresh resolve (attempt {}/3)", relay_attempts + 1);
         true
     } else {
