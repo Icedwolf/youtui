@@ -358,7 +358,6 @@ pub(crate) struct RuntimeInfo {
     disable_media_controls: bool,
     config: Config,
     api_key: ApiKey,
-    pot_provider: Option<app::PotProvider>,
 }
 
 #[tokio::main]
@@ -404,12 +403,10 @@ async fn try_main() -> anyhow::Result<()> {
     // a couple of stat syscalls — lazy-loading would add indirection for no
     // measurable startup gain.
     let api_key = load_api_key(&config).await?;
-    let pot_provider = load_pot_provider();
     let rt = RuntimeInfo {
         debug,
         config,
         api_key,
-        pot_provider,
         disable_media_controls,
     };
     match cli.command {
@@ -476,38 +473,6 @@ pub(crate) fn get_config_dir() -> anyhow::Result<PathBuf> {
         bail!(DIRECTORY_NAME_ERROR_MESSAGE);
     };
     Ok(directory)
-}
-
-/// Detect the externally installed yt-dlp POT provider. Both assets are
-/// required: the plugin invokes the executable at resolve time, so exposing
-/// only one would make the `web_music` client-fallback retry mint a token
-/// without its CLI and fail. The provider is only used on that fallback —
-/// the primary download runs yt-dlp's token-free default clients.
-fn load_pot_provider() -> Option<app::PotProvider> {
-    let config_dir = get_config_dir().ok()?;
-    let plugin_dir = config_dir.join("yt-dlp-plugins");
-    let cli = config_dir.join("bin/bgutil-pot");
-    let plugin = plugin_dir
-        .join("bgutil-ytdlp-pot-provider")
-        .join("yt_dlp_plugins");
-    let executable = std::fs::metadata(&cli).ok().is_some_and(|metadata| {
-        metadata.is_file() && {
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::PermissionsExt;
-                metadata.permissions().mode() & 0o111 != 0
-            }
-            #[cfg(not(unix))]
-            {
-                true
-            }
-        }
-    });
-    if plugin.is_dir() && executable {
-        Some(app::PotProvider { plugin_dir, cli })
-    } else {
-        None
-    }
 }
 
 async fn load_cookie_file() -> anyhow::Result<String> {

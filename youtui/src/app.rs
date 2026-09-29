@@ -16,7 +16,6 @@ use media_controls::MediaController;
 use queue_persistence::auto_save;
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
-pub(crate) use server::song_downloader::resolve::PotProvider;
 use server::{Server, song_downloader};
 use std::borrow::Cow;
 use std::fmt::Display;
@@ -84,7 +83,6 @@ impl Youtui {
         let RuntimeInfo {
             api_key,
             debug,
-            pot_provider,
             config,
             disable_media_controls,
         } = rt;
@@ -163,12 +161,7 @@ impl Youtui {
         // the legacy/corrupt format below.
         let autosave_read = tokio::task::spawn_blocking(queue_persistence::read_autosave_compact);
         let t_server = std::time::Instant::now();
-        let server = Arc::new(server::Server::new(
-            api_key,
-            pot_provider,
-            &config,
-            cookie_path,
-        )?);
+        let server = Arc::new(server::Server::new(api_key, &config, cookie_path)?);
         debug!(
             "startup_timing: Server::new() = {}ms",
             t_server.elapsed().as_millis()

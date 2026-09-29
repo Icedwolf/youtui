@@ -1,4 +1,4 @@
-use self::song_downloader::resolve::{PotProvider, is_nonempty_cookie_file};
+use self::song_downloader::resolve::is_nonempty_cookie_file;
 use crate::config::Config;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -16,7 +16,6 @@ pub struct Server {
     pub api: api::Api,
     pub player: player::Player,
     pub config: Arc<Config>,
-    pub pot_provider: Option<PotProvider>,
     pub cookie_path: Option<PathBuf>,
     pub cookie_header: Option<String>,
 }
@@ -24,7 +23,6 @@ pub struct Server {
 impl Server {
     pub fn new(
         api_key: crate::config::ApiKey,
-        pot_provider: Option<PotProvider>,
         config: &Config,
         cookie_path: Option<PathBuf>,
     ) -> anyhow::Result<Server> {
@@ -56,7 +54,6 @@ impl Server {
             api,
             player,
             config: Arc::new(config.clone()),
-            pot_provider,
             cookie_path,
             cookie_header,
         })

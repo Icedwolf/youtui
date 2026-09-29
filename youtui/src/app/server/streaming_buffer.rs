@@ -8,7 +8,6 @@ struct SharedBufferInner {
     dead_video: bool,
     auth_error: bool,
     throttled: bool,
-    format_unavailable: bool,
     total_len: Option<u64>,
     state: BufferState,
 }
@@ -59,7 +58,6 @@ impl SharedBuffer {
                 dead_video: false,
                 auth_error: false,
                 throttled: false,
-                format_unavailable: false,
                 total_len: None,
                 state: BufferState::Partial(Vec::with_capacity(cap)),
             }),
@@ -162,22 +160,6 @@ impl SharedBuffer {
         guard.finished = true;
         record_len_if_unknown(&mut guard);
         self.cvar.notify_all();
-    }
-
-    /// True when yt-dlp reported that the requested format set is unavailable
-    /// on the default player clients (`Requested format is not available`).
-    /// Distinct from `is_throttled`/`is_dead_video`/`is_auth_error`: the video
-    /// is fine but the default clients cannot serve it (SABR experiment /
-    /// abandoned client), so the pipeline retries once through the `web_music`
-    /// client with the GVS-token provider instead of skipping the song.
-    #[must_use]
-    pub fn is_format_unavailable(&self) -> bool {
-        self.inner.lock().unwrap_or_warn().format_unavailable
-    }
-
-    pub fn mark_format_unavailable(&self) {
-        let mut guard = self.inner.lock().unwrap_or_warn();
-        guard.format_unavailable = true;
     }
 
     pub fn fail(&self) {

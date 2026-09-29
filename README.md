@@ -94,41 +94,15 @@ required for age-restricted (`18+`) content, which yt-dlp would otherwise refuse
 
 ### PO token information
 
-YouTube Music's `web_music` client requires a GVS PO token bound to each *video ID*, and a static
-`po_token.txt` does not work. youtui's primary download path **avoids the token entirely**: it runs
-yt-dlp's default (token-free) clients — measured ~2.5s to first byte on the 2026-08-30 nightly,
-versus ~9.4s for a forced `web_music` mint — so the provider is only used as the bounded
-client-fallback safety net below. When it fires, youtui delegates minting to yt-dlp's POT
-framework: download the `bgutil-ytdlp-pot-provider-rs` release zip, extract its `yt_dlp_plugins/`
-directory to `~/.config/youtui/yt-dlp-plugins/bgutil-ytdlp-pot-provider/`, and place the Linux
-`bgutil-pot` release executable at `~/.config/youtui/bin/bgutil-pot` (`chmod 755`). The plugin
-supplies the per-video token to yt-dlp; youtui has no token generator of its own. Node is still
-required (if installed) — yt-dlp uses it as its JavaScript runtime to solve the nsig
-player-JS challenge. Both assets are required for the `web_music` fallback to fire.
-
-**Required patch:** `bgutil-pot` keeps a per-video token cache on disk
-(`~/.cache/bgutil-ytdlp-pot-provider/cache.json`) that YouTube invalidates *before* the token's
-advertised expiry, so a replayed song is 403-refused (and the relay retry replays the same
-stale token). In
-`~/.config/youtui/yt-dlp-plugins/bgutil-ytdlp-pot-provider/yt_dlp_plugins/extractor/getpot_bgutil_cli.py`,
-make `--bypass-cache` unconditional — replace
-
-```python
-if request.bypass_cache:
-    command_args.append('--bypass-cache')
-```
-
-with
-
-```python
-command_args.append('--bypass-cache')
-```
-
-so a fresh token is minted on every download (minting is ~0.6s; the in-memory audio cache
-already deduplicates replay). Note that `--bypass-cache` only disables *reading* the disk
-cache; `bgutil-pot` still *writes* `cache.json` after every mint, so the file keeps growing and
-never going stale isn't a sign the patch is missing — it is never consulted again after the
-patch.
+YouTube's `web_music` player client requires a GVS PO token bound to each video ID, and a
+static token does not work. youtui does not use `web_music` at all: every download runs
+yt-dlp's default (token-free) playback clients, and yt-dlp upstream tracks the moving
+token-free player-client target (android_vr was removed upstream in 2026-08-19/#17461).
+The `web_music` + POT-provider client-fallback slice (plugin directory, the `bgutil-pot`
+CLI, and the `--bypass-cache` cache patch) was **removed** in this fork — it never fired in
+observed sessions and depended on fragile external assets (DECISIONS.md:46). If yt-dlp's
+default clients ever refuse formats (SABR experiment / abandoned client), upgrade yt-dlp;
+upstream fixes its own client matrix.
 
 ## Architecture notes
 
@@ -146,13 +120,9 @@ patch.
   (three capped attempts total), so a song whose early fresh resolve+fetch attempts were
   refused by an intermittent CDN wave plays on a later one instead of skipping — even
   when the wave beats two consecutive fresh mints.
-- **Token-free default clients first**: the primary attempt runs yt-dlp's default playback
-  clients (no client pinning, no POT mint) — the fast common path. yt-dlp tracks the moving
-  token-free client target itself (android_vr was removed upstream in 2026-08-19/#17461).
-- **Client fallback (bounded)**: a default-client refusal (`Requested format is not
-  available` — SABR experiment stripping formats / abandoned client) retries the song
-  **exactly once** through `web_music` with the GVS-token provider before bailing, so an
-  abandoned client never skips a playable song.
+- **Token-free default clients**: every attempt runs yt-dlp's default playback clients (no
+  client pinning, no POT mint) — the fast common path. yt-dlp tracks the moving token-free
+  client target itself.
 - Subprocesses run with a bounded environment (`env_clear()` + allowlist) — children never
   inherit the parent's oversized `envp` (E2BIG-safe by construction).
 

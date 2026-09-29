@@ -1,7 +1,7 @@
 # Youtui Backlog
 
 **Build:** 0 errors, 0 warnings, 0 clippy
-**Tests:** 695 workspace passed (whole workspace incl. ytmapi-rs + doctests; composition 420 youtui bin + 113 ytmapi lib + 77 doctests + 13 debug_dump + 70 live_integration + 2 json_crawler doctests). Binary is NOT reinstalled to
+**Tests:** 687 workspace passed (whole workspace incl. ytmapi-rs + doctests; composition 412 youtui bin + 113 ytmapi lib + 77 doctests + 13 debug_dump + 70 live_integration + 2 json_crawler doctests; −8 from 695 by the client-fallback removal, DECISIONS.md:46). Binary is NOT reinstalled to
 `~/.config/cargo/bin/youtui` anymore (user runs it actively) — `target/release/youtui` is the
 verification artifact only.
 **Last updated:** 2026-09-29
@@ -605,7 +605,7 @@ External-root-cause items tracked so future sessions don't re-diagnose them. Evi
 
 | Issue | Root cause | Status |
 |-------|-----------|--------|
-| Intermittent CDN 403 on the relay's first attempt (debug18: 2, debug19: 2, debug20: 9, debug21: 1, debug27: 7) — mostly self-heals on the retry; a throttle wave can still halt via the transient-failure counter | Fresh per-video GVS PO token churn (`bgutil-pot` disk cache invalidation; DECISIONS.md:29-30,32-33) | Needs an external fix (per-video GVS token); the plugin `--bypass-cache` patch (DECISIONS.md:33) is the standing mitigation; debug27 showed all 7 self-healed in 4-6s, 0 lost plays |
+| Intermittent CDN 403 on the relay's first attempt (debug18: 2, debug19: 2, debug20: 9, debug21: 1, debug27: 7) — mostly self-heals on the retry; a throttle wave can still halt via the transient-failure counter | nsig/GVS-token CDN throttling wave — fresh external churn, NOT stale cookies/dead video (DECISIONS.md:32,40) | External fix lives upstream (yt-dlp client/token matrix); the recovery is item 40's fresh-resolve relay retry (9/9 observed self-heals, all `attempt 2/3`). The POT-provider slice (incl. the `--bypass-cache` patch) was **removed** 2026-09-29 (DECISIONS.md:46) — it never fired and is not involved in the 403 path |
 | Missing artist-albums continuation (6×/session in debug21, graceful first-page fallback) | Upstream ytmapi-rs response-shape gap; not fixable inside youtui | Flagged upstream; youtui side is already correct (optional section list, no R2 crash) |
 
 ## Log reviews (2026-09-29)
@@ -635,13 +635,19 @@ External-root-cause items tracked so future sessions don't re-diagnose them. Evi
   Removed branch wild-confirmed dead: `DEBUG download failed while buffering` = 0
   in this pre-cut binary, and `song id not found` = 0 → the new `expect()` is
   safe. 0 halts, 0 loops.
-- **debug28 (live at review, 14:57:03Z+) — heavy rapid-skip session**: 196 download
-  starts / 360 cancels in the first minute across ~165 distinct songs (24× the
-  baseline ratio) — but coalesced by the settle window exactly as designed: only
-  10 real fills, semaphore=1 held, no parallel yt-dlp, 0 `ERROR`. 3 WARNs = one
-  dead-video incident (`9REO_JI0exY`: yt-dlp stderr fail → `download_error` → the
-  live `:1421` "download failed while buffering" skip). The `:1421` warn firing
-  confirms the removed `debug!` branch was a distinct unreachable site.
+- **debug28 (complete — final figures; ran the PRE-CUT binary, 2273 lines,
+  session ended 13:27 local) — heavy rapid-skip session**: 216 download starts /
+  365 cancels across ~165 distinct songs — but coalesced by the settle window
+  exactly as designed: 25 real fills / 25 `download_done` (1:1), 7 cache
+  reuses, semaphore=1 held, no parallel yt-dlp, 18 `audio_output_started`
+  (+7 cache-reuse plays ≈ 25 plays → fills/play ≈ 1.00). **5 WARNs / 0
+  `ERROR`, 0 halts**: one dead-video incident (`9REO_JI0exY` — 3 WARNs across
+  distinct layers: yt-dlp stderr classifier → UI `download_error` → the live
+  `:1421` "download failed while buffering" skip, confirming the removed
+  `debug!` branch was a distinct unreachable site) + one throttle incident
+  (`bkXsZqmXxZU` — 2 WARNs: classifier + `relay_throttle_retry` note; the
+  **pre-cut** 2-WARN-per-throttle pattern — the both-cuts land in the next
+  build, baseline for commits 74ba3f6 + a6cf39b).
 - **Throttle-WARN consolidation (2026-09-29, `74ba3f6`)** — the
   `Relay throttled (403) — retrying with a fresh resolve (attempt n/3)` warn
   (`relay_throttle_retry`) was redundant with the stderr classifier's
@@ -651,9 +657,10 @@ External-root-cause items tracked so future sessions don't re-diagnose them. Evi
   to `debug!` (attempt n/3 + elapsed evidence preserved at review level);
   WARN now means definitive failure only (exhausted retry/halt, dead video,
   auth). Expected: ~7 WARNs/session for the same churn. Field note: the
-  `--bypass-cache` plugin patch is present and active — the churn is genuine
-  first-fetch GVS rejection (fresh resolve each incident; all 7 recovered in
-  ~2s; all prefills, user impact ≈ 0).
+  `--bypass-cache` plugin patch is since REMOVED with the POT-provider slice
+  (DECISIONS.md:46) — the churn was genuine first-fetch GVS rejection, and the
+  recovery is the fresh-resolve relay retry alone (all 7 recovered in ~2s; all
+  prefills, user impact ≈ 0).
 - **AGENTS.md staleness fix (2026-09-29)** — AGENTS.md still documented the
   **removed** direct-URL architecture (`build_ffmpeg_command(FfmpegInput::Url)`,
   `throttled_url_retry`, URL-cache eviction, `player_client=web_music` forced on
@@ -663,12 +670,29 @@ External-root-cause items tracked so future sessions don't re-diagnose them. Evi
   direct-URL theory before the relay-only code was re-verified). Rewritten to
   the verified relay-only reality: `ba/bestaudio` relay → ffmpeg `pipe:0` ALAC,
   auth via yt-dlp `--ignore-config` + `--add-header Cookie:`, primary = token-free
-  default clients with `web_music`+POT only as the bounded fallback (item 42),
+  default clients with `web_music`+POT only as the bounded fallback (item 42,
+  itself since removed — item 46),
   throttle = in-place relay retry capped at 3 (items 39-40). Also appended
   DECISIONS.md:45 (retry-note WARN→debug policy, amends item 36) and corrected
   the `direct-URL 403` mislabels in this file (the 403s always hit the relay's
   first attempt). AGENTS.md is untracked (local-only); DECISIONS.md + BACKLOG
   are committed.
+- **Client-fallback + POT-provider slice removed (2026-09-29, DECISIONS.md:46)**
+  — the whole `web_music`+POT escape hatch is gone: `PotProvider`,
+  `load_pot_provider`, the `web_music_fallback`/`pot_provider` threading,
+  `relay_client_fallback_retry`, `is_format_unavailable_line`, the
+  `format_unavailable` buffer flag, the `--bypass-cache` plugin patch, and
+  their tests (resolve.rs ×4 + mod.rs ×4 incl. 2 E2E). Evidence: never fired
+  once across debug23–28 (~2 weeks / hundreds of songs; the only failure
+  classes ever observed were the throttle — recovered by item 40's
+  fresh-resolve retry, 9/9 on attempt 2 — dead video, auth, and stalls), and
+  the net depended on fragile external assets (plugin + CLI + patch all
+  current). `apply_ytdlp_auth_args` is now `(cmd, cookie_header, video_id)`
+  with no client branching; `try_pipeline_retry` is throttle-only. The
+  `Requested format is not available` line now bails as a generic transient
+  (WARN + skip), matching what a doubly-refused fallback did anyway. Expected
+  next session: byte-identical fills, throttle recovery unchanged, no
+  format-unavailable path ever warming (6-session-old baseline says none).
 
 ## Cancel-class audit (2026-09-29) — characterized benign, no gap
 
