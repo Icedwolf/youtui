@@ -648,6 +648,16 @@ channel in order. Observed cancels (debug26: 11, debug27: 3) are all supersede
 churn on prefilled successors — never the current target. No test added (nothing
 to reverse); docs record closes the query.
 
+- **Dead cancel-branch removed (playback.rs, 2026-09-29)** — the
+  `if is_cancellation_error(&e) { debug!("download failed while buffering,
+  skipping") }` inside the `Buffering(target)==id` guard (:1451-1453) was dead:
+  every token-cancel sink either sets `play_status` away from `Buffering(id)`
+  before cancelling (`stop()` :883, delete :928-933) or never touches the current
+  target's token (inclusive `{current, successor}` scope; the `prepare_playback_id`
+  window also contains `id` itself). The stale-cancel/replay race is impossible
+  (same mutation channel, ordered). −3 source lines; `is_cancellation_error` still
+  used at :1395; 695 tests green, clippy 0, release build clean.
+
 ## When adding work here
 
 - State the item, the severity/type (bug / complexity / perf), and the evidence.
