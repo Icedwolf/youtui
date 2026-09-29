@@ -112,6 +112,40 @@ The codebase is at a local optimum across the areas this project optimizes:
   strings. Measurable after: next `--debug` session shows ~44 prefill lines for
   comparable volume (with the decoder merge, ~180 fewer log lines/session total).
 
+- **Log review debug23/24/25 (2026-09-29) — measured-after for both merges** —
+  debug23/24 are pre-merge builds (codec_params + queue-state lines present);
+  **debug25 is the merged binary in the wild**: `SymphoniaDecoder created`
+  renders all 8 fields on one line (codec_sample_rate=48000 … codec=0x2003,
+  n_frames=0), `queue BEFORE/AFTER clear` = 0, 0 WARNs, `Queuing up song!` = 0.
+  Session-scale verification stands (debug21: fills/play 1.22, gate misfire 0).
+
+- **Audio-path audit (2026-09-29) — "Playback channel closed" characterized
+  benign** — the `play_song` task (async_rodio_sink.rs:232) exits without
+  `DonePlaying` whenever the responder sender drops before `StoppedPlaying` fires.
+  Trace of every such close:
+  - *Supersede* (play next / hot path): new song's `handle_play_song` calls
+    `sink.stop()` (:39-41), dropping the old `on_done` source → old channel closes.
+    Terminal state comes from the new song's `Playing` mutation — never depends
+    on `DonePlaying`.
+  - *Explicit stop*: `Playlist::stop()` sets `play_status = NotPlaying` directly
+    (playback.rs:883) and `handle_stopped` (:1560) is reached via `stop_song_id`;
+    both bypass `DonePlaying`.
+  - *App quit*: request sender drops → audio loop exits → responder closes;
+    process is exiting, no state to preserve.
+  `StartedPlaying`'s `try_send` (:53) always succeeds — the response channel is
+  empty at that instant (no progress updates before playback begins) — so
+  `audio_output_started` always fires with the start. No reachable stall; no test
+  added (nothing to reverse), docs record closes the query.
+
+- **Play-start log-line narrowing (async_rodio_sink.rs, 2026-09-29)** — dropped
+  `debug!("Inside PlaySong")` (:33, bare function-entry marker; the kept
+  `Received request to play … duration` line already proves entry) and
+  `debug!("Now playing …")` (:52, duplicates `audio_output_started` one tick
+  later on the same `StartedPlaying`; the response channel is empty at that
+  instant so `audio_output_started` always fires). −2 log lines per play
+  (~−82/session at debug21 volume), zero diagnostic loss in any reachable branch;
+  no test pins the strings. Net −2 source lines.
+
 - **Startup latency** — cookie export is conditional (fresh-file skip); the `ffmpeg -version`
   probe is warmed on the blocking pool so it overlaps the rest of startup; the autosave
   deserialize overlaps startup on the blocking pool and the load moves `CompactSongRef`
