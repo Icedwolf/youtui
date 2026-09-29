@@ -702,7 +702,11 @@ fn relay_client_fallback_retry(
     t0: tokio::time::Instant,
 ) -> bool {
     if buffer.is_format_unavailable() && !web_music_fallback_used && provider_available {
-        warn!(%video_id, elapsed = ?t0.elapsed(),
+        // The stderr classifier already WARNed this fallback decision (the
+        // format-unavailable site, with the raw stderr line). This note is the
+        // retry evidence at debug level, mirroring the throttle-retry site —
+        // WARN stays reserved for definitive failures.
+        debug!(%video_id, elapsed = ?t0.elapsed(),
             "default-client formats unavailable — retrying once via web_music (GVS token)");
         true
     } else {
