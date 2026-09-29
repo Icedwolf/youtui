@@ -1,7 +1,7 @@
 # Youtui Backlog
 
 **Build:** 0 errors, 0 warnings, 0 clippy
-**Tests:** 687 workspace passed (whole workspace incl. ytmapi-rs + doctests; composition 412 youtui bin + 113 ytmapi lib + 77 doctests + 13 debug_dump + 70 live_integration + 2 json_crawler doctests; −8 from 695 by the client-fallback removal, DECISIONS.md:46). Binary is NOT reinstalled to
+**Tests:** 686 workspace passed (whole workspace incl. ytmapi-rs + doctests; composition 411 youtui bin passed + 2 ignored + 113 ytmapi lib + 77 doctests + 13 debug_dump + 70 live_integration + 2 json_crawler doctests; −2 +1 from 687 by the verdict-handoff refactor, DECISIONS.md:47 — removed `try_pipeline_retry_decision` + `throttled_marker_sets_failed`, added `act_on_stderr_verdict_maps_classes`). Binary is NOT reinstalled to
 `~/.config/cargo/bin/youtui` anymore (user runs it actively) — `target/release/youtui` is the
 verification artifact only.
 **Last updated:** 2026-09-29
@@ -693,6 +693,21 @@ External-root-cause items tracked so future sessions don't re-diagnose them. Evi
   (WARN + skip), matching what a doubly-refused fallback did anyway. Expected
   next session: byte-identical fills, throttle recovery unchanged, no
   format-unavailable path ever warming (6-session-old baseline says none).
+- **Relay verdict handoff — flags → handler return value (2026-09-29, DECISIONS.md:47)**
+  — the failure path no longer races flags across two tasks: `spawn_stderr_handler`
+  returns `JoinHandle<Option<RelayFailure>>` (Throttle/Dead/Auth/Generic + line) and
+  one function, `act_on_stderr_verdict`, reaps it at each failure observable
+  (failed buffer, source exit, ffmpeg exit, M4A wait). Killed: both `yield_now()`
+  workarounds (empty-pipe `:917` + ffmpeg-exit `:986` sites), the
+  `throttled`/`dead_video`/`auth_error` flags + 6 accessors on `SharedBuffer`
+  (buffer back to bytes + `finished`/`failed`/`total_len`), `bail_failed_buffer`,
+  and the `try_pipeline_retry` pass-through. Bonus: the ffmpeg-exit site now
+  classifies dead/auth instead of bailing generically. Test-pinned: the two
+  throttle E2E paths (`throttle_relay_twice_then_third_relay_recovers_and_plays`,
+  `throttled_relay_failure_bails_after_capped_relay_retries`) pass unchanged.
+  Expected next session: identical fills/WARN behavior vs debug28 baseline (the
+  per-line WARN budget is byte-identical), with one fewer structural layer to
+  re-derive on review.
 
 ## Cancel-class audit (2026-09-29) — characterized benign, no gap
 

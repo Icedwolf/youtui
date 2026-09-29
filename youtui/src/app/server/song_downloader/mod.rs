@@ -403,6 +403,30 @@ pub(crate) const DEAD_VIDEO_ERR: &str = "video unavailable (yt-dlp error)";
 /// resolve path appends a POT-provider tag and the yt-dlp stderr line after it.
 pub(crate) const AUTH_ERR: &str = "authentication error (stale cookies)";
 
+/// The stderr handler's classification of why a relay failed, delivered as the
+/// task's return value rather than shared-buffer flags. The handler is the only
+/// place yt-dlp line-classification happens; returning the verdict makes the
+/// attempt loop's bail points deterministic — the child's stderr is fully read
+/// when the task completes, so no flag-in-flight race exists (the two
+/// `yield_now()` workarounds that papered over it are gone, DECISIONS.md:47).
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum RelayFailureKind {
+    /// CDN nsig/GVS-token throttle wave — retry the relay with a fresh resolve.
+    Throttle,
+    /// Permanently unavailable video (removed, terminated account, ...).
+    Dead,
+    /// Auth/cookie problem (Sign in required, bot check, invalid cookies).
+    Auth,
+    /// Any other ERROR line (format/network/novel unclassified).
+    Generic,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct RelayFailure {
+    kind: RelayFailureKind,
+    line: String,
+}
+
 /// Classify a yt-dlp stderr line as a *permanently* unavailable video
 /// (removed, terminated account, region-blocked) as opposed to a transient
 /// error (bot-check, bad cookie file, format/network issue). The bare
@@ -441,8 +465,8 @@ pub(crate) fn is_auth_error_line(line: &str) -> bool {
 /// Classify a yt-dlp stderr line as the CDN throttle (`HTTP Error 403`). The
 /// relay's yt-dlp reports this when googlevideo refuses the fetch — the
 /// nsig/GVS-token throttling wave, NOT a dead video or stale cookies. The
-/// buffer is marked so the pipeline retries the relay once instead of skipping
-/// the song.
+/// verdict is returned to the pipeline, which retries the relay with a fresh
+/// resolve instead of skipping the song.
 fn is_throttle_line(line: &str) -> bool {
     let line = line.to_ascii_lowercase();
     line.contains("forbidden")
@@ -451,23 +475,32 @@ fn is_throttle_line(line: &str) -> bool {
             && (line.contains("http") || line.contains("server") || line.contains("error")))
 }
 
+/// Read the yt-dlp stderr stream to EOF, log every line (progress, WARNING,
+/// ERROR), fail the buffer on any ERROR line, and return the *first* classified
+/// ERROR as the relay's verdict. The return value is the handoff: the attempt
+/// loop reaps it at its failure observables, so classification is deterministic
+/// (a task's return value exists once the task completes — no shared flags, no
+/// cross-task timing). `fail()` still drives the init-wait/empty-pipe loops'
+/// early breaks; the class flags this function used to scribble on the buffer
+/// are gone.
 fn spawn_stderr_handler(
     stderr: tokio::process::ChildStderr,
     cancel_token: tokio_util::sync::CancellationToken,
     buffer: Arc<SharedBuffer>,
     log_cancellation: bool,
     video_id: String,
-) -> tokio::task::JoinHandle<()> {
+) -> tokio::task::JoinHandle<Option<RelayFailure>> {
     tokio::spawn(async move {
         use tokio::io::AsyncBufReadExt;
         let reader = tokio::io::BufReader::new(stderr);
         let mut lines = reader.lines();
+        let mut verdict: Option<RelayFailure> = None;
         loop {
             if cancel_token.is_cancelled() {
                 if log_cancellation {
                     debug!(%video_id, "yt-dlp stderr handler cancelled");
                 }
-                return;
+                return None;
             }
             match lines.next_line().await {
                 Ok(Some(line)) => {
@@ -476,35 +509,43 @@ fn spawn_stderr_handler(
                         buffer.set_total_len(bytes);
                     } else if line.contains("ERROR") {
                         // `self_warned` distinguishes errors the classifier
-                        // already named with its own WARN (throttle / client
-                        // fallback) from errors whose only log signal is the
-                        // generic line below (dead video, auth, or novel
-                        // unclassified). The redundant generic line after a
-                        // classifier WARN is a duplicate entry during a throttle
-                        // wave (two WARNs per song); dead/auth must keep their
-                        // single WARN — that line is what surfaces them.
+                        // already named with its own WARN (throttle) from
+                        // errors whose only log signal is the generic line
+                        // below (dead video, auth, or novel unclassified). The
+                        // redundant generic line after a classifier WARN is a
+                        // duplicate entry during a throttle wave (two WARNs
+                        // per song); dead/auth must keep their single WARN —
+                        // that line is what surfaces them.
                         let mut self_warned = false;
-                        if is_permanently_unavailable(&line) {
-                            buffer.mark_dead_video();
+                        let kind = if is_permanently_unavailable(&line) {
+                            Some(RelayFailureKind::Dead)
                         } else if is_auth_error_line(&line) {
-                            buffer.mark_auth_error();
+                            Some(RelayFailureKind::Auth)
                         } else if is_throttle_line(&line) {
-                            // A relay `HTTP Error 403: Forbidden` is the nsig/GVS-token
-                            // CDN throttle — mark it so the pipeline may retry the
-                            // relay once. warn! (not debug!) so a throttle wave is
-                            // visible in the default-level log and a recovery is
-                            // explainable.
+                            // A relay `HTTP Error 403: Forbidden` is the
+                            // nsig/GVS-token CDN throttle — the pipeline
+                            // retries the relay with a fresh resolve. warn!
+                            // (not debug!) so a throttle wave is visible in the
+                            // default-level log and a recovery is explainable.
                             warn!(%video_id, stderr_line = %line.trim(),
-                                "yt-dlp 403 (throttled), marking buffer for relay retry");
-                            buffer.mark_throttled();
+                                "yt-dlp 403 (throttled), relay will retry with a fresh resolve");
                             self_warned = true;
-                        }
+                            Some(RelayFailureKind::Throttle)
+                        } else {
+                            None
+                        };
                         if self_warned {
                             debug!(%video_id, stderr_line = %line.trim(),
                                 "yt-dlp stderr (error), failing buffer");
                         } else {
                             warn!(%video_id, stderr_line = %line.trim(),
                                 "yt-dlp stderr (error), failing buffer");
+                        }
+                        if verdict.is_none() {
+                            verdict = Some(RelayFailure {
+                                kind: kind.unwrap_or(RelayFailureKind::Generic),
+                                line: line.trim().to_string(),
+                            });
                         }
                         buffer.fail();
                     } else if line.contains("WARNING") {
@@ -519,6 +560,7 @@ fn spawn_stderr_handler(
             }
         }
         debug!(%video_id, "yt-dlp stderr stream ended");
+        verdict
     })
 }
 
@@ -614,44 +656,74 @@ fn decoder_from_buffer(
     SymphoniaDecoder::new(mss).with_context(|| format!("decoder (fallback, {pipeline})"))
 }
 
-/// Common bail-out for a failed source buffer: permanently unavailable video,
-/// auth/cookie problem, or a generic format/network error. Each class surfaces
-/// a distinct error.
-fn bail_failed_buffer(
-    buffer: &SharedBuffer,
+/// Reap a finished yt-dlp stderr handler's verdict at a failure observable and
+/// act on it deterministically. The handler returns after reading stderr to
+/// EOF, and every observable (failed buffer, source exit, failed ffmpeg exit)
+/// implies the yt-dlp child is dead or exiting, so the await is bounded —
+/// there is no flag-in-flight race to yield around. `retry_throttle` enables
+/// the fresh-resolve relay retry; the M4A fallback passes `false` (its failures
+/// skip rather than retry, DECISIONS.md:40-46). Returns `Ok(true)` when a
+/// throttled relay was retried — the caller must `continue 'attempt`. Every
+/// other outcome bails with the class's terminal error: `DEAD_VIDEO_ERR` /
+/// `AUTH_ERR` (the UI's classification contract) or the site's generic message.
+#[allow(clippy::too_many_arguments)]
+async fn act_on_stderr_verdict(
+    stderr_handle: &mut tokio::task::JoinHandle<Option<RelayFailure>>,
+    relay_attempts: usize,
+    retry_throttle: bool,
     video_id: &str,
     t0: tokio::time::Instant,
     context: &str,
-) -> anyhow::Result<()> {
-    if !buffer.is_failed() {
-        return Ok(());
+    generic_message: &str,
+) -> anyhow::Result<bool> {
+    let verdict = stderr_handle.await.unwrap_or(None);
+    if retry_throttle && relay_throttle_retry(verdict.as_ref(), relay_attempts, video_id, t0) {
+        return Ok(true);
     }
-    if buffer.is_dead_video() {
-        debug!(%video_id, "Video unavailable (permanently dead), bailing early");
-        anyhow::bail!("{}", DEAD_VIDEO_ERR);
+    match verdict {
+        Some(RelayFailure {
+            kind: RelayFailureKind::Dead,
+            ..
+        }) => {
+            debug!(%video_id, "Video unavailable (permanently dead), bailing early");
+            anyhow::bail!("{}", DEAD_VIDEO_ERR);
+        }
+        Some(RelayFailure {
+            kind: RelayFailureKind::Auth,
+            ..
+        }) => {
+            warn!(%video_id, "Auth error {context} (stale cookies?), bailing early");
+            anyhow::bail!("{}", AUTH_ERR);
+        }
+        _ => {
+            debug!(%video_id, elapsed = ?t0.elapsed(), "yt-dlp failed {context} — bailing early");
+            anyhow::bail!("{generic_message}")
+        }
     }
-    if buffer.is_auth_error() {
-        warn!(%video_id, "Auth error {context} (stale cookies?), bailing early");
-        anyhow::bail!("{}", AUTH_ERR);
-    }
-    debug!(%video_id, elapsed = ?t0.elapsed(), "yt-dlp failed {context} — bailing early");
-    anyhow::bail!("format not available (yt-dlp error)")
 }
 
 /// Allow a throttled relay attempt up to two retries (three capped relay
-/// attempts total). The CDN's throttle wave periodically beats two consecutive
-/// fresh mints (debug370 xAbGAyd_-W4: both capped relays 403'd → skipped,
-/// then played on a re-select seconds later), so only a third consecutive
-/// throttle is definitive. Dead/auth failures never throttle, and a third
-/// throttled relay is still definitive: the queue halts via the transient-
-/// failure counter exactly as before, never an endless relay loop.
+/// attempts total) — a pure function of the reaped verdict, no shared-flag
+/// reads. The CDN's throttle wave periodically beats two consecutive fresh
+/// mints (debug370 xAbGAyd_-W4: both capped relays 403'd → skipped, then
+/// played on a re-select seconds later), so only a third consecutive throttle
+/// is definitive. Dead/auth failures never throttle, and a third throttled
+/// relay is still definitive: the queue halts via the transient-failure
+/// counter exactly as before, never an endless relay loop.
 fn relay_throttle_retry(
-    buffer: &SharedBuffer,
+    verdict: Option<&RelayFailure>,
     relay_attempts: usize,
     video_id: &str,
     t0: tokio::time::Instant,
 ) -> bool {
-    if buffer.is_throttled() && relay_attempts <= 2 {
+    if matches!(
+        verdict,
+        Some(RelayFailure {
+            kind: RelayFailureKind::Throttle,
+            ..
+        })
+    ) && relay_attempts <= 2
+    {
         // The stderr classifier already WARNed this 403 (the wave detector at
         // the throttle-line site); the retry is the designed recovery and its
         // outcome is logged downstream (`first chunk` / `Caching completed` /
@@ -663,22 +735,6 @@ fn relay_throttle_retry(
     } else {
         false
     }
-}
-
-/// Unified retry-decision for the `'attempt` loop's three bail points
-/// (no-data, empty-pipe, ffmpeg-exit): a throttled relay under the cap
-/// retries with a fresh resolve (relay → relay → relay, three attempts
-/// total). Returns `true` when a retry was scheduled — the caller must
-/// `continue 'attempt`; `false` means no retry applies and the caller bails
-/// with its site-specific message. (The `web_music` client-fallback arm was
-/// removed — DECISIONS.md:46; it never fired in observed sessions.)
-fn try_pipeline_retry(
-    buffer: &SharedBuffer,
-    relay_attempts: usize,
-    video_id: &str,
-    t0: tokio::time::Instant,
-) -> bool {
-    relay_throttle_retry(buffer, relay_attempts, video_id, t0)
 }
 
 /// Build the yt-dlp command for streaming a song to stdout, with the auth
@@ -704,7 +760,7 @@ fn build_ytdlp_command(cfg: &DownloadConfig, format: &str) -> tokio::process::Co
 /// bail/timeout/cancel, rather than relying on pipe closure which left
 /// orphans).
 struct YtDlpSpawn {
-    stderr_handle: tokio::task::JoinHandle<()>,
+    stderr_handle: tokio::task::JoinHandle<Option<RelayFailure>>,
     stdout: tokio::process::ChildStdout,
     child: tokio::process::Child,
 }
@@ -806,7 +862,7 @@ async fn ytdlp_pipeline(
         let buffer = SharedBuffer::new();
         let writer = buffer.writer();
 
-        let (_stderr_handle, stdout_handle, mut child, _relay_handle, mut yt_child) =
+        let (mut stderr_handle, stdout_handle, mut child, _relay_handle, mut yt_child) =
             if ffmpeg_avail {
                 // Spawn ffmpeg before yt-dlp. If the relay's yt-dlp fails the
                 // buffer instantly (e.g. a throttled 403 written before ffmpeg
@@ -889,10 +945,24 @@ async fn ytdlp_pipeline(
             if cfg.cancel_token.is_cancelled() {
                 bail!("download cancelled during buffering");
             }
-            if try_pipeline_retry(&buffer, relay_attempts, &cfg.video_id, t0) {
+            // A failed buffer means the stderr handler classified an ERROR
+            // line; reap its verdict and act on it (throttle → replay the
+            // relay, dead/auth/generic → class-specific bail). The await is
+            // bounded: yt-dlp exits promptly after printing an ERROR.
+            if buffer.is_failed()
+                && act_on_stderr_verdict(
+                    &mut stderr_handle,
+                    relay_attempts,
+                    true,
+                    &cfg.video_id,
+                    t0,
+                    "before data arrived",
+                    "format not available (yt-dlp error)",
+                )
+                .await?
+            {
                 continue 'attempt;
             }
-            bail_failed_buffer(&buffer, &cfg.video_id, t0, "before data arrived")?;
             let current = buffer.len();
             if current == 0 {
                 // A source that has already exited without emitting a byte is
@@ -914,19 +984,27 @@ async fn ytdlp_pipeline(
                     match verdict {
                         EmptyPipeVerdict::Break => break,
                         EmptyPipeVerdict::SourceExited => {
-                            // A throttle mark from the stderr handler may still be
-                            // in flight when the source-exit is observed first
-                            // (stdout EOF wins the race). Yield once and re-check
-                            // so a 403-refused relay breaks into the throttle-retry
-                            // guard after the empty-pipe loop instead of being
-                            // misread as a dead pipe.
-                            tokio::task::yield_now().await;
-                            if buffer.is_failed() {
-                                break;
+                            // Source exit is observed only while the buffer is
+                            // NOT failed (failure breaks the loop first), so no
+                            // verdict race exists: the yt-dlp child exited and
+                            // its stderr handler has read to EOF. Reap its
+                            // verdict (`None` for a clean pipe, `Throttle` if
+                            // the 403 landed just before exit) and classify
+                            // deterministically — the old yield-based
+                            // accommodation is gone (DECISIONS.md:47).
+                            if act_on_stderr_verdict(
+                                &mut stderr_handle,
+                                relay_attempts,
+                                true,
+                                &cfg.video_id,
+                                t0,
+                                "source exited, empty pipe",
+                                "format not available (source exited, empty pipe)",
+                            )
+                            .await?
+                            {
+                                continue 'attempt;
                             }
-                            debug!(%cfg.video_id, elapsed = ?t0.elapsed(),
-                                "Source exited with an empty pipe");
-                            bail!("format not available (source exited, empty pipe)");
                         }
                         EmptyPipeVerdict::Cancelled => {
                             bail!("download cancelled during empty-pipe wait");
@@ -945,10 +1023,23 @@ async fn ytdlp_pipeline(
                         }
                     }
                 }
-                if try_pipeline_retry(&buffer, relay_attempts, &cfg.video_id, t0) {
+                // Reached only via `Break` (data arrived): the relay may also have
+                // failed mid-stream (a throttle that won the race with the first
+                // bytes). Reap the verdict and classify once.
+                if buffer.is_failed()
+                    && act_on_stderr_verdict(
+                        &mut stderr_handle,
+                        relay_attempts,
+                        true,
+                        &cfg.video_id,
+                        t0,
+                        "during empty-pipe wait",
+                        "format not available (yt-dlp error)",
+                    )
+                    .await?
+                {
                     continue 'attempt;
                 }
-                bail_failed_buffer(&buffer, &cfg.video_id, t0, "during empty-pipe wait")?;
             }
             debug!(%cfg.video_id, stream_type = "ffmpeg→alac-mp4", buf_len = buffer.len(), elapsed = ?t0.elapsed(),
                 "Trying early decoder init");
@@ -983,17 +1074,27 @@ async fn ytdlp_pipeline(
                     .await?;
                     if !status.success() {
                         let code = exit_code_string(&status);
-                        // The 403 throttle mark can still be in flight when the
-                        // writer task resolves on stdout EOF (see the empty-pipe
-                        // Site-2 handling for the same race). Yield once so the
-                        // stderr handler's mark lands before classifying the exit
-                        // — otherwise a throttled relay is misread as a generic
-                        // failure and the song skips instead of relay-retrying.
-                        tokio::task::yield_now().await;
-                        if try_pipeline_retry(&buffer, relay_attempts, &cfg.video_id, t0) {
+                        // The stderr handler owns the verdict; reap it (the
+                        // writer task resolving on stdout EOF implies the
+                        // yt-dlp child exited, so the handler has read to
+                        // EOF). This also classifies a dead video or stale
+                        // cookies here — the flag-based code bailed generically
+                        // on any nonzero ffmpeg exit, losing the class. On a
+                        // clean yt-dlp stderr (verdict `None`), the relay
+                        // genuinely failed and the ffmpeg code names it.
+                        if act_on_stderr_verdict(
+                            &mut stderr_handle,
+                            relay_attempts,
+                            true,
+                            &cfg.video_id,
+                            t0,
+                            "ffmpeg relay exited",
+                            &format!("ffmpeg exited with code {code}"),
+                        )
+                        .await?
+                        {
                             continue 'attempt;
                         }
-                        bail!("ffmpeg exited with code {code}");
                     }
                     debug!(%cfg.video_id, "ffmpeg completed successfully");
 
@@ -1009,11 +1110,21 @@ async fn ytdlp_pipeline(
                     + std::time::Duration::from_secs(M4A_TOTAL_LEN_TIMEOUT_S);
                 loop {
                     if buffer.is_failed() {
-                        if buffer.is_dead_video() {
-                            bail!("{}", DEAD_VIDEO_ERR);
-                        }
-                        if buffer.is_auth_error() {
-                            bail!("{}", AUTH_ERR);
+                        // No retry ladder on the M4A fallback (DECISIONS.md:40-46):
+                        // a throttle or format-refusal skips rather than retries.
+                        // Reap the verdict for the class-specific bail.
+                        if act_on_stderr_verdict(
+                            &mut stderr_handle,
+                            relay_attempts,
+                            false,
+                            &cfg.video_id,
+                            t0,
+                            "during M4A total_len wait",
+                            "format not available (yt-dlp error)",
+                        )
+                        .await?
+                        {
+                            continue 'attempt;
                         }
                         break None;
                     }
@@ -1467,41 +1578,131 @@ mod tests {
     #[test]
     fn relay_throttle_retry_decision() {
         let t0 = tokio::time::Instant::from_std(std::time::Instant::now());
-        let throttled = SharedBuffer::new();
-        throttled.mark_throttled();
-        let failed = SharedBuffer::new();
-        failed.fail();
-        let plain = SharedBuffer::new();
+        let throttle = RelayFailure {
+            kind: RelayFailureKind::Throttle,
+            line: "ERROR: unable to download video data: HTTP Error 403: Forbidden".to_string(),
+        };
 
         // A throttled first relay (one relay so far) must get its retry.
-        assert!(relay_throttle_retry(&throttled, 1, "v1", t0));
+        assert!(relay_throttle_retry(Some(&throttle), 1, "v1", t0));
         // A throttled second relay (two relays so far) must get one more retry:
         // the CDN wave beats a second consecutive fresh mint often enough that
         // the song plays on a third (debug370 xAbGAyd_-W4: skipped at 2,
         // played on re-select). Two throttles are not definitive.
-        assert!(relay_throttle_retry(&throttled, 2, "v1", t0));
+        assert!(relay_throttle_retry(Some(&throttle), 2, "v1", t0));
         // A throttled third relay is definitive: three capped attempts total.
-        assert!(!relay_throttle_retry(&throttled, 3, "v1", t0));
-        // A non-throttle relay failure (dead/auth/format, whatever the mark)
-        // is definitive per-song and must not consume a retry slot.
-        assert!(!relay_throttle_retry(&failed, 1, "v1", t0));
-        assert!(!relay_throttle_retry(&plain, 1, "v1", t0));
+        assert!(!relay_throttle_retry(Some(&throttle), 3, "v1", t0));
+        // Non-throttle verdicts (dead/auth/generic) never consume a retry slot.
+        for kind in [
+            RelayFailureKind::Dead,
+            RelayFailureKind::Auth,
+            RelayFailureKind::Generic,
+        ] {
+            let f = RelayFailure {
+                kind,
+                line: "ERROR: x".to_string(),
+            };
+            assert!(!relay_throttle_retry(Some(&f), 1, "v1", t0));
+        }
+        // No verdict (clean stderr) → no retry.
+        assert!(!relay_throttle_retry(None, 1, "v1", t0));
     }
 
-    #[test]
-    fn try_pipeline_retry_decision() {
+    #[tokio::test]
+    async fn act_on_stderr_verdict_maps_classes() {
         let t0 = tokio::time::Instant::from_std(std::time::Instant::now());
-        let throttled = SharedBuffer::new();
-        throttled.mark_throttled();
-        let plain = SharedBuffer::new();
+        let spawn_verdict = |kind: RelayFailureKind| {
+            tokio::spawn(async move {
+                Some(RelayFailure {
+                    kind,
+                    line: "ERROR: x".to_string(),
+                })
+            })
+        };
 
-        // A throttled relay under the cap retries (fresh resolve).
-        assert!(try_pipeline_retry(&throttled, 1, "v1", t0));
-        assert!(try_pipeline_retry(&throttled, 2, "v1", t0));
-        // Three capped attempts total: the third is definitive.
-        assert!(!try_pipeline_retry(&throttled, 3, "v1", t0));
-        // Plain failure (dead/auth/unclassified) → no retry of any kind.
-        assert!(!try_pipeline_retry(&plain, 1, "v1", t0));
+        // Throttle under the cap → retried (Ok(true)).
+        let mut h = spawn_verdict(RelayFailureKind::Throttle);
+        assert!(
+            act_on_stderr_verdict(&mut h, 1, true, "v1", t0, "test-case", "generic")
+                .await
+                .unwrap(),
+            "a throttled relay under the cap must be retried"
+        );
+
+        // Dead → the dead-video error (the UI's classification contract).
+        let mut h = spawn_verdict(RelayFailureKind::Dead);
+        let err = act_on_stderr_verdict(&mut h, 1, true, "v1", t0, "test-case", "generic")
+            .await
+            .unwrap_err();
+        assert_eq!(err.to_string(), DEAD_VIDEO_ERR);
+
+        // Auth → the stale-cookies error.
+        let mut h = spawn_verdict(RelayFailureKind::Auth);
+        let err = act_on_stderr_verdict(&mut h, 1, true, "v1", t0, "test-case", "generic")
+            .await
+            .unwrap_err();
+        assert_eq!(err.to_string(), AUTH_ERR);
+
+        // Generic / no verdict → the site's generic message.
+        let mut h = spawn_verdict(RelayFailureKind::Generic);
+        let err = act_on_stderr_verdict(
+            &mut h,
+            1,
+            true,
+            "v1",
+            t0,
+            "test-case",
+            "format not available (yt-dlp error)",
+        )
+        .await
+        .unwrap_err();
+        assert!(err.to_string().starts_with("format not available"));
+
+        let mut h = tokio::spawn(async { None });
+        let err = act_on_stderr_verdict(
+            &mut h,
+            1,
+            true,
+            "v1",
+            t0,
+            "test-case",
+            "ffmpeg exited with code 1",
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(err.to_string(), "ffmpeg exited with code 1");
+
+        // A throttled relay at the cap bails as a generic transient (never a
+        // fourth attempt).
+        let mut h = spawn_verdict(RelayFailureKind::Throttle);
+        let err = act_on_stderr_verdict(
+            &mut h,
+            3,
+            true,
+            "v1",
+            t0,
+            "test-case",
+            "format not available (yt-dlp error)",
+        )
+        .await
+        .unwrap_err();
+        assert!(err.to_string().starts_with("format not available"));
+
+        // `retry_throttle = false` (M4A fallback): even an under-cap throttle
+        // bails instead of retrying.
+        let mut h = spawn_verdict(RelayFailureKind::Throttle);
+        let err = act_on_stderr_verdict(
+            &mut h,
+            1,
+            false,
+            "v1",
+            t0,
+            "test-case",
+            "format not available (yt-dlp error)",
+        )
+        .await
+        .unwrap_err();
+        assert!(err.to_string().starts_with("format not available"));
     }
 
     // The E2E throttle tests below put fake `ffmpeg`/`yt-dlp` binaries on PATH

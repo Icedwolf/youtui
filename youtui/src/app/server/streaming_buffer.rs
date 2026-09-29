@@ -5,9 +5,6 @@ use std::sync::{Arc, Condvar, Mutex};
 struct SharedBufferInner {
     finished: bool,
     failed: bool,
-    dead_video: bool,
-    auth_error: bool,
-    throttled: bool,
     total_len: Option<u64>,
     state: BufferState,
 }
@@ -55,9 +52,6 @@ impl SharedBuffer {
             inner: Mutex::new(SharedBufferInner {
                 finished: false,
                 failed: false,
-                dead_video: false,
-                auth_error: false,
-                throttled: false,
                 total_len: None,
                 state: BufferState::Partial(Vec::with_capacity(cap)),
             }),
@@ -113,53 +107,6 @@ impl SharedBuffer {
     #[must_use]
     pub fn is_failed(&self) -> bool {
         self.inner.lock().unwrap_or_warn().failed
-    }
-
-    /// True when yt-dlp reported the video is permanently unavailable
-    /// (removed, terminated account, etc.) rather than a transient error.
-    #[must_use]
-    pub fn is_dead_video(&self) -> bool {
-        self.inner.lock().unwrap_or_warn().dead_video
-    }
-
-    pub fn mark_dead_video(&self) {
-        let mut guard = self.inner.lock().unwrap_or_warn();
-        guard.dead_video = true;
-    }
-
-    /// True when yt-dlp reported an authentication/cookie problem (Sign in
-    /// required, bot check, invalid cookies) rather than a dead video or a
-    /// generic transient error. Distinct from `is_dead_video`: auth failures
-    /// must never auto-remove the song — they are a config/login problem.
-    #[must_use]
-    pub fn is_auth_error(&self) -> bool {
-        self.inner.lock().unwrap_or_warn().auth_error
-    }
-
-    pub fn mark_auth_error(&self) {
-        let mut guard = self.inner.lock().unwrap_or_warn();
-        guard.auth_error = true;
-    }
-
-    /// True when the relay's yt-dlp reported the CDN refused the fetch
-    /// (403 Forbidden). The video is not dead and the session cookies are
-    /// fine — this is the nsig/GVS-token throttling wave: a fresh relay mint
-    /// usually plays. Distinct from `is_auth_error`: a throttle must trigger
-    /// a relay retry, never surface as stale cookies. `mark_throttled` also
-    /// fails the buffer so the init-wait/empty-pipe loops break into
-    /// classification immediately.
-    #[must_use]
-    pub fn is_throttled(&self) -> bool {
-        self.inner.lock().unwrap_or_warn().throttled
-    }
-
-    pub fn mark_throttled(&self) {
-        let mut guard = self.inner.lock().unwrap_or_warn();
-        guard.throttled = true;
-        guard.failed = true;
-        guard.finished = true;
-        record_len_if_unknown(&mut guard);
-        self.cvar.notify_all();
     }
 
     pub fn fail(&self) {
@@ -301,26 +248,6 @@ mod tests {
     use std::time::Duration;
 
     #[test]
-    fn throttled_marker_sets_failed() {
-        let buf = SharedBuffer::new();
-        assert!(!buf.is_throttled(), "fresh buffer must not be throttled");
-        assert!(!buf.is_failed(), "precondition: fresh buffer is not failed");
-        buf.mark_throttled();
-        assert!(
-            buf.is_throttled(),
-            "mark_throttled must set the throttled flag"
-        );
-        assert!(
-            buf.is_failed(),
-            "mark_throttled must fail the buffer so the pipeline loops break immediately"
-        );
-        // A throttled buffer is NOT an auth error or a dead video — the song
-        // is playable, just refused once at fetch time.
-        assert!(!buf.is_auth_error());
-        assert!(!buf.is_dead_video());
-    }
-
-    #[test]
     fn failed_or_finished_buffer_records_partial_len_as_total() {
         let fail_buf = SharedBuffer::new();
         fail_buf.writer().write(b"partial data");
@@ -329,15 +256,6 @@ mod tests {
             fail_buf.total_len(),
             Some(12),
             "fail() must record the partial length as total so End-seeks break out"
-        );
-
-        let throttle_buf = SharedBuffer::new();
-        throttle_buf.writer().write(b"throttled");
-        throttle_buf.mark_throttled();
-        assert_eq!(
-            throttle_buf.total_len(),
-            Some(9),
-            "mark_throttled() must record the partial length as total"
         );
 
         let finish_buf = SharedBuffer::new();
