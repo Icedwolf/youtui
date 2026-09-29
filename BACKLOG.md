@@ -608,6 +608,25 @@ External-root-cause items tracked so future sessions don't re-diagnose them. Evi
 | Intermittent CDN 403 on the direct-URL fetch (debug18: 2, debug19: 2, debug20: 9, debug21: 1) — mostly self-heals on the credential-carrying relay attempt; a throttle wave can still halt via the transient-failure counter | Fresh per-video GVS PO token churn (`bgutil-pot` disk cache invalidation; DECISIONS.md:29-30,32-33) | Needs an external fix (per-video GVS token); the plugin `--bypass-cache` patch (DECISIONS.md:33) is the standing mitigation |
 | Missing artist-albums continuation (6×/session in debug21, graceful first-page fallback) | Upstream ytmapi-rs response-shape gap; not fixable inside youtui | Flagged upstream; youtui side is already correct (optional section list, no R2 crash) |
 
+## Log reviews (2026-09-29)
+
+- **debug26 (complete, 21 min, 12:35:27→12:56:26Z)** — all narrowings hold (`codec
+  params`=0, prefill queue lines=0, `Inside PlaySong`/`Now playing`=0). Real
+  fills/play = **15/15 = 1.00** — the earlier "23" count double-counts
+  `finishing buffer`, which fires twice per download; the load-bearing anchors are
+  `ffmpeg completed successfully` + `download_done` (each fired once). 6 WARNs, all
+  known classes: the 60s watchdog kill (`16gZm9oeLtI`, stall after first chunk,
+  self-healed), a **self-healed 403 throttle** (`d8JXbgjILys`: direct-URL 403 at
+  12:47:20 → relay attempt 2/3 → first chunk 6.4s, streamed, cached 79MB, later
+  reused from cache), and a `Video unavailable` graceful skip (`sM3Pc9hDLJI`).
+  11 `download cancelled` = normal supersede churn (each prefilled successor is
+  cancelled when the user picks elsewhere). `ERROR`=0, 0 halts, 0 loops.
+- **debug27 (live at review, 7 min, 12:56:30→13:03:35Z+) — same profile**: 8 plays,
+  13 real fills; the >1 ratio is manual-supersede churn (rapid selections
+  superseding prefills, incl. a 4-start burst 13:03:16-18 — only one played), not a
+  prefill regression. In-session `Reusing cached buffer` replay verified
+  (TU8OVVs3-TU, 38.5MB). 0 WARNs, 0 `ERROR`, 0 halts.
+
 ## When adding work here
 
 - State the item, the severity/type (bug / complexity / perf), and the evidence.
