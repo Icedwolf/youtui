@@ -608,6 +608,41 @@ fn spawn_stdout_writer(
     })
 }
 
+/// Pump the relay's yt-dlp stdout into ffmpeg's stdin, logging the first
+/// forwarded chunk (the "relay is live" anchor). Ends on stdout EOF, a closed
+/// ffmpeg stdin (ffmpeg exited), or a read error; then shuts ffmpeg's stdin
+/// down so ffmpeg sees EOF and finalizes the fragmented MP4.
+fn spawn_relay_task(
+    video_id: String,
+    t0: tokio::time::Instant,
+    yt_stdout: tokio::process::ChildStdout,
+    mut ffmpeg_stdin: tokio::process::ChildStdin,
+) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let mut rdr = tokio::io::BufReader::new(yt_stdout);
+        let mut buf = vec![0u8; READ_BUF_SIZE];
+        let mut first_write = true;
+        loop {
+            match rdr.read(&mut buf).await {
+                Ok(0) => break,
+                Ok(n) => {
+                    if ffmpeg_stdin.write_all(&buf[..n]).await.is_err() {
+                        break;
+                    }
+                    if first_write {
+                        first_write = false;
+                        debug!(%video_id, first_chunk = n, elapsed = ?t0.elapsed(),
+                        "relay: first chunk forwarded to ffmpeg");
+                    }
+                }
+                Err(_) => break,
+            }
+        }
+        let _ = ffmpeg_stdin.shutdown().await;
+    })
+}
+
 /// The spawned ffmpeg's (stderr-logger, buffer-writer, child, optional stdin).
 type FfmpegSpawn = (
     tokio::task::JoinHandle<()>,
@@ -923,7 +958,7 @@ async fn ytdlp_pipeline(
                 // startup with the yt-dlp spawn.
                 let (_ffmpeg_stderr_handle, write_handle, ffmpeg_child, ffmpeg_stdin) =
                     spawn_ffmpeg(writer, "ffmpeg", &cfg.video_id)?;
-                let mut ffmpeg_stdin = ffmpeg_stdin.context("no ffmpeg stdin")?;
+                let ffmpeg_stdin = ffmpeg_stdin.context("no ffmpeg stdin")?;
                 let video_id = cfg.video_id.clone();
 
                 let YtDlpSpawn {
@@ -932,29 +967,7 @@ async fn ytdlp_pipeline(
                     child: yt_dlp_child,
                 } = spawn_ytdlp(cfg, "ba/bestaudio", buffer.clone(), t0, true)?;
 
-                let relay = tokio::spawn(async move {
-                    use tokio::io::{AsyncReadExt, AsyncWriteExt};
-                    let mut rdr = tokio::io::BufReader::new(yt_stdout);
-                    let mut buf = vec![0u8; READ_BUF_SIZE];
-                    let mut first_write = true;
-                    loop {
-                        match rdr.read(&mut buf).await {
-                            Ok(0) => break,
-                            Ok(n) => {
-                                if ffmpeg_stdin.write_all(&buf[..n]).await.is_err() {
-                                    break;
-                                }
-                                if first_write {
-                                    first_write = false;
-                                    debug!(%video_id, first_chunk = n, elapsed = ?t0.elapsed(),
-                                    "relay: first chunk forwarded to ffmpeg");
-                                }
-                            }
-                            Err(_) => break,
-                        }
-                    }
-                    let _ = ffmpeg_stdin.shutdown().await;
-                });
+                let relay = spawn_relay_task(video_id, t0, yt_stdout, ffmpeg_stdin);
 
                 (
                     stderr_handle,

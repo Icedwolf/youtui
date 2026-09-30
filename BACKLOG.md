@@ -4,7 +4,7 @@
 **Tests:** 686 workspace passed (whole workspace incl. ytmapi-rs + doctests; composition 411 youtui bin passed + 2 ignored + 113 ytmapi lib + 77 doctests + 13 debug_dump + 70 live_integration + 2 json_crawler doctests; −2 +1 from 687 by the verdict-handoff refactor, DECISIONS.md:47 — removed `try_pipeline_retry_decision` + `throttled_marker_sets_failed`, added `act_on_stderr_verdict_maps_classes`). Binary is NOT reinstalled to
 `~/.config/cargo/bin/youtui` anymore (user runs it actively) — `target/release/youtui` is the
 verification artifact only.
-**Last updated:** 2026-09-29
+**Last updated:** 2026-09-30
 
 This file is a working backlog only — no changelog, no session archaeology. Past work
 and its rationale live in git history and in the code comments / `DECISIONS.md`.
@@ -708,11 +708,13 @@ External-root-cause items tracked so future sessions don't re-diagnose them. Evi
   Expected next session: identical fills/WARN behavior vs debug28 baseline (the
   per-line WARN budget is byte-identical), with one fewer structural layer to
   re-derive on review.
-- **debug29 (complete, 54 min, 17:59:40→18:53:16Z, 1107 lines) —
-  measured-after for DECISIONS.md:47 (verdict handoff) in the wild** —
-  46 download starts / 34 `download_done` (fills 1:1), 18 cache reuses, 31
-  `audio_output_started` → fills/play ≈ **1.10**, 0 cancels (debug28: 365 — a
-  calm session by contrast). **11 WARNs / 0 `ERROR`, 0 halts**, every WARN a
+- **debug29 (complete, 1h38m, 17:59:40→19:37:39Z, 1253 lines; reviewed
+  mid-session, amended with the final figures) — measured-after for
+  DECISIONS.md:47 (verdict handoff) in the wild** —
+  51 download starts / 38 `download_done` (fills 1:1), 22 cache reuses, 36
+  `audio_output_started` → fills/play ≈ **1.06**, 9 cancels — all supersede
+  churn (8 during buffering + 1 after semaphore; debug28: 365 — a calm session
+  by contrast). **11 WARNs / 0 app-level `ERROR`, 0 halts**, every WARN a
   known class per the item 45 budget: 10 = auth incidents
   (`Sign in to confirm your age`/`not a bot` — `ONPcY8iTXGs` ×2: 3 WARNs at
   18:00 + 4 at 18:05 incl. the live-buffering skip; `-XZSIcQWEy0` ×1: 3 WARNs
@@ -724,6 +726,14 @@ External-root-cause items tracked so future sessions don't re-diagnose them. Evi
   incident pre-cut). Verdict handoff: identical fills/WARN behavior to the
   debug28 baseline, retry recovered on the fresh resolve exactly as designed,
   zero race-yield noise, no flag machinery re-derivable from the log.
+- **debug30 (complete, 4.5 min, 19:51:21→19:55:47Z, 2084 lines — the
+  heaviest supersede burst yet)** — 236 download starts, **209 cancelled
+  during settle** + 19 during buffering + 2 after semaphore, coalesced to 6
+  `download_done` / 4 `audio_output_started` / 2 cache reuses. The settle
+  window absorbed 209/236 selections before any yt-dlp spawn — the held-key
+  burst-coalescing contract (DECISIONS.md:38/43) verified under max stress.
+  **0 WARNs / 0 `ERROR`, 0 halts, 0 throttles**; the session ended with the
+  user pausing and quitting (no kill/abort observable).
 - **Full-download fallback deduped across both shells (2026-09-29)** — the
   post-streaming-init-failure tail (await full download → classify final exit →
   `decoder_from_buffer`) was written twice with divergent exit handling: the
@@ -738,6 +748,16 @@ External-root-cause items tracked so future sessions don't re-diagnose them. Evi
   instead of two divergent copies; both shells' success and the relay's
   throttle-retry paths stay pinned by the existing E2E fake-binary suite.
   686 tests green, clippy 0.
+- **Relay pump extracted to `spawn_relay_task` (2026-09-30)** — the anonymous
+  `tokio::spawn` closure pumping the relay's yt-dlp stdout into ffmpeg's stdin
+  (with first-chunk logging) was the last inline block in `ytdlp_pipeline`'s
+  spawn arm. Now a named helper sitting beside its sibling pumps
+  (`spawn_stdout_writer` for the M4A direct path, `spawn_stderr_handler` for the
+  verdict), and the pipeline's ffmpeg arm reads spawn-ffmpeg → spawn-yt-dlp →
+  spawn-relay → wait → init → fallback. Verbatim move (branch table unchanged:
+  stdout EOF / forwarded chunk / closed stdin / read error → shutdown stdin);
+  the two throttle E2E paths + ALAC happy path exercise it. Net −0 lines, one
+  less anonymous block to re-derive.
 
 ## Cancel-class audit (2026-09-29) — characterized benign, no gap
 
