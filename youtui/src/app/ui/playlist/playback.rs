@@ -825,9 +825,11 @@ impl Playlist {
         self.play_prev()
     }
 
-    /// Player pause with no mutation — shared by `pauseplay`/`resume`/`pause`.
-    /// Rodio's sink pause is idempotent, so all three state guards send the
-    /// same server command; only the guard differs.
+    /// The shared pause/resume command: `server.player.pause()` is a *toggle*
+    /// (async_rodio_sink's `handle_pause` pauses a playing sink and plays a
+    /// paused one), so exactly one command accompanies every status flip
+    /// below, and it never fires when a guard holds the status steady — the
+    /// flip and the command stay one unit or status and sink desync.
     fn player_pause_effect() -> Effects<Self> {
         Effects::new(|server: &crate::app::server::ArcServer| {
             server.player.pause();
@@ -838,44 +840,45 @@ impl Playlist {
         })
     }
 
-    pub fn pauseplay(&mut self) -> Effects<Self> {
-        let _id = match self.play_status {
+    /// Flip `play_status` between `Playing` and `Paused`, returning whether it
+    /// flipped. The three pause guards below share this single transition, and
+    /// every true flip is paired with `player_pause_effect`.
+    fn flip_play_status(&mut self) -> bool {
+        match self.play_status {
             PlayState::Playing(id) => {
                 self.play_status = PlayState::Paused(id);
-                id
+                true
             }
             PlayState::Paused(id) => {
                 self.play_status = PlayState::Playing(id);
-                id
+                true
             }
-            _ => return Effects::none(),
-        };
+            _ => false,
+        }
+    }
 
-        Self::player_pause_effect()
+    pub fn pauseplay(&mut self) -> Effects<Self> {
+        if self.flip_play_status() {
+            Self::player_pause_effect()
+        } else {
+            Effects::none()
+        }
     }
 
     pub fn resume(&mut self) -> Effects<Self> {
-        let _id = match self.play_status {
-            PlayState::Paused(id) => {
-                self.play_status = PlayState::Playing(id);
-                id
-            }
-            _ => return Effects::none(),
-        };
-
-        Self::player_pause_effect()
+        if matches!(self.play_status, PlayState::Paused(_)) && self.flip_play_status() {
+            Self::player_pause_effect()
+        } else {
+            Effects::none()
+        }
     }
 
     pub fn pause(&mut self) -> Effects<Self> {
-        let _id = match self.play_status {
-            PlayState::Playing(id) => {
-                self.play_status = PlayState::Paused(id);
-                id
-            }
-            _ => return Effects::none(),
-        };
-
-        Self::player_pause_effect()
+        if matches!(self.play_status, PlayState::Playing(_)) && self.flip_play_status() {
+            Self::player_pause_effect()
+        } else {
+            Effects::none()
+        }
     }
 
     pub fn stop(&mut self) -> Effects<Self> {

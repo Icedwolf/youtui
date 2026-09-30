@@ -734,6 +734,19 @@ External-root-cause items tracked so future sessions don't re-diagnose them. Evi
   burst-coalescing contract (DECISIONS.md:38/43) verified under max stress.
   **0 WARNs / 0 `ERROR`, 0 halts, 0 throttles**; the session ended with the
   user pausing and quitting (no kill/abort observable).
+- **debug31 (complete, 1h18m, 11:28:31→12:46:13Z, 6 lines — the first
+  default-level (WARN) measured-after)** — **6 WARNs, 0 halts**: 4 = throttles
+  (`vgUAeLuLfXc`/`bTHq4lvI3X4`/`GJMZ7W1oV3A`/`2dOD24oW3JA`), each exactly the
+  1-WARN + "relay will retry" classifier per incident (item 45 contract holds
+  at default level; recovery is debug-level by design); 2 = one dead video
+  (`fax0XJ4mZF8`, "Video unavailable"): the failing-buffer WARN + UI
+  `download_error` layer. Zero app-level `ERROR`. The WARN budget is
+  byte-calibrated even when the DEBUG layers are filtered out.
+- **debug32 (complete, 7s, 16:45:23→16:45:30Z, 55 lines — `--debug` smoke
+  test of the `spawn_relay_task` build)** — 139007-song queue restore in
+  197ms, two clean streamed plays (first chunk 2.47s / 2.21s, full ALAC caches
+  47MB / 55MB), **0 WARN / 0 `ERROR`, 0 halts**. Relay-pump extraction is
+  byte-behavior-identical in the wild.
 - **Full-download fallback deduped across both shells (2026-09-29)** — the
   post-streaming-init-failure tail (await full download → classify final exit →
   `decoder_from_buffer`) was written twice with divergent exit handling: the
@@ -758,6 +771,21 @@ External-root-cause items tracked so future sessions don't re-diagnose them. Evi
   stdout EOF / forwarded chunk / closed stdin / read error → shutdown stdin);
   the two throttle E2E paths + ALAC happy path exercise it. Net −0 lines, one
   less anonymous block to re-derive.
+- **Pause/resume/pauseplay guards unified on `flip_play_status` (2026-09-30)** —
+  the three pause actions hand-wrote the same `Playing`↔`Paused` transition
+  four times (plus a useless `_id` binding each), and the shared-effect doc
+  claimed the sink command was "idempotent" — wrong: `server.player.pause()`
+  is a *toggle* (`async_rodio_sink::handle_pause` pauses a playing sink and
+  plays a paused one), so reading the truth required opening async_rodio_sink.
+  Now one `flip_play_status(&mut self) -> bool` owns the transition, the three
+  guards are one-liners, and the pairing invariant ("no command without a
+  flip, command ⇔ flip") is documented at the single shared site. Behavior
+  preserved: the 5-state × 3-action guard matrix was already fully pinned by
+  the existing suite (`play_pause_resume_cycle`,
+  `play_pause_resume_separate_methods`, `pause_when_not_playing_is_noop`,
+  `resume_when_not_paused_is_noop`, `buffering/error_pause[_play|_resume]`
+  `_is_noop`, `stopped_*` variants) — zero new tests needed; the edit reverted
+  an attempted duplicate-row test. Net −17 lines.
 
 ## Cancel-class audit (2026-09-29) — characterized benign, no gap
 
